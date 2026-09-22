@@ -93,7 +93,6 @@ describe("offer generation", function()
 	end)
 
 	it("gates fusion cards behind their prerequisite stacks", function()
-		local service = UpgradeService.new(7)
 		local state = newState()
 		expect(UpgradeService.IsEligible(UpgradeConfig.Get("Fusillade"), state)).toBe(false)
 

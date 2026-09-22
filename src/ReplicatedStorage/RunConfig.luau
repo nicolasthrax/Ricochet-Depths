@@ -28,6 +28,19 @@ RunConfig.RoomTimeLimit = 150
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
 RunConfig.HardRunTimeLimit = 900
 
+-- Lobby sits far from the arena so room geometry never overlaps it.
+RunConfig.LobbyPosition = Vector3.new(0, 0, 600)
+-- Run state is pushed to clients on every transition, and at most this often in between.
+RunConfig.RunStateBroadcastInterval = 0.25
+
+-- Token-bucket limits for every client-callable remote.
+RunConfig.RemoteRules = {
+	Fire = { Cooldown = 0.08, Burst = 4 },
+	ChooseUpgrade = { Cooldown = 0.25, Burst = 3 },
+	RequestStartRun = { Cooldown = 1, Burst = 2 },
+	RequestReturnToLobby = { Cooldown = 1, Burst = 2 },
+}
+
 RunConfig.Rooms = {
 	{
 		Id = "Atrium",

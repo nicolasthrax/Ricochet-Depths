@@ -16,6 +16,9 @@ return {
 	MaxSpeedMultiplier = 1.45,
 
 	MaxBounces = 3,
+	-- Shots ricochet off enemies as well as walls, which is what makes chain kills possible.
+	-- Flip this to true to have a damaging hit swallow the projectile instead.
+	ConsumeOnEnemyHit = false,
 	Lifetime = 4,
 
 	-- Distance the spawn point is pushed ahead of the shooter so the shot reads as leaving the body.

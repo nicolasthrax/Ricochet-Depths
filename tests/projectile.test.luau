@@ -204,10 +204,12 @@ describe("ProjectileService", function()
 		local service, parent = newService()
 		Harness.setClock(0)
 		local impacts = 0
-		service.OnImpact = function(position, normal, hitPart)
+		service.OnImpact = function(result, entry)
 			impacts += 1
-			expect(hitPart).toBe(wallPart)
-			expect(normal.Magnitude).toBeCloseTo(1, 1e-6)
+			expect(result.Instance).toBe(wallPart)
+			expect(result.Normal.Magnitude).toBeCloseTo(1, 1e-6)
+			expect(entry.contacts).toBe(1)
+			expect(entry.damage).toBe(1)
 			return true -- consume on first contact
 		end
 		service:Fire(nil, Vector3.new(0, PLANE_Y, 0), Vector3.new(0, 0, 1), 1)

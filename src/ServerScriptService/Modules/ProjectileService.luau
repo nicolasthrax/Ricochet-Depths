@@ -19,7 +19,8 @@ function ProjectileService.new(poolParent, collisionRoot, planeY)
 	self._rayParams.FilterDescendantsInstances = { collisionRoot }
 	self._rayParams.IgnoreWater = true
 
-	-- Set by the game loop: (position, normal, hitPart, shooter) -> true to consume the projectile.
+	-- Set by the game loop: (raycastResult, entry) -> true to consume the projectile.
+	-- The entry carries direction, damage, contacts and shooter, so no extra table is allocated.
 	self.OnImpact = nil
 
 	return self
@@ -37,16 +38,20 @@ function ProjectileService:_resolveMuzzle(base, direction)
 	return base + direction * clearance
 end
 
-function ProjectileService:Fire(shooter, origin, direction, power)
+-- options carries the shooter's upgraded stats: damage, bounces, speedMultiplier,
+-- lifetimeBonus and damagePerBounce. Omitted fields fall back to the config defaults.
+function ProjectileService:Fire(shooter, origin, direction, power, options)
 	local base = Vector3.new(origin.X, self._planeY, origin.Z)
 	local part = self._pool:Acquire(self:_resolveMuzzle(base, direction))
 	if not part then
 		return false
 	end
 
+	options = options or {}
+
 	local multiplier = ProjectileConfig.MinSpeedMultiplier
 		+ (ProjectileConfig.MaxSpeedMultiplier - ProjectileConfig.MinSpeedMultiplier) * power
-	local speed = ProjectileConfig.BaseSpeed * multiplier
+	local speed = ProjectileConfig.BaseSpeed * multiplier * (options.speedMultiplier or 1)
 
 	local spawnPosition = part.Position
 	part.AssemblyLinearVelocity = direction * speed
@@ -55,9 +60,12 @@ function ProjectileService:Fire(shooter, origin, direction, power)
 		direction = direction,
 		speed = speed,
 		position = spawnPosition, -- authoritative position, swept against each frame
-		bouncesLeft = ProjectileConfig.MaxBounces,
-		expiresAt = os.clock() + ProjectileConfig.Lifetime,
+		bouncesLeft = options.bounces or ProjectileConfig.MaxBounces,
+		expiresAt = os.clock() + ProjectileConfig.Lifetime + (options.lifetimeBonus or 0),
 		shooter = shooter,
+		damage = options.damage or 1,
+		damagePerBounce = options.damagePerBounce or 0,
+		contacts = 0,
 	})
 
 	return true
@@ -89,7 +97,8 @@ function ProjectileService:_stepEntry(entry, dt, now)
 			break
 		end
 
-		if self.OnImpact and self.OnImpact(result.Position, result.Normal, result.Instance, entry.shooter) then
+		entry.contacts += 1
+		if self.OnImpact and self.OnImpact(result, entry) then
 			entry.position = result.Position
 			return false
 		end
@@ -141,6 +150,20 @@ function ProjectileService:Step(deltaTime)
 			table.remove(self._active, index)
 		end
 	end
+end
+
+-- Despawns every live projectile, e.g. when a run ends. Leaves the pool full.
+function ProjectileService:Clear()
+	for index = #self._active, 1, -1 do
+		self._pool:Release(self._active[index].part)
+		self._active[index] = nil
+	end
+end
+
+function ProjectileService:Destroy()
+	self:Clear()
+	self._pool:Destroy()
+	self.OnImpact = nil
 end
 
 function ProjectileService:GetActiveCount()

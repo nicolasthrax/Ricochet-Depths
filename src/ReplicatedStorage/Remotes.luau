@@ -4,8 +4,20 @@ local RunService = game:GetService("RunService")
 
 local FOLDER_NAME = "Remotes"
 local REMOTE_NAMES = {
-	"FireProjectile", -- client -> server: aim direction + power
-	"ProjectileImpact", -- server -> clients: confirmed hit, cosmetic only
+	-- client -> server (every one of these is validated and rate limited server-side)
+	"FireProjectile", -- aim direction + power
+	"ChooseUpgrade", -- offer id + card id
+	"RequestStartRun",
+	"RequestReturnToLobby",
+
+	-- server -> clients (display and cosmetics only)
+	"ProjectileImpact", -- batched confirmed contacts
+	"EnemyDefeated",
+	"RunStateChanged",
+	"PlayerStateChanged",
+	"UpgradeOffer",
+	"UpgradeResolved",
+	"RunResults",
 }
 
 local Remotes = {}

@@ -12,10 +12,12 @@ local function isFiniteNumber(value)
 end
 
 -- Returns rootPart, direction, power on success, or nil plus a reason string.
-function FireValidator.Validate(player, direction, power)
+-- cooldownOverride lets upgraded fire rates through without duplicating the checks.
+function FireValidator.Validate(player, direction, power, cooldownOverride)
 	local now = os.clock()
+	local cooldown = cooldownOverride or ProjectileConfig.FireCooldown
 	local last = lastFireTime[player]
-	if last and now - last < ProjectileConfig.FireCooldown then
+	if last and now - last < cooldown then
 		return nil, "rate limited"
 	end
 

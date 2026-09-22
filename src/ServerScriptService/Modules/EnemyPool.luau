@@ -16,6 +16,7 @@ local function createEnemyPart()
 	part.CanCollide = false
 	part.CanTouch = false
 	part.CastShadow = false
+	part.CanQuery = false -- idle bodies are invisible to raycasts until they are spawned
 	part.Transparency = 1
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth

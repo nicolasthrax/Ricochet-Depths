@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local AimConfig = require(ReplicatedStorage:WaitForChild("AimConfig"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
+local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local AimIndicator = require(script.Parent:WaitForChild("AimIndicator"))
 
 local player = Players.LocalPlayer
@@ -18,6 +19,11 @@ local activeInput = nil
 local function isAimInput(input)
 	return input.UserInputType == Enum.UserInputType.MouseButton1
 		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+-- ClientMain publishes the run state as an attribute; aiming is only live during combat.
+local function canAim()
+	return player:GetAttribute("RunState") == RunConfig.States.Combat
 end
 
 -- Screen drag maps onto the camera's flattened basis: +x is camera-right, screen-up is forward.
@@ -55,7 +61,7 @@ local function readDrag(input)
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed or activeInput or not isAimInput(input) then
+	if gameProcessed or activeInput or not isAimInput(input) or not canAim() then
 		return
 	end
 	activeInput = input
@@ -64,6 +70,13 @@ end)
 
 UserInputService.InputChanged:Connect(function(input)
 	if input ~= activeInput then
+		return
+	end
+	if not canAim() then
+		-- The run moved on mid-drag; drop the gesture rather than firing into a cleared room.
+		activeInput = nil
+		dragOrigin = nil
+		indicator:Hide()
 		return
 	end
 	local aimScreen, power = readDrag(input)
@@ -84,7 +97,7 @@ UserInputService.InputEnded:Connect(function(input)
 	dragOrigin = nil
 	indicator:Hide()
 
-	if not aimScreen then
+	if not aimScreen or not canAim() then
 		return
 	end
 

@@ -23,6 +23,9 @@ function MatchService.new(deps)
 	self._rewards = deps.rewards
 	self._effects = deps.effects
 	self._telemetry = deps.telemetry
+	self._persistence = deps.persistence
+	-- Run keys must be unique across servers, since the reward ledger is stored per profile.
+	self._runKeyPrefix = deps.runKeyPrefix or "local"
 	self._net = deps.net or {}
 	self._world = deps.world -- teleport/position adapter, so tests need no characters
 
@@ -66,13 +69,30 @@ end
 
 --// membership ---------------------------------------------------------------
 
+-- Late join rule: a player who arrives while a run is in progress is queued and admitted at the
+-- next room boundary, never mid-fight and never mid-upgrade-round. They start the room they join
+-- with a fresh state and no upgrades.
 function MatchService:RegisterPlayer(player)
 	local state = self._states[player]
 	if not state then
 		state = PlayerState.new(player)
 		self._states[player] = state
 	end
+
+	if self:IsRunActive() and not table.find(self._participants, player) and not table.find(self._pendingJoins, player) then
+		state:ResetRun()
+		table.insert(self._pendingJoins, player)
+	end
+
 	return state
+end
+
+function MatchService:IsPendingJoin(player)
+	return table.find(self._pendingJoins, player) ~= nil
+end
+
+function MatchService:IsParticipant(player)
+	return table.find(self._participants, player) ~= nil
 end
 
 function MatchService:GetPlayerState(player)
@@ -98,6 +118,7 @@ function MatchService:UnregisterPlayer(player, now)
 	removeFrom(self._pendingJoins, player)
 	self._upgrades:Clear(player)
 	self._states[player] = nil
+	FireValidator.Clear(player)
 	if self._telemetry then
 		self._telemetry:Clear(player)
 	end
@@ -308,10 +329,14 @@ function MatchService:_beginRoom(index, now)
 		return self:_finish("Extracted", now)
 	end
 
-	-- Anyone who joined mid-run is admitted at a room boundary, never mid-fight.
+	-- Anyone who joined mid-run is admitted here, at a room boundary, never mid-fight.
 	for _, player in self._pendingJoins do
-		if self._states[player] and not table.find(self._participants, player) then
+		local joiner = self._states[player]
+		if joiner and not table.find(self._participants, player) then
+			joiner:ResetRun()
+			joiner.roomsCleared = index - 1 -- credited with the rooms the team already cleared
 			table.insert(self._participants, player)
+			self:_log("LateJoin", { RunId = self._runId, Room = index }, now)
 		end
 	end
 	table.clear(self._pendingJoins)
@@ -395,12 +420,21 @@ function MatchService:_finish(outcome, now)
 		eliteCleared = self._eliteCleared,
 	}
 
+	local runKey = string.format("%s-%d", self._runKeyPrefix, self._runId)
 	for _, player in self._participants do
 		local state = self._states[player]
 		if state then
 			local summary = RunSummary.ForPlayer(state, context)
-			-- The ledger makes a repeated completion event a no-op rather than a second payout.
+
+			-- Two guards in series: the in-memory ledger stops a repeated completion event on
+			-- this server, and the profile ledger stops a repeat across reconnects or servers.
 			summary.Reward = self._rewards:Grant(self._runId, player, summary.Reward)
+			if summary.Reward > 0 and self._persistence then
+				summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
+				self._persistence:RecordRunEnd(player, summary)
+			end
+			summary.RunKey = runKey
+
 			self:_fireClient("RunResults", player, summary)
 		end
 	end

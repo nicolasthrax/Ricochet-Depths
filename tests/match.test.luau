@@ -368,3 +368,103 @@ describe("fire gating", function()
 		expect(reason).toBe("not choosing upgrades")
 	end)
 end)
+
+describe("persisted rewards", function()
+	it("credits a completed run to the profile exactly once", function()
+		reset()
+		local PlayerDataService = __require("PlayerDataService")
+
+		local store = { data = {} }
+		function store:UpdateAsync(key, transform)
+			local updated = transform(self.data[key])
+			self.data[key] = updated
+			return updated
+		end
+
+		local persistence = PlayerDataService.new(store)
+		local ctx = build(77)
+		-- Rebuild the match with persistence attached, reusing the same collaborators.
+		local MatchServiceModule = __require("MatchService")
+		local match = MatchServiceModule.new({
+			rooms = ctx.rooms,
+			enemies = ctx.enemies,
+			upgrades = ctx.upgrades,
+			projectiles = ctx.projectiles,
+			rewards = ctx.rewards,
+			telemetry = nil,
+			net = ctx.net,
+			world = ctx.world,
+			persistence = persistence,
+			runKeyPrefix = "testjob",
+		})
+		ctx.match = match
+
+		local player = { Name = "Saver", UserId = 4242 }
+		persistence:Load(player)
+		match:RegisterPlayer(player)
+		match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+
+		for roomIndex = 1, RunConfig.RoomCount() do
+			wipeRoom(ctx, player)
+			step(ctx, DT)
+			if roomIndex < RunConfig.RoomCount() then
+				chooseFirstOffer(ctx, player)
+				step(ctx, RunConfig.TransitionDuration + DT * 2)
+			end
+		end
+
+		local summary = ctx.net.RunResults:Last().payload
+		expect(summary.Outcome).toBe("Extracted")
+		expect(summary.Reward).toBeGreaterThan(0)
+		expect(summary.RunKey).toBe("testjob-1")
+
+		local profile = persistence:GetSession(player).profile
+		expect(profile.Currency.Salvage).toBe(summary.Reward)
+		expect(profile.Stats.RunsExtracted).toBe(1)
+
+		-- A replayed completion for the same run key pays nothing more.
+		expect((persistence:GrantReward(player, "testjob-1", summary.Reward))).toBe(0)
+		expect(profile.Currency.Salvage).toBe(summary.Reward)
+	end)
+
+	it("still finishes a run when the profile failed to load", function()
+		reset()
+		local PlayerDataService = __require("PlayerDataService")
+		local failingStore = {}
+		function failingStore:UpdateAsync()
+			error("datastore down", 0)
+		end
+
+		local persistence = PlayerDataService.new(failingStore)
+		local ctx = build(78)
+		local MatchServiceModule = __require("MatchService")
+		ctx.match = MatchServiceModule.new({
+			rooms = ctx.rooms, enemies = ctx.enemies, upgrades = ctx.upgrades,
+			projectiles = ctx.projectiles, rewards = ctx.rewards, net = ctx.net,
+			world = ctx.world, persistence = persistence, runKeyPrefix = "testjob",
+		})
+
+		local player = { Name = "Offline", UserId = 4243 }
+		persistence:Load(player)
+		expect(persistence:IsLoaded(player)).toBe(false)
+
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		wipeRoom(ctx, player)
+		step(ctx, DT)
+		chooseFirstOffer(ctx, player)
+		step(ctx, RunConfig.TransitionDuration + DT * 2)
+
+		local state = ctx.match:GetPlayerState(player)
+		state.invulnerableUntil = 0
+		ctx.match:HandlePlayerContact(player, 9999, nil, clock)
+		step(ctx, DT * 2)
+
+		-- The run completes and reports a controlled zero payout rather than erroring.
+		local summary = ctx.net.RunResults:Last().payload
+		expect(summary.Outcome).toBe("Defeated")
+		expect(summary.Reward).toBe(0)
+	end)
+end)

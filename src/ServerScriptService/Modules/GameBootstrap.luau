@@ -3,12 +3,15 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
 local EnemyService = require(script.Parent.EnemyService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
 local MatchService = require(script.Parent.MatchService)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
+local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfig"))
+local PlayerDataService = require(script.Parent.PlayerDataService)
 local ProjectileService = require(script.Parent.ProjectileService)
 local RemoteRouter = require(script.Parent.RemoteRouter)
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
@@ -51,6 +54,14 @@ function GameBootstrap.Start()
 		end
 	end)
 
+	-- Development builds are pinned to a separate datastore scope, so test runs can never
+	-- write into live player data.
+	local store, scope = DataStoreProvider.Get(DebugConfig.IsEnabled())
+	local persistence = PlayerDataService.new(store)
+	if DebugConfig.IsEnabled() then
+		print(("[data] scope=%s schema=v%d"):format(scope, PlayerDataConfig.SchemaVersion))
+	end
+
 	local net = {}
 	for _, name in NET_EVENTS do
 		net[name] = Remotes.Get(name)
@@ -66,6 +77,8 @@ function GameBootstrap.Start()
 		telemetry = telemetry,
 		net = net,
 		world = WorldAdapter,
+		persistence = persistence,
+		runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
 	})
 
 	projectiles.OnImpact = function(result, entry)
@@ -79,15 +92,32 @@ function GameBootstrap.Start()
 		match:RequestStart(player, os.clock())
 	end)
 
-	for _, player in Players:GetPlayers() do
+	local function onPlayerAdded(player)
 		match:RegisterPlayer(player)
+		-- Loading yields, so it runs off the join thread.
+		task.spawn(function()
+			local _, err = persistence:Load(player)
+			if err then
+				warn(("[data] profile load failed for %s, session is read-only: %s"):format(player.Name, err))
+			end
+		end)
 	end
-	Players.PlayerAdded:Connect(function(player)
-		match:RegisterPlayer(player)
-	end)
+
+	for _, player in Players:GetPlayers() do
+		onPlayerAdded(player)
+	end
+	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(function(player)
 		match:UnregisterPlayer(player, os.clock())
 		router:ClearPlayer(player)
+		task.spawn(function()
+			persistence:Release(player, os.clock())
+		end)
+	end)
+
+	-- Last chance to flush before the server closes.
+	game:BindToClose(function()
+		persistence:SaveAll(os.clock())
 	end)
 
 	local effects = match._effects
@@ -97,6 +127,7 @@ function GameBootstrap.Start()
 		projectiles:Step(deltaTime)
 		match:Step(deltaTime, now)
 		effects:Step(now)
+		persistence:StepAutosave(now)
 	end)
 
 	return {
@@ -106,6 +137,7 @@ function GameBootstrap.Start()
 		projectiles = projectiles,
 		router = router,
 		telemetry = telemetry,
+		persistence = persistence,
 	}
 end
 

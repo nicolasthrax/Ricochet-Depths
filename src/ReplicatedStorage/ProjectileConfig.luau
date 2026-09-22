@@ -31,6 +31,10 @@ return {
 	SurfaceSkin = 0.05,
 	-- Safety cap on reflections resolved inside a single frame (corners can chain).
 	MaxBouncesPerStep = 4,
+	-- A moving enemy can slide over a projectile, leaving it inside that body. A swept cast
+	-- from inside a part reports nothing, so such a projectile would pass straight through.
+	-- When true, a projectile that made no contact this frame is tested for enclosure.
+	ResolveEnemyOverlap = true,
 
 	-- Server-side rate limit, seconds between accepted shots from one player.
 	FireCooldown = 0.18,

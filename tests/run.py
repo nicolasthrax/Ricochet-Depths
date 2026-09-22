@@ -71,8 +71,11 @@ def rewrite_requires(source, known):
 
 def build_bundle(test_files):
     modules = collect_modules()
-    chunks = [open(os.path.join(HARNESS, "RobloxStub.luau")).read(),
-              open(os.path.join(HARNESS, "TestRunner.luau")).read()]
+    # RobloxStub must come first (it installs the globals everything else builds on), then the
+    # runner, then any remaining harness helpers.
+    ordered = ["RobloxStub.luau", "TestRunner.luau"]
+    ordered += sorted(f for f in os.listdir(HARNESS) if f.endswith(".luau") and f not in ordered)
+    chunks = [open(os.path.join(HARNESS, name)).read() for name in ordered]
     chunks.append(
         "local __factories = {}\n"
         "local __cache = {}\n"

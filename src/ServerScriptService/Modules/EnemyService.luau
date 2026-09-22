@@ -20,6 +20,9 @@ function EnemyService.new(parent, planeY, seed)
 	self._random = Random.new(seed or 1)
 	self._bounds = nil
 	self._targetProvider = nil
+	-- Enemies that actually moved on the last step. Only these can have slid over a
+	-- projectile, so only these are worth testing for enclosure.
+	self._movers = {}
 
 	-- Set by the encounter layer.
 	self.OnDeath = nil -- (enemy, shooter)
@@ -189,8 +192,39 @@ function EnemyService:_applyVisuals(enemy)
 	end
 end
 
+-- Returns the enemy body containing this point and the outward normal of its nearest face,
+-- or nil. Only enemies that moved on the last step are considered: a stationary enemy cannot
+-- have engulfed a projectile that a swept cast would otherwise have caught.
+function EnemyService:FindEnclosingMover(position, margin)
+	margin = margin or 0
+	for _, enemy in self._movers do
+		if not enemy.dead then
+			local size = enemy.archetype.Size
+			local halfX = size.X / 2 + margin
+			local halfZ = size.Z / 2 + margin
+			local offsetX = position.X - enemy.position.X
+			local offsetZ = position.Z - enemy.position.Z
+
+			if math.abs(offsetX) <= halfX and math.abs(offsetZ) <= halfZ then
+				-- Push out through whichever face is nearest, so the bounce reads correctly.
+				local depthX = halfX - math.abs(offsetX)
+				local depthZ = halfZ - math.abs(offsetZ)
+				local normal
+				if depthX <= depthZ then
+					normal = Vector3.new(offsetX >= 0 and 1 or -1, 0, 0)
+				else
+					normal = Vector3.new(0, 0, offsetZ >= 0 and 1 or -1)
+				end
+				return enemy.part, normal, enemy
+			end
+		end
+	end
+	return nil
+end
+
 function EnemyService:Step(deltaTime, now)
 	local targets = self._targetProvider and self._targetProvider() or {}
+	table.clear(self._movers)
 	local randomSource = function()
 		return self._random:NextNumber()
 	end
@@ -205,8 +239,12 @@ function EnemyService:Step(deltaTime, now)
 			behaviour(enemy, archetype, deltaTime, target, now, randomSource)
 		end
 
+		local previousPosition = enemy.part.Position
 		enemy.position = self:_clampToBounds(Vector3.new(enemy.position.X, self._planeY, enemy.position.Z))
 		enemy.part.Position = enemy.position
+		if (enemy.position - previousPosition).Magnitude > 1e-4 then
+			table.insert(self._movers, enemy)
+		end
 		self:_applyVisuals(enemy)
 
 		if target and (archetype.ContactDamage or 0) > 0 and now >= enemy.contactReadyAt then
@@ -226,6 +264,7 @@ function EnemyService:Clear()
 		self:Despawn(self._enemies[index], "cleared")
 	end
 	table.clear(self._byPart)
+	table.clear(self._movers)
 end
 
 function EnemyService:Destroy()

@@ -56,6 +56,10 @@ function MatchService.new(deps)
 	self._enemies.OnPlayerContact = function(player, damage, enemy)
 		self:HandlePlayerContact(player, damage, enemy, self._now)
 	end
+	-- Lets a projectile that an enemy moved over still register, rather than passing through.
+	self._projectiles.OverlapQuery = function(position, margin)
+		return self._enemies:FindEnclosingMover(position, margin)
+	end
 
 	return self
 end

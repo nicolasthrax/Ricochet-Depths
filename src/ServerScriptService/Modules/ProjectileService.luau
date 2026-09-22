@@ -23,6 +23,10 @@ function ProjectileService.new(poolParent, collisionRoot, planeY)
 	-- The entry carries direction, damage, contacts and shooter, so no extra table is allocated.
 	self.OnImpact = nil
 
+	-- Optional: (position, margin) -> instance, normal. Consulted only for a projectile that
+	-- made no contact this frame, to catch a body that moved over it. See ResolveEnemyOverlap.
+	self.OverlapQuery = nil
+
 	return self
 end
 
@@ -123,6 +127,48 @@ function ProjectileService:_stepEntry(entry, dt, now)
 			+ result.Normal * (ProjectileConfig.Radius + ProjectileConfig.SurfaceSkin)
 		to = from + entry.direction * leftover
 		resolved += 1
+	end
+
+	-- The loop can run out of its per-frame bounce allowance with travel still pending. If that
+	-- last stretch would cross geometry, advancing to it would put the projectile outside the
+	-- room, where a forward cast finds nothing and it is gone for good. Losing a fraction of a
+	-- frame's travel is invisible; leaking out of the arena is not.
+	if resolved >= ProjectileConfig.MaxBouncesPerStep then
+		local pending = to - from
+		if pending.Magnitude > 1e-4 then
+			local castOrigin = from - entry.direction * ProjectileConfig.CastBackStep
+			if workspace:Raycast(castOrigin, to - castOrigin, self._rayParams) then
+				to = from -- hold at the last point known to be inside
+			end
+		end
+	end
+
+	-- Nothing was struck, so check whether something moved on top of us. A swept cast whose
+	-- origin sits inside a part reports nothing, which would otherwise let the projectile pass
+	-- straight through a body that slid over it.
+	if resolved == 0 and ProjectileConfig.ResolveEnemyOverlap and self.OverlapQuery then
+		local instance, normal = self.OverlapQuery(to, ProjectileConfig.Radius)
+		if instance and normal then
+			entry.contacts += 1
+			local contact = { Position = to, Normal = normal, Instance = instance, Distance = 0 }
+			if self.OnImpact and self.OnImpact(contact, entry) then
+				entry.position = to
+				return false
+			end
+			if entry.bouncesLeft <= 0 then
+				return false
+			end
+			entry.bouncesLeft -= 1
+
+			local reflected = entry.direction - 2 * entry.direction:Dot(normal) * normal
+			reflected = Vector3.new(reflected.X, 0, reflected.Z)
+			if reflected.Magnitude < 1e-4 then
+				return false
+			end
+			entry.direction = reflected.Unit
+			to = to + normal * (ProjectileConfig.Radius + ProjectileConfig.SurfaceSkin)
+			resolved = 1
+		end
 	end
 
 	entry.position = to

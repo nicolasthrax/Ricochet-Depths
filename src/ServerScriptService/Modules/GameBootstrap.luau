@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
 local EnemyService = require(script.Parent.EnemyService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
@@ -48,7 +49,8 @@ function GameBootstrap.Start()
 	local projectiles = ProjectileService.new(workspace, arena, planeY)
 	local rooms = RoomService.new(arena, enemies, planeY, Random.new(seed))
 
-	local telemetry = TelemetryService.new(function(eventName, payload, now)
+	local telemetry
+	telemetry = TelemetryService.new(function(eventName, payload, now)
 		if DebugConfig.LogTelemetry and DebugConfig.IsEnabled() then
 			print(string.format("[telemetry %7.1f] %s %s", now, eventName, GameBootstrap._format(payload)))
 		end
@@ -56,7 +58,13 @@ function GameBootstrap.Start()
 
 	-- Development builds are pinned to a separate datastore scope, so test runs can never
 	-- write into live player data.
+	telemetry:SetEnabled(FeatureFlags.Telemetry)
+
+	-- Persistence can be switched off wholesale; nothing is read or written when it is.
 	local store, scope = DataStoreProvider.Get(DebugConfig.IsEnabled())
+	if not FeatureFlags.Persistence then
+		store = DataStoreProvider.UnavailableStore.new("persistence feature flag is off")
+	end
 	local persistence = PlayerDataService.new(store)
 	if DebugConfig.IsEnabled() then
 		print(("[data] scope=%s schema=v%d"):format(scope, PlayerDataConfig.SchemaVersion))
@@ -107,6 +115,7 @@ function GameBootstrap.Start()
 			local _, err = persistence:Load(player)
 			if err then
 				warn(("[data] profile load failed for %s, session is read-only: %s"):format(player.Name, err))
+				telemetry:LogError("ProfileLoadFailed", err, os.clock())
 			end
 			pushProfile(player)
 		end)
@@ -120,14 +129,23 @@ function GameBootstrap.Start()
 		match:UnregisterPlayer(player, os.clock())
 		router:ClearPlayer(player)
 		task.spawn(function()
-			persistence:Release(player, os.clock())
+			local ok, err = persistence:Release(player, os.clock())
+			if not ok and err and err ~= "profile not loaded" then
+				telemetry:LogError("ProfileSaveFailed", err, os.clock())
+			end
 		end)
 	end)
 
 	-- Last chance to flush before the server closes.
 	game:BindToClose(function()
-		persistence:SaveAll(os.clock())
+		local failures = persistence:SaveAll(os.clock())
+		for _, failure in failures do
+			telemetry:LogError("ShutdownSaveFailed", failure.error, os.clock())
+		end
 	end)
+
+	local debugStats = Remotes.Get("DebugStats")
+	local nextDebugPush = 0
 
 	local effects = match._effects
 	RunService.Heartbeat:Connect(function(deltaTime)
@@ -137,6 +155,17 @@ function GameBootstrap.Start()
 		match:Step(deltaTime, now)
 		effects:Step(now)
 		persistence:StepAutosave(now)
+
+		-- Developer overlay feed. Nothing here reaches a normal player in a published build.
+		if now >= nextDebugPush then
+			nextDebugPush = now + DebugConfig.OverlayUpdateInterval
+			local snapshot = GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, telemetry, persistence)
+			for _, player in Players:GetPlayers() do
+				if DebugConfig.IsDebugUser(player) then
+					debugStats:FireClient(player, snapshot)
+				end
+			end
+		end
 	end)
 
 	return {
@@ -147,6 +176,28 @@ function GameBootstrap.Start()
 		router = router,
 		telemetry = telemetry,
 		persistence = persistence,
+	}
+end
+
+function GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, telemetry, persistence)
+	local run = match:GetRunSnapshot()
+	local telemetryStats = telemetry:GetStats()
+	local dataStats = persistence:GetStats()
+	return {
+		State = run.State,
+		RoomIndex = run.RoomIndex,
+		RoomCount = run.RoomCount,
+		EnemiesRemaining = run.EnemiesRemaining,
+		Participants = run.Players,
+		ProjectilesActive = projectiles:GetActiveCount(),
+		ProjectilesFree = projectiles:GetFreeCount(),
+		EnemiesActive = enemies:GetActiveCount(),
+		EffectsDropped = effects:GetDroppedCount(),
+		TelemetryEmitted = telemetryStats.emitted,
+		TelemetryDropped = telemetryStats.dropped,
+		DataSaves = dataStats.saves,
+		DataSaveFailures = dataStats.saveFailures,
+		DataRetries = dataStats.retries,
 	}
 end
 

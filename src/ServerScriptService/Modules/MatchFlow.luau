@@ -1,0 +1,166 @@
+-- Room-to-room progression: starting a room, clearing it, opening an upgrade round, finishing
+-- a run and tearing it down. Installed onto MatchService.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RunSummary = require(script.Parent.RunSummary)
+local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+
+local States = RunConfig.States
+
+local Flow = { methods = {} }
+
+function Flow.methods:_beginRoom(index, now)
+	local definition = RunConfig.GetRoom(index)
+	if not definition then
+		return self:_finish("Extracted", now)
+	end
+
+	-- Anyone who joined mid-run is admitted here, at a room boundary, never mid-fight.
+	for _, player in self._pendingJoins do
+		local joiner = self._states[player]
+		if joiner and not table.find(self._participants, player) then
+			joiner:ResetRun()
+			joiner.roomsCleared = index - 1 -- credited with the rooms the team already cleared
+			table.insert(self._participants, player)
+			self:_log("LateJoin", { RunId = self._runId, Room = index }, now)
+		end
+	end
+	table.clear(self._pendingJoins)
+
+	self._roomIndex = index
+	self._rooms:Load(definition, now)
+
+	local spawnPoint = self._rooms:GetSpawnPoint()
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state then
+			if not state.alive then
+				state:Revive(now) -- downed players return at the start of the next room
+			end
+			state:GrantInvulnerability(now)
+			if self._world then
+				self._world.Teleport(player, spawnPoint)
+			end
+			self:_pushPlayerState(player)
+		end
+	end
+
+	self:_setState(States.Combat, now)
+	self:_log("RoomStart", { RunId = self._runId, Room = index, RoomId = definition.Id }, now)
+	return nil
+end
+
+function Flow.methods:_onRoomCleared(now)
+	local definition = RunConfig.GetRoom(self._roomIndex)
+	if definition and definition.Kind == "Elite" then
+		self._eliteCleared = true
+	end
+
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state then
+			state.roomsCleared += 1
+			if state.alive and state.stats.RoomClearHeal > 0 then
+				state:Heal(state.stats.RoomClearHeal)
+			end
+			self:_pushPlayerState(player)
+		end
+	end
+	self:_log("RoomClear", { RunId = self._runId, Room = self._roomIndex }, now)
+
+	if self._roomIndex >= RunConfig.RoomCount() then
+		return self:_finish("Extracted", now)
+	end
+
+	self._projectiles:Clear()
+	self:_openUpgradeChoice(now)
+	return nil
+end
+
+function Flow.methods:_openUpgradeChoice(now)
+	local offered = 0
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state then
+			local offer = self._upgrades:BuildOffer(player, state, now)
+			self:_fireClient("UpgradeOffer", player, self._upgrades.ToClientPayload(offer))
+			offered += 1
+			self:_log("CardOffered", { RunId = self._runId, Room = self._roomIndex }, now)
+		end
+	end
+
+	-- Nobody to offer to: skip straight on rather than waiting for choices that cannot arrive.
+	self:_setState(offered > 0 and States.UpgradeChoice or States.Transition, now)
+end
+
+function Flow.methods:_finish(outcome, now)
+	self._projectiles:Clear()
+	self._rooms:Unload()
+	self._upgrades:ClearAll()
+
+	local context = {
+		runId = self._runId,
+		outcome = outcome,
+		duration = now - self._runStartedAt,
+		roomCount = RunConfig.RoomCount(),
+		eliteCleared = self._eliteCleared,
+	}
+
+	local runKey = string.format("%s-%d", self._runKeyPrefix, self._runId)
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state then
+			local summary = RunSummary.ForPlayer(state, context)
+
+			-- Two guards in series: the in-memory ledger stops a repeated completion event on
+			-- this server, and the profile ledger stops a repeat across reconnects or servers.
+			summary.Reward = self._rewards:Grant(self._runId, player, summary.Reward)
+			if summary.Reward > 0 and self._persistence then
+				summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
+				self._persistence:RecordRunEnd(player, summary)
+			end
+			summary.RunKey = runKey
+
+			self:_fireClient("RunResults", player, summary)
+		end
+	end
+
+	self:_log("RunEnd", {
+		RunId = self._runId,
+		Outcome = outcome,
+		Rooms = self._roomIndex,
+		Duration = math.floor(context.duration),
+	}, now)
+	self:_setState(States.Results, now)
+end
+
+function Flow.methods:_cleanup(now)
+	self._projectiles:Clear()
+	self._rooms:Unload()
+	self._enemies:Clear()
+	self._upgrades:ClearAll()
+
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state then
+			state:ResetRun()
+			if self._world then
+				self._world.Teleport(player, RunConfig.LobbyPosition)
+			end
+			self:_pushPlayerState(player)
+		end
+	end
+
+	table.clear(self._participants)
+	table.clear(self._pendingJoins)
+	self._roomIndex = 0
+	self:_setState(States.Lobby, now)
+end
+
+function Flow.Install(class)
+	for name, method in Flow.methods do
+		class[name] = method
+	end
+end
+
+return Flow

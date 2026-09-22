@@ -1,0 +1,87 @@
+-- Who is in a run: registration, late-join queueing, and removal. Installed onto MatchService.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MatchCombat = require(script.Parent.MatchCombat)
+local PlayerState = require(script.Parent.PlayerState)
+local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+
+local States = RunConfig.States
+
+local Membership = { methods = {} }
+
+local function removeFrom(list, value)
+	for index, entry in list do
+		if entry == value then
+			table.remove(list, index)
+			return true
+		end
+	end
+	return false
+end
+
+
+-- Late join rule: a player who arrives while a run is in progress is queued and admitted at the
+-- next room boundary, never mid-fight and never mid-upgrade-round. They start the room they join
+-- with a fresh state and no upgrades.
+function Membership.methods:RegisterPlayer(player)
+	local state = self._states[player]
+	if not state then
+		state = PlayerState.new(player)
+		self._states[player] = state
+	end
+
+	if self:IsRunActive() and not table.find(self._participants, player) and not table.find(self._pendingJoins, player) then
+		state:ResetRun()
+		table.insert(self._pendingJoins, player)
+	end
+
+	return state
+end
+
+function Membership.methods:IsPendingJoin(player)
+	return table.find(self._pendingJoins, player) ~= nil
+end
+
+function Membership.methods:IsParticipant(player)
+	return table.find(self._participants, player) ~= nil
+end
+
+function Membership.methods:GetPlayerState(player)
+	return self._states[player]
+end
+
+function Membership.methods:GetParticipants()
+	return table.clone(self._participants)
+end
+
+function Membership.methods:UnregisterPlayer(player, now)
+	removeFrom(self._participants, player)
+	removeFrom(self._pendingJoins, player)
+	self._upgrades:Clear(player)
+	self._states[player] = nil
+	MatchCombat.ClearPlayer(player)
+	if self._telemetry then
+		self._telemetry:Clear(player)
+	end
+
+	-- A run with nobody left in it ends rather than ticking on forever.
+	if #self._participants == 0 and self:IsRunActive() then
+		self:_finish("Abandoned", now or 0)
+	end
+end
+
+function Membership.methods:IsRunActive()
+	return self._state ~= States.Lobby and self._state ~= States.Results and self._state ~= States.Cleanup
+end
+
+function Membership.methods:GetState()
+	return self._state
+end
+
+function Membership.Install(class)
+	for name, method in Membership.methods do
+		class[name] = method
+	end
+end
+
+return Membership

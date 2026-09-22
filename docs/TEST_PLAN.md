@@ -39,6 +39,19 @@ deterministic. Game source is never modified for tests.
 | Soft-lock guards | `match.test.luau` | A room whose enemies vanish still clears; a room past its time limit is force-cleared; an unanswered upgrade auto-resolves; the run ends when the last participant leaves. |
 | Reward integrity | `match.test.luau` | A run pays a player once however many completion events fire; multiplier scaling and the per-run cap; a defeat pays less than an extraction. |
 | Fire gating | `match.test.luau` | Fire is only accepted during combat; upgrade choices are rejected outside the choice state. |
+| Persisted rewards | `match.test.luau` | A full run credits a profile exactly once and records run stats; a run still completes and pays zero when the profile failed to load. |
+| Co-op runs | `coop.test.luau` | Full descents with 2, 3 and 4 players; one start pulls in everyone; each player gets their own offer; nobody can spend another's offer. |
+| Co-op deadlocks | `coop.test.luau` | The round waits for every player, and an unanswered offer auto-resolves rather than stalling the team. |
+| Co-op membership | `coop.test.luau` | One player leaving does not end the run; the last leaving does; a late joiner waits for the next room boundary; defeat needs every participant down. |
+| Per-player authority | `coop.test.luau` | Fire cooldowns are per player; a downed player cannot fire. |
+| Profile schema | `persistence.test.luau` | Defaults from nothing, missing fields filled without loss, idempotent normalisation, corrupt stored values survived, v1→v3 and v2→v3 migration. |
+| Datastore resilience | `persistence.test.luau` | Retry with backoff on a flaky store; a failed load yields a read-only session; a failed save keeps changes queued; unloaded players are refused. |
+| Reward ledger | `persistence.test.luau` | A run key pays once, across reconnects too; different runs still pay; malformed amounts rejected; the ledger stays bounded and is unioned on a concurrent write. |
+| Autosave and shutdown | `persistence.test.luau` | Only dirty sessions past the interval autosave; every session flushes on shutdown; failures are reported. |
+| Settings | `persistence.test.luau` | Defaults, clamping, mistyped/unknown/non-table payloads rejected, refusal on a failed session, onboarding flag set after a run. |
+| Soak: projectiles | `soak.test.luau` | ~3600 frames of continuous fire: active + free always equals the pool size, and the folder never grows. 5000 fire attempts never exceed the pool. |
+| Soak: enemies | `soak.test.luau` | 200 spawn/step/clear cycles leave the pool at exactly its configured size. |
+| Soak: runs | `soak.test.luau` | 25 consecutive runs end in the lobby with pools full and a flat total instance count from run 3 onward. |
 
 ## Manual Studio test cases
 

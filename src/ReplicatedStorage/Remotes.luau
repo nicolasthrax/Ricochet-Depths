@@ -20,6 +20,7 @@ local REMOTE_NAMES = {
 	"UpgradeResolved",
 	"RunResults",
 	"ProfileSync", -- currency, flags and settings for this player
+	"DebugStats", -- developer overlay only; sent to allowlisted users
 }
 
 local Remotes = {}

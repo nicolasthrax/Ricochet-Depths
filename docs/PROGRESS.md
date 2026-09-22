@@ -5,7 +5,10 @@ presentation from any existing game.
 
 ## Current milestone
 
-**Milestone 7 — Co-op foundation** (next). Milestones 1–6 are complete; see the changelog.
+**Blocked on manual Studio validation.** Milestones 1–11 are implemented and the automated gate
+is green, but nothing has been run inside Roblox Studio. Until the checks in
+`docs/RELEASE_CHECKLIST.md` sections 2–5 pass, this is not a playable build, only a plausible
+one.
 
 ## Completed milestones
 
@@ -46,17 +49,67 @@ presentation from any existing game.
 - Three weighted choices per event, drawn without replacement, with a 10s auto-pick.
 - Active upgrades shown in the HUD.
 
+### Milestone 7 — Co-op foundation
+- Shared run ownership: one player starting pulls in everyone in the lobby.
+- Late join rule: a player arriving mid-run is queued and admitted at the next room boundary
+  with a fresh state, never mid-fight and never mid-upgrade-round.
+- Upgrade policy **A**: each player receives their own offer with its own timer. The round ends
+  when all offers resolve; an unanswered offer auto-picks, so one idle player cannot deadlock.
+- Downed players stay down for the room and return at the start of the next; defeat requires
+  every participant to be down.
+- Leaving clears offers, rate-limit buckets, fire cooldowns and telemetry identity. The run ends
+  only when the last participant leaves.
+
+### Milestone 8 — Persistence and rewards
+- Versioned profile schema (v3) with safe defaults and ordered forward migrations.
+- `UpdateAsync` writes with capped exponential backoff; a failed load yields a read-only session
+  where the run still plays but nothing is written and no reward is persisted.
+- Two-layer reward idempotency: an in-memory per-server ledger and a bounded per-profile run
+  ledger, with the ledger unioned on save so a concurrent write cannot resurrect a paid run.
+- Separate `dev_v1` datastore scope for development builds; save on leave, autosave of dirty
+  sessions only, and `BindToClose`.
+
+### Milestone 9 — Onboarding, UI and mobile
+- Contextual hints that appear in the moment and retire once the player finishes a run; no modal
+  tutorial before the first shot.
+- HUD for health, room progress, objective and active upgrades; card picker with countdown;
+  results screen.
+- Options panel: reduced flash, effect intensity, screen shake. Settings are sanitised
+  server-side against a spec before storage.
+- The effective fire cooldown is sent to the client so a refused shot is visible before it is
+  sent, rather than vanishing silently.
+- Touch and mouse share one aim path; 48px minimum touch targets; scale-based card layout.
+
+### Milestone 10 — Quality and performance
+- `MatchService` split into MatchService / MatchMembership / MatchFlow / MatchCombat /
+  MatchBroadcast, none over 210 lines.
+- Developer overlay on F3, gated by `DebugConfig` so it is inert for normal players in a
+  published build, fed by a server stats push.
+- Soak tests: 25 consecutive runs with a flat instance count, ~3600 frames of continuous fire
+  with the pool constant, 200 enemy spawn/clear cycles.
+- Caps: 150 projectiles, 28 active enemies (36 pooled), 24 impacts per batch, all configurable.
+  Every cap degrades by refusing or dropping, never by allocating.
+
+### Milestone 11 — Release package
+- `README.md`, `docs/PLAYTEST.md`, `docs/RELEASE_CHECKLIST.md`.
+- `FeatureFlags.luau`: anything off is inert — no UI entry point, no remote handler, no data.
+- Build version surfaced in the Options panel.
+- Telemetry funnel: run start, room start, room clear, card offered, card chosen, shot fired,
+  enemy defeated, player down, late join, run end with outcome, plus categorised errors. Rate
+  limited per event, and identities reduced to an opaque per-session index.
+
 ## Known limitations
 
 | # | Limitation | Impact |
 |---|---|---|
-| 1 | No persistence yet — salvage is computed and shown but not saved. | Milestone 8. |
-| 2 | Co-op is untested with more than one client. Membership, shared rooms and per-player offers are implemented; 2–4 client validation has not been run. | Milestone 7. |
-| 3 | `MatchService.luau` is ~500 lines, over the ~150-line convention. | Split planned in Milestone 10. |
-| 4 | No audio. `SoundService` hooks are not yet placed. | Milestone 9/11. |
-| 5 | No developer overlay yet; `DebugConfig` exists but nothing consumes it. | Milestone 10. |
-| 6 | Enemies do not avoid pillars — they clamp to arena bounds but can walk into cover. | Acceptable for the slice; revisit if playtests flag it. |
-| 7 | Telemetry sink only prints in Studio. No external transport. | Milestone 11. |
+| 1 | **Nothing has been run in Roblox Studio.** Every claim of correctness rests on static checks and the headless harness, which stubs the engine. Physics feel, replication, character handling and UI layout are all unverified against the real engine. | Blocker for playtest. |
+| 2 | Co-op is verified only headlessly. 2–4 real clients have never connected. | Blocker for playtest. |
+| 3 | Balance numbers are first-pass guesses. The 6–8 minute run target has never been measured. | Tune from playtest data. |
+| 4 | No audio; `FeatureFlags.Audio` is off and no sound assets are wired. | Post-playtest. |
+| 5 | Enemies clamp to arena bounds but do not path around pillars. | Revisit if playtests flag it. |
+| 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
+| 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
+| 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 
 ## Manual Studio validation still required
 
@@ -79,6 +132,13 @@ confirmed by hand; see `docs/TEST_PLAN.md` for the steps.
 - [ ] MS-13 2, 3 and 4 simulated clients complete a run together.
 
 ## Changelog
+
+### 0.4.0-dev — co-op, persistence, release package
+- Co-op membership with an explicit late-join rule and per-player upgrade offers.
+- Versioned persistent profiles with retries, migrations and a two-layer reward ledger.
+- Accessibility settings, sanitised server-side; onboarding hints that retire after a run.
+- Developer overlay, soak tests, `MatchService` split into five focused modules.
+- `FeatureFlags`, README, playtest guide and release checklist.
 
 ### 0.4.0-dev — run loop, enemies, upgrades
 - Added `MatchService`, `RoomService`, `EnemyService`, `UpgradeService`, `RewardService`,

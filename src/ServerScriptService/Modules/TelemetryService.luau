@@ -9,6 +9,7 @@ local DEFAULT_RULES = {
 	Budgets = {
 		ShotFired = 30,
 		EnemyDefeated = 60,
+		Error = 20,
 	},
 	WindowSeconds = 60,
 }
@@ -70,6 +71,14 @@ function TelemetryService:Log(eventName, payload, now)
 		self._sink(eventName, payload or {}, now)
 	end
 	return true
+end
+
+-- Errors are logged by category, never with a message that could carry player data.
+function TelemetryService:LogError(category, detail, now)
+	return self:Log("Error", {
+		Category = tostring(category),
+		Detail = detail ~= nil and tostring(detail):sub(1, 120) or nil,
+	}, now)
 end
 
 function TelemetryService:GetStats()

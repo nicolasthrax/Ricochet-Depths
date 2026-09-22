@@ -14,6 +14,21 @@ collision, property-based fuzzing, and a dry-run simulator — specifically so t
 Studio session is execution rather than discovery. Run `docs/STUDIO_VALIDATION_CHECKLIST.md`
 top to bottom when Studio is available.
 
+### Where the stub is more forgiving than the engine
+
+These are the places a headless pass **cannot** fail but the real engine might. They are the
+highest-value targets for the first Studio session, in rough order of risk. None is a known
+defect; each is an untested assumption.
+
+| # | Assumption the stub makes | What the engine does instead | Watch for |
+|---|---|---|---|
+| 1 | `task.wait` returns immediately, so `PlayerDataService` retries cost nothing. | Real backoff yields up to ~7.5s per profile. `BindToClose` calls `SaveAll` **synchronously**, so four struggling profiles could approach Roblox's ~30s shutdown budget. | Data loss on a server shutdown while the datastore is slow. Studio step V6b. |
+| 2 | No yielding means no interleaving, so a load can never overlap a leave or a rejoin. | A player can leave, or rejoin, while their `Load` is still yielding. The session is detached mid-flight and the completed load writes to a table no longer in `_sessions`. | A fast rejoin producing a stale or missing profile. |
+| 3 | `WorldAdapter.Teleport` always finds a `HumanoidRootPart`. | A player mid-respawn has no character. `Teleport` returns false and **`_beginRoom` ignores it**, leaving that player at the previous room's coordinates after the geometry is destroyed. | A player falling out of the world at a room transition. |
+| 4 | RemoteEvent arguments pass by reference with no serialisation. | Roblox deep-copies and drops non-string/number keys, functions and metatables, with a 1MB cap. Payloads were reviewed and are all primitives, but nothing tests this. | Malformed or empty payloads client-side. |
+| 5 | One shared virtual clock across "server" and "client". | `os.clock()` is per-process and unrelated across machines. *(This one did bite — see the upgrade countdown fix in 0.5.1-dev.)* | Any other cross-machine time comparison. |
+| 6 | Raycasts only see boxes the test registered. | The Include filter covers everything under `Arena`, including the `Room` folder's floor and spawn pad and the enemy pool folder. | Shots stopping on geometry the tests never modelled. |
+
 ### Verified headless vs requires Studio
 
 Everything below is stated against a **stubbed engine**. The stub models axis-aligned box
@@ -133,6 +148,9 @@ replication, character controllers, rendering, input, or DataStore.
 | 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
 | 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
+| 9 | A late joiner is credited with `roomsCleared = index - 1`, so joining at the elite room still pays for the rooms the team cleared without them. Possible farming vector. | Design decision to confirm; untouched because it is a balance call. |
+| 10 | Any participant can dismiss the results screen for the whole team. | Design decision to confirm; currently documented as intentional. |
+| 11 | Duplicate small idioms across modules: flattening a Vector3 to XZ (five places), point-in-box tests (`EnemyService.FindEnclosingMover`, `RoomService.GetSpawnPoint`), and list removal. | Flagged only; consolidating would move code between modules, which needs approval. |
 
 ## Manual Studio validation still required
 
@@ -155,6 +173,22 @@ confirmed by hand; see `docs/TEST_PLAN.md` for the steps.
 - [ ] MS-13 2, 3 and 4 simulated clients complete a run together.
 
 ## Changelog
+
+### 0.5.1-dev — post-split review pass
+- Fixed: a room that fails to build left the run in Combat with no room to clear, hanging until
+  the 900s hard limit. It now ends the run with an `Aborted` outcome and an error telemetry
+  event.
+- Fixed: the upgrade countdown sent an absolute server `os.clock()` timestamp and the client
+  compared it against its own clock. Per-process clocks are unrelated across machines, so the
+  timer would have shown nonsense. The payload now carries a duration and the client builds its
+  own deadline.
+- Fixed: contact damage was evaluated against a one-frame-stale clock, because enemies step
+  before the run loop does. `EnemyService` now passes its step clock through.
+- Fixed: the spawn-point search returned the room centre when no clear ground was found — the
+  one point already known to be blocked. It now returns the least-bad sampled point.
+- Verified the lint filter hides nothing real: all 464 suppressed findings are the standalone
+  analyzer not knowing Roblox globals.
+- Documented where the stub is more forgiving than the engine, as a Studio priority list.
 
 ### 0.5.0-dev — headless hardening
 - Harness upgraded from four infinite planes to box-accurate raycasting, reproducing the

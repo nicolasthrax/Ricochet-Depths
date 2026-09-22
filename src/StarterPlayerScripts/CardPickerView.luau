@@ -67,7 +67,10 @@ end
 function CardPickerView:Show(payload)
 	self:_clear()
 	self._offerId = payload.OfferId
-	self._expiresAt = payload.ExpiresAt
+	-- The server sends how long is left, and the deadline is computed against this machine's
+	-- clock. Comparing against a server timestamp would be meaningless.
+	local secondsRemaining = tonumber(payload.SecondsRemaining) or UpgradeConfig.ChoiceTimeout
+	self._deadline = os.clock() + math.max(secondsRemaining, 0)
 	self._locked = false
 
 	for index, card in payload.Cards do
@@ -130,10 +133,10 @@ function CardPickerView:Show(payload)
 end
 
 function CardPickerView:UpdateTimer(now)
-	if not self.gui.Enabled or not self._expiresAt then
+	if not self.gui.Enabled or not self._deadline then
 		return
 	end
-	local remaining = math.max(self._expiresAt - now, 0)
+	local remaining = math.max(self._deadline - now, 0)
 	self.timerLabel.Text = string.format("Auto-picks in %.0fs", remaining)
 end
 
@@ -141,7 +144,7 @@ function CardPickerView:Hide()
 	self.gui.Enabled = false
 	self:_clear()
 	self._offerId = nil
-	self._expiresAt = nil
+	self._deadline = nil
 end
 
 function CardPickerView:Destroy()

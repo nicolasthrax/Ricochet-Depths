@@ -167,22 +167,25 @@ function RoomService:GetSpawnPoint()
 	local clearance = RoomConfig.SpawnPadSize.X / 2 + 1
 	local half = current.bounds.half
 
-	local function isClear(x, z)
+	-- How far this point sits outside the nearest padded obstacle footprint. Negative means
+	-- inside one, and larger is better, so a fully blocked room still has a least-bad answer.
+	local function clearanceAt(x, z)
 		if math.abs(x) > half.X or math.abs(z) > half.Y then
-			return false
+			return -math.huge
 		end
+		local worst = math.huge
 		for _, obstacle in obstacles do
-			if
-				math.abs(x - obstacle.Offset.X) < obstacle.Size.X / 2 + clearance
-				and math.abs(z - obstacle.Offset.Y) < obstacle.Size.Y / 2 + clearance
-			then
-				return false
-			end
+			local gapX = math.abs(x - obstacle.Offset.X) - (obstacle.Size.X / 2 + clearance)
+			local gapZ = math.abs(z - obstacle.Offset.Y) - (obstacle.Size.Y / 2 + clearance)
+			-- A point escapes a box as soon as it is outside on either axis.
+			worst = math.min(worst, math.max(gapX, gapZ))
 		end
-		return true
+		return worst
 	end
 
-	if isClear(0, 0) then
+	local bestX, bestZ = 0, 0
+	local bestClearance = clearanceAt(0, 0)
+	if bestClearance >= 0 then
 		return fallback
 	end
 
@@ -191,13 +194,19 @@ function RoomService:GetSpawnPoint()
 		for step = 0, 11 do
 			local angle = step * math.pi / 6
 			local x, z = math.cos(angle) * radius, math.sin(angle) * radius
-			if isClear(x, z) then
+			local score = clearanceAt(x, z)
+			if score >= 0 then
 				return Vector3.new(x, floorY + SPAWN_HEIGHT, z)
+			end
+			if score > bestClearance then
+				bestX, bestZ, bestClearance = x, z, score
 			end
 		end
 	end
 
-	return fallback
+	-- Nothing is fully clear. Take the least-bad point rather than the centre, which is the one
+	-- place already known to be blocked.
+	return Vector3.new(bestX, floorY + SPAWN_HEIGHT, bestZ)
 end
 
 function RoomService:Destroy()

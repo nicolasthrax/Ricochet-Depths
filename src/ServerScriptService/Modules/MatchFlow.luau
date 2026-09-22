@@ -28,7 +28,16 @@ function Flow.methods:_beginRoom(index, now)
 	table.clear(self._pendingJoins)
 
 	self._roomIndex = index
-	self._rooms:Load(definition, now)
+
+	local loaded, reason = self._rooms:Load(definition, now)
+	if not loaded then
+		-- Nothing was built, so there is nothing to clear: IsCleared stays false and the run
+		-- would sit in Combat until the hard time limit. End it instead of hanging.
+		if self._telemetry then
+			self._telemetry:LogError("RoomLoadFailed", reason, now)
+		end
+		return self:_finish("Aborted", now)
+	end
 
 	local spawnPoint = self._rooms:GetSpawnPoint()
 	for _, player in self._participants do
@@ -83,7 +92,7 @@ function Flow.methods:_openUpgradeChoice(now)
 		local state = self._states[player]
 		if state then
 			local offer = self._upgrades:BuildOffer(player, state, now)
-			self:_fireClient("UpgradeOffer", player, self._upgrades.ToClientPayload(offer))
+			self:_fireClient("UpgradeOffer", player, self._upgrades.ToClientPayload(offer, now))
 			offered += 1
 			self:_log("CardOffered", { RunId = self._runId, Room = self._roomIndex }, now)
 		end

@@ -19,7 +19,6 @@ local function removeFrom(list, value)
 	return false
 end
 
-
 -- Late join rule: a player who arrives while a run is in progress is queued and admitted at the
 -- next room boundary, never mid-fight and never mid-upgrade-round. They start the room they join
 -- with a fresh state and no upgrades.
@@ -66,7 +65,7 @@ function Membership.methods:UnregisterPlayer(player, now)
 
 	-- A run with nobody left in it ends rather than ticking on forever.
 	if #self._participants == 0 and self:IsRunActive() then
-		self:_finish("Abandoned", now or 0)
+		self:_finish("Abandoned", now or self._now)
 	end
 end
 

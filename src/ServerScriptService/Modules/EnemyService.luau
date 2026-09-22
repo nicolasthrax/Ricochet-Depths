@@ -26,7 +26,7 @@ function EnemyService.new(parent, planeY, seed)
 
 	-- Set by the encounter layer.
 	self.OnDeath = nil -- (enemy, shooter)
-	self.OnPlayerContact = nil -- (player, damage, enemy)
+	self.OnPlayerContact = nil -- (player, damage, enemy, now)
 
 	return self
 end
@@ -252,7 +252,9 @@ function EnemyService:Step(deltaTime, now)
 			if offset.Magnitude <= (archetype.ContactRange or 0) then
 				enemy.contactReadyAt = now + (archetype.ContactCooldown or EnemyConfig.DefaultContactCooldown)
 				if self.OnPlayerContact then
-					self.OnPlayerContact(target.player, archetype.ContactDamage, enemy)
+					-- Pass the step's clock through: the handler runs before the run loop's own
+					-- Step, so anything it reads from the match would be a frame stale.
+					self.OnPlayerContact(target.player, archetype.ContactDamage, enemy, now)
 				end
 			end
 		end

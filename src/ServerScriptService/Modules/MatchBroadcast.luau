@@ -8,7 +8,6 @@ local States = RunConfig.States
 
 local Broadcast = { methods = {} }
 
-
 function Broadcast.methods:GetRunSnapshot()
 	local current = self._rooms:GetCurrent()
 	local definition = current and current.definition

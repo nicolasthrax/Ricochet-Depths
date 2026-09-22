@@ -112,7 +112,7 @@ function UpgradeService:GetOffer(playerKey)
 end
 
 -- Card payload for the client. Only display data crosses the wire.
-function UpgradeService.ToClientPayload(offer)
+function UpgradeService.ToClientPayload(offer, now)
 	local cards = {}
 	for _, card in offer.cards do
 		table.insert(cards, {
@@ -123,7 +123,10 @@ function UpgradeService.ToClientPayload(offer)
 			Rarity = card.Rarity,
 		})
 	end
-	return { OfferId = offer.id, Cards = cards, ExpiresAt = offer.expiresAt }
+	-- A duration, never a timestamp. os.clock() is per-process, so a server clock value is
+	-- meaningless on a client; the client counts down from this against its own clock.
+	local secondsRemaining = now and math.max(offer.expiresAt - now, 0) or UpgradeConfig.ChoiceTimeout
+	return { OfferId = offer.id, Cards = cards, SecondsRemaining = secondsRemaining }
 end
 
 -- Validates and applies a selection. Every rejection path returns a reason and changes nothing.

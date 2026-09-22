@@ -53,8 +53,8 @@ function MatchService.new(deps)
 	self._enemies:SetTargetProvider(function()
 		return self:_targets()
 	end)
-	self._enemies.OnPlayerContact = function(player, damage, enemy)
-		self:HandlePlayerContact(player, damage, enemy, self._now)
+	self._enemies.OnPlayerContact = function(player, damage, enemy, now)
+		self:HandlePlayerContact(player, damage, enemy, now or self._now)
 	end
 	-- Lets a projectile that an enemy moved over still register, rather than passing through.
 	self._projectiles.OverlapQuery = function(position, margin)
@@ -107,7 +107,9 @@ function MatchService:RequestStart(player, now)
 	return true
 end
 
-function MatchService:RequestReturnToLobby(player, now)
+-- Any participant can dismiss the results for the whole team, which is why the requesting
+-- player is not consulted. Shared run, shared results screen.
+function MatchService:RequestReturnToLobby(_player, now)
 	if self._state ~= States.Results then
 		return false, "no results to dismiss"
 	end

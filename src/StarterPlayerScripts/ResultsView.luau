@@ -12,6 +12,7 @@ local OUTCOME_TEXT = {
 	Defeated = { title = "Lost in the Depths", color = UiConfig.Colors.Danger },
 	TimedOut = { title = "Out of Time", color = UiConfig.Colors.Warning },
 	Abandoned = { title = "Run Abandoned", color = UiConfig.Colors.TextMuted },
+	Aborted = { title = "Descent Collapsed", color = UiConfig.Colors.TextMuted },
 }
 
 function ResultsView.new(playerGui, onDismiss)

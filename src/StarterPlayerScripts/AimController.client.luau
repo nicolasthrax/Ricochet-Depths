@@ -15,6 +15,16 @@ local indicator = AimIndicator.new(player:WaitForChild("PlayerGui"))
 
 local dragOrigin = nil
 local activeInput = nil
+local lastFireAt = -math.huge
+
+-- Mirrors the server's cooldown so a refused shot is visible before it is sent.
+local function isReady()
+	local cooldown = player:GetAttribute("FireCooldown")
+	if type(cooldown) ~= "number" then
+		return true
+	end
+	return os.clock() - lastFireAt >= cooldown
+end
 
 local function isAimInput(input)
 	return input.UserInputType == Enum.UserInputType.MouseButton1
@@ -81,7 +91,7 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 	local aimScreen, power = readDrag(input)
 	if aimScreen then
-		indicator:Show(dragOrigin, aimScreen, power)
+		indicator:Show(dragOrigin, aimScreen, power, isReady())
 	else
 		indicator:Hide()
 	end
@@ -101,8 +111,13 @@ UserInputService.InputEnded:Connect(function(input)
 		return
 	end
 
+	if not isReady() then
+		return -- the server would refuse it; do not spend bandwidth on the attempt
+	end
+
 	local worldDirection = screenToWorldDirection(aimScreen)
 	if worldDirection then
+		lastFireAt = os.clock()
 		fireProjectile:FireServer(worldDirection, power)
 	end
 end)

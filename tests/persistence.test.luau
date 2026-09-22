@@ -311,3 +311,97 @@ describe("run statistics", function()
 		expect(stats.BestRoomsCleared).toBe(4)
 	end)
 end)
+
+describe("settings", function()
+	local function loadedService()
+		local store = { data = {} }
+		function store:UpdateAsync(key, transform)
+			local updated = transform(self.data[key])
+			self.data[key] = updated
+			return updated
+		end
+		local service = PlayerDataService.new(store)
+		local subject = player(60)
+		service:Load(subject)
+		return service, subject, store
+	end
+
+	it("starts every player on the documented defaults", function()
+		local service, subject = loadedService()
+		local settings = service:GetPublicProfile(subject).Settings
+		for name, spec in PlayerDataConfig.SettingSpecs do
+			expect(settings[name]).toBe(spec.Default)
+		end
+	end)
+
+	it("accepts valid changes and persists them", function()
+		local service, subject, store = loadedService()
+		local applied = service:ApplySettings(subject, { ReducedFlash = true, EffectIntensity = 0.5 })
+		expect(applied.ReducedFlash).toBe(true)
+		expect(applied.EffectIntensity).toBe(0.5)
+		service:Save(subject, 1)
+		expect(store.data["profile_60"].Settings.ReducedFlash).toBe(true)
+	end)
+
+	it("clamps out-of-range numbers instead of trusting them", function()
+		local service, subject = loadedService()
+		local applied = service:ApplySettings(subject, { EffectIntensity = 99, ScreenShake = -12 })
+		expect(applied.EffectIntensity).toBe(1)
+		expect(applied.ScreenShake).toBe(0)
+	end)
+
+	it("discards mistyped, missing and unknown fields", function()
+		local service, subject = loadedService()
+		service:ApplySettings(subject, { ReducedFlash = true })
+		local applied = service:ApplySettings(subject, {
+			ReducedFlash = "yes",
+			EffectIntensity = 0 / 0,
+			ScreenShake = math.huge,
+			Cheat = true,
+			Salvage = 99999,
+		})
+		expect(applied.ReducedFlash).toBe(true) -- kept its previous valid value
+		expect(applied.EffectIntensity).toBe(1)
+		expect(applied.ScreenShake).toBe(1)
+		expect(applied.Cheat).toBeNil()
+		expect(service:GetPublicProfile(subject).Salvage).toBe(0)
+	end)
+
+	it("survives a non-table payload", function()
+		local service, subject = loadedService()
+		expect(service:ApplySettings(subject, "drop tables").ReducedFlash).toBe(false)
+		expect(service:ApplySettings(subject, nil).EffectIntensity).toBe(1)
+	end)
+
+	it("refuses settings for a session that failed to load", function()
+		local failing = {}
+		function failing:UpdateAsync()
+			error("down", 0)
+		end
+		local service = PlayerDataService.new(failing)
+		local subject = player(61)
+		service:Load(subject)
+		local applied, reason = service:ApplySettings(subject, { ReducedFlash = true })
+		expect(applied).toBeNil()
+		expect(reason).toBe("profile not loaded")
+	end)
+
+	it("migrates a v2 profile forward with default settings", function()
+		local profile = PlayerDataService.Normalise({
+			SchemaVersion = 2,
+			Currency = { Salvage = 42 },
+			GrantedRuns = { ["job-1"] = 10 },
+		})
+		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
+		expect(profile.Currency.Salvage).toBe(42)
+		expect(profile.GrantedRuns["job-1"]).toBe(10)
+		expect(profile.Settings.EffectIntensity).toBe(1)
+	end)
+
+	it("marks onboarding complete after the first finished run", function()
+		local service, subject = loadedService()
+		expect(service:GetPublicProfile(subject).Flags.OnboardingSeen).toBe(false)
+		service:RecordRunEnd(subject, { Outcome = "Defeated", EnemiesDefeated = 1, BestChain = 1, RoomsCleared = 0 })
+		expect(service:GetPublicProfile(subject).Flags.OnboardingSeen).toBe(true)
+	end)
+end)

@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 2
+PlayerDataConfig.SchemaVersion = 3
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -33,8 +33,45 @@ function PlayerDataConfig.DefaultProfile()
 			BestRoomsCleared = 0,
 		},
 		GrantedRuns = {},
+		Settings = PlayerDataConfig.DefaultSettings(),
 		LastSaved = 0,
 	}
+end
+
+-- Player-facing accessibility and comfort options, with the range each one is clamped to.
+PlayerDataConfig.SettingSpecs = {
+	ReducedFlash = { Kind = "boolean", Default = false },
+	EffectIntensity = { Kind = "number", Default = 1, Min = 0, Max = 1 },
+	ScreenShake = { Kind = "number", Default = 1, Min = 0, Max = 1 },
+}
+
+function PlayerDataConfig.DefaultSettings()
+	local settings = {}
+	for name, spec in PlayerDataConfig.SettingSpecs do
+		settings[name] = spec.Default
+	end
+	return settings
+end
+
+-- Returns a sanitised settings table. Anything unknown, mistyped or out of range is discarded
+-- rather than trusted, since this arrives from the client.
+function PlayerDataConfig.SanitiseSettings(incoming, current)
+	local result = {}
+	for name, spec in PlayerDataConfig.SettingSpecs do
+		local fallback = (current and current[name] ~= nil) and current[name] or spec.Default
+		local value = type(incoming) == "table" and incoming[name] or nil
+
+		if spec.Kind == "boolean" then
+			result[name] = type(value) == "boolean" and value or fallback
+		elseif spec.Kind == "number" then
+			if type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge then
+				result[name] = math.clamp(value, spec.Min, spec.Max)
+			else
+				result[name] = fallback
+			end
+		end
+	end
+	return result
 end
 
 -- Ordered migration steps, applied in sequence from the profile's stored version.
@@ -49,6 +86,11 @@ PlayerDataConfig.Migrations = {
 			BestChain = 0,
 			BestRoomsCleared = 0,
 		}
+		return profile
+	end,
+	-- v2 -> v3: accessibility settings were introduced.
+	[2] = function(profile)
+		profile.Settings = PlayerDataConfig.SanitiseSettings(profile.Settings, nil)
 		return profile
 	end,
 }

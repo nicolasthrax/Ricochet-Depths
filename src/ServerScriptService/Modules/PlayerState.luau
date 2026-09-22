@@ -2,6 +2,7 @@
 -- never writes to it.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("UpgradeConfig"))
 
@@ -149,6 +150,9 @@ function PlayerState:ToSnapshot()
 		Kills = self.kills,
 		RoomsCleared = self.roomsCleared,
 		BestChain = self.bestChain,
+		-- Sent so the client can predict its own cooldown and give instant feedback on a
+		-- shot that would be refused, without an extra remote for rejections.
+		FireCooldown = ProjectileConfig.FireCooldown * self.stats.FireCooldownMultiplier,
 		Upgrades = upgrades,
 	}
 end

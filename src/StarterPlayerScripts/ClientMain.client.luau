@@ -10,14 +10,20 @@ local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+local SettingsView = require(script.Parent:WaitForChild("SettingsView"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local chooseUpgrade = Remotes.Get("ChooseUpgrade")
 local requestReturnToLobby = Remotes.Get("RequestReturnToLobby")
+local updateSettings = Remotes.Get("UpdateSettings")
 
 local hud = HudView.new(playerGui)
+local settingsView = SettingsView.new(playerGui, function(settings)
+	updateSettings:FireServer(settings)
+end)
+settingsView:SetVersion("Build " .. RunConfig.Version)
 local onboarding = OnboardingView.new(playerGui)
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 	chooseUpgrade:FireServer(offerId, cardId)
@@ -62,6 +68,25 @@ end)
 
 Remotes.Get("PlayerStateChanged").OnClientEvent:Connect(function(snapshot)
 	hud:UpdatePlayer(snapshot)
+	if type(snapshot) == "table" and type(snapshot.FireCooldown) == "number" then
+		-- AimController predicts its own cooldown from this, purely for feedback.
+		player:SetAttribute("FireCooldown", snapshot.FireCooldown)
+	end
+end)
+
+-- Cosmetic scripts read these attributes rather than each opening their own remote.
+Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(profile.Flags) == "table" and profile.Flags.OnboardingSeen then
+		onboarding:MarkAllSeen()
+	end
+	settingsView:Apply(profile.Settings)
+	local settings = settingsView:GetSettings()
+	player:SetAttribute("EffectIntensity", settings.EffectIntensity)
+	player:SetAttribute("ReducedFlash", settings.ReducedFlash)
+	player:SetAttribute("ScreenShake", settings.ScreenShake)
 end)
 
 Remotes.Get("UpgradeOffer").OnClientEvent:Connect(function(payload)
@@ -74,7 +99,7 @@ end)
 
 Remotes.Get("UpgradeResolved").OnClientEvent:Connect(function(payload)
 	cardPicker:Hide()
-	if payload and payload.Auto then
+	if payload and payload.Auto and not player:GetAttribute("ReducedFlash") then
 		hud:Flash("Upgrade auto-selected")
 	end
 end)

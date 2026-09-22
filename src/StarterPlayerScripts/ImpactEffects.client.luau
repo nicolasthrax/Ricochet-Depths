@@ -1,5 +1,6 @@
 -- Cosmetic hit bursts, driven by server-confirmed impacts. Parts are pooled, never created
 -- at runtime, and exist only on this client.
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -7,6 +8,13 @@ local EffectConfig = require(ReplicatedStorage:WaitForChild("EffectConfig"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 
 local projectileImpact = Remotes.Get("ProjectileImpact")
+local player = Players.LocalPlayer
+
+-- Player-set comfort option, defaulting to full until the profile arrives.
+local function effectIntensity()
+	local value = player:GetAttribute("EffectIntensity")
+	return type(value) == "number" and math.clamp(value, 0, 1) or 1
+end
 
 local folder = Instance.new("Folder")
 folder.Name = "ImpactEffects"
@@ -33,6 +41,11 @@ for index = 1, EffectConfig.PoolSize do
 end
 
 local function spawnBurst(position, normal)
+	local intensity = effectIntensity()
+	if intensity <= 0 then
+		return true -- effects disabled by the player; keep draining the batch
+	end
+
 	local count = #free
 	if count == 0 then
 		return false -- pool dry: drop the burst rather than allocating
@@ -42,9 +55,9 @@ local function spawnBurst(position, normal)
 	free[count] = nil
 
 	part.Size = EffectConfig.StartSize
-	part.Transparency = 0
+	part.Transparency = 1 - intensity
 	part.CFrame = CFrame.lookAlong(position + normal * 0.1, normal)
-	table.insert(active, { part = part, startedAt = os.clock() })
+	table.insert(active, { part = part, startedAt = os.clock(), intensity = intensity })
 	return true
 end
 
@@ -74,7 +87,7 @@ RunService.RenderStepped:Connect(function()
 			table.remove(active, index)
 		else
 			entry.part.Size = EffectConfig.StartSize:Lerp(EffectConfig.EndSize, alpha)
-			entry.part.Transparency = alpha
+			entry.part.Transparency = 1 - entry.intensity * (1 - alpha)
 		end
 	end
 end)

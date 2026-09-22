@@ -9,6 +9,7 @@ local REMOTE_NAMES = {
 	"ChooseUpgrade", -- offer id + card id
 	"RequestStartRun",
 	"RequestReturnToLobby",
+	"UpdateSettings", -- accessibility options, sanitised server-side before storage
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -18,6 +19,7 @@ local REMOTE_NAMES = {
 	"UpgradeOffer",
 	"UpgradeResolved",
 	"RunResults",
+	"ProfileSync", -- currency, flags and settings for this player
 }
 
 local Remotes = {}

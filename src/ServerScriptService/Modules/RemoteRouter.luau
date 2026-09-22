@@ -9,9 +9,11 @@ local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RemoteRouter = {}
 RemoteRouter.__index = RemoteRouter
 
-function RemoteRouter.new(match)
+function RemoteRouter.new(match, persistence, onProfileChanged)
 	return setmetatable({
 		_match = match,
+		_persistence = persistence,
+		_onProfileChanged = onProfileChanged,
 		_guard = RemoteGuard.new(RunConfig.RemoteRules),
 		_connections = {},
 	}, RemoteRouter)
@@ -44,6 +46,15 @@ function RemoteRouter:Bind()
 
 	self:_connect("RequestReturnToLobby", "RequestReturnToLobby", function(player, now)
 		self._match:RequestReturnToLobby(player, now)
+	end)
+
+	self:_connect("UpdateSettings", "UpdateSettings", function(player, _now, settings)
+		if not self._persistence or type(settings) ~= "table" then
+			return
+		end
+		if self._persistence:ApplySettings(player, settings) and self._onProfileChanged then
+			self._onProfileChanged(player)
+		end
 	end)
 end
 

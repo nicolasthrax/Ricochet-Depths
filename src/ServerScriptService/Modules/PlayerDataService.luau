@@ -199,6 +199,40 @@ function PlayerDataService:_trimLedger(profile)
 	end
 end
 
+-- Settings arrive from the client, so they are sanitised against the spec before storage.
+function PlayerDataService:ApplySettings(player, incoming)
+	local session = self._sessions[player]
+	if not session or not session.loaded or session.failed then
+		return nil, "profile not loaded"
+	end
+
+	local sanitised = PlayerDataConfig.SanitiseSettings(incoming, session.profile.Settings)
+	session.profile.Settings = sanitised
+	session.dirty = true
+	return sanitised
+end
+
+function PlayerDataService:GetPublicProfile(player)
+	local session = self._sessions[player]
+	if not session or not session.profile then
+		return nil
+	end
+	local profile = session.profile
+	return {
+		Salvage = profile.Currency.Salvage,
+		Settings = table.clone(profile.Settings),
+		Flags = table.clone(profile.Flags),
+		Stats = table.clone(profile.Stats),
+		ReadOnly = session.failed == true,
+	}
+end
+
+function PlayerDataService:SetFlag(player, name, value)
+	return self:Update(player, function(profile)
+		profile.Flags[name] = value
+	end)
+end
+
 function PlayerDataService:RecordRunEnd(player, summary)
 	return self:Update(player, function(profile)
 		profile.Stats.RunsStarted += 1
@@ -208,6 +242,8 @@ function PlayerDataService:RecordRunEnd(player, summary)
 		profile.Stats.EnemiesDefeated += summary.EnemiesDefeated
 		profile.Stats.BestChain = math.max(profile.Stats.BestChain, summary.BestChain)
 		profile.Stats.BestRoomsCleared = math.max(profile.Stats.BestRoomsCleared, summary.RoomsCleared)
+		-- Finishing a run, win or lose, counts as having been onboarded.
+		profile.Flags.OnboardingSeen = true
 	end)
 end
 

@@ -39,6 +39,7 @@ RunConfig.RemoteRules = {
 	ChooseUpgrade = { Cooldown = 0.25, Burst = 3 },
 	RequestStartRun = { Cooldown = 1, Burst = 2 },
 	RequestReturnToLobby = { Cooldown = 1, Burst = 2 },
+	UpdateSettings = { Cooldown = 0.5, Burst = 4 },
 }
 
 RunConfig.Rooms = {

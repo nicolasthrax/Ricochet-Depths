@@ -66,6 +66,14 @@ function OnboardingView:Hide()
 	self.panel.Visible = false
 end
 
+-- Used when the profile says this player has already completed a run.
+function OnboardingView:MarkAllSeen()
+	for hintId in HINTS do
+		self._seen[hintId] = true
+	end
+	self:Hide()
+end
+
 function OnboardingView:HasSeen(hintId)
 	return self._seen[hintId] == true
 end

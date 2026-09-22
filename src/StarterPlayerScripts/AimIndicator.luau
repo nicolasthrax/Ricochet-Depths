@@ -48,8 +48,9 @@ function AimIndicator.new(playerGui)
 	return self
 end
 
--- aimDirection is a unit Vector2 in screen space; power is 0..1.
-function AimIndicator:Show(originPixels, aimDirection, power)
+-- aimDirection is a unit Vector2 in screen space; power is 0..1. ready is false while the
+-- shot would be refused for cooldown, which tints the line instead of silently doing nothing.
+function AimIndicator:Show(originPixels, aimDirection, power, ready)
 	local length = AimConfig.LineMinLength + (AimConfig.LineMaxLength - AimConfig.LineMinLength) * power
 
 	self._line.Position = UDim2.fromOffset(originPixels.X, originPixels.Y)
@@ -57,8 +58,10 @@ function AimIndicator:Show(originPixels, aimDirection, power)
 	-- Frames rotate about their AnchorPoint, which is pinned to the drag origin.
 	self._line.Rotation = math.deg(math.atan2(aimDirection.Y, aimDirection.X))
 	self._line.Visible = true
+	self._line.BackgroundColor3 = ready == false and AimConfig.CooldownColor or AimConfig.LineColor
 
 	self._fill.Size = UDim2.fromScale(power, 1)
+	self._fill.BackgroundColor3 = ready == false and AimConfig.CooldownColor or AimConfig.PowerBarFillColor
 	self._bar.Visible = true
 end
 

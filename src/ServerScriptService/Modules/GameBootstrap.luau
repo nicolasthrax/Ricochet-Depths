@@ -85,7 +85,15 @@ function GameBootstrap.Start()
 		return match:HandleImpact(result, entry, os.clock())
 	end
 
-	local router = RemoteRouter.new(match)
+	local profileSync = Remotes.Get("ProfileSync")
+	local function pushProfile(player)
+		local public = persistence:GetPublicProfile(player)
+		if public then
+			profileSync:FireClient(player, public)
+		end
+	end
+
+	local router = RemoteRouter.new(match, persistence, pushProfile)
 	router:Bind()
 
 	startPrompt.Triggered:Connect(function(player)
@@ -100,6 +108,7 @@ function GameBootstrap.Start()
 			if err then
 				warn(("[data] profile load failed for %s, session is read-only: %s"):format(player.Name, err))
 			end
+			pushProfile(player)
 		end)
 	end
 

@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RoomBuilder = require(script.Parent.RoomBuilder)
+local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
 local RoomService = {}
@@ -148,9 +149,55 @@ function RoomService:Step(_deltaTime, now)
 	end
 end
 
+local SPAWN_HEIGHT = 4
+local SPAWN_SEARCH_STEP = 6
+
+-- A point on the floor clear of pillars. The room centre is preferred, but a layout with cover
+-- there would otherwise teleport players inside solid geometry, so this spirals outward until
+-- it finds somewhere clear.
 function RoomService:GetSpawnPoint()
-	local floorY = self._current and self._current.bounds.center.Y or 0
-	return Vector3.new(0, floorY + 4, 0)
+	local current = self._current
+	local floorY = current and current.bounds.center.Y or 0
+	local fallback = Vector3.new(0, floorY + SPAWN_HEIGHT, 0)
+	if not current then
+		return fallback
+	end
+
+	local obstacles = current.layout.Obstacles
+	local clearance = RoomConfig.SpawnPadSize.X / 2 + 1
+	local half = current.bounds.half
+
+	local function isClear(x, z)
+		if math.abs(x) > half.X or math.abs(z) > half.Y then
+			return false
+		end
+		for _, obstacle in obstacles do
+			if
+				math.abs(x - obstacle.Offset.X) < obstacle.Size.X / 2 + clearance
+				and math.abs(z - obstacle.Offset.Y) < obstacle.Size.Y / 2 + clearance
+			then
+				return false
+			end
+		end
+		return true
+	end
+
+	if isClear(0, 0) then
+		return fallback
+	end
+
+	local maxRadius = math.max(half.X, half.Y)
+	for radius = SPAWN_SEARCH_STEP, maxRadius, SPAWN_SEARCH_STEP do
+		for step = 0, 11 do
+			local angle = step * math.pi / 6
+			local x, z = math.cos(angle) * radius, math.sin(angle) * radius
+			if isClear(x, z) then
+				return Vector3.new(x, floorY + SPAWN_HEIGHT, z)
+			end
+		end
+	end
+
+	return fallback
 end
 
 function RoomService:Destroy()

@@ -417,7 +417,16 @@ local instanceMt = {
 		return nil
 	end,
 	__newindex = function(self, key, value)
-		if key == "Parent" then
+		if key == "CFrame" then
+			-- In the engine these are the same property; game code sets CFrame to move a part
+			-- and other code reads Position back. Keeping them in step matters for teleports.
+			rawset(self, "CFrame", value)
+			local position = type(value) == "table" and rawget(value, "_position") or nil
+			if position then
+				rawset(self, "Position", position)
+			end
+			return
+		elseif key == "Parent" then
 			detach(self)
 			attach(self, value)
 			return

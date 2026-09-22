@@ -38,7 +38,8 @@ RoomConfig.Layouts = {
 		InteriorSize = Vector2.new(104, 132),
 		AccentColor = Color3.fromRGB(110, 92, 128),
 		Obstacles = {
-			{ Offset = Vector2.new(0, 20), Size = Vector2.new(8, 44) },
+			-- Shifted off the origin: as a centred spine it covered the player spawn point.
+			{ Offset = Vector2.new(0, 26), Size = Vector2.new(8, 32) },
 			{ Offset = Vector2.new(-32, -26), Size = Vector2.new(16, 8) },
 			{ Offset = Vector2.new(32, -26), Size = Vector2.new(16, 8) },
 			{ Offset = Vector2.new(-34, 40), Size = Vector2.new(8, 8) },
@@ -61,7 +62,9 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(26, -18), Size = Vector2.new(26, 8) },
 			{ Offset = Vector2.new(-30, -28), Size = Vector2.new(8, 24) },
 			{ Offset = Vector2.new(30, 28), Size = Vector2.new(8, 24) },
-			{ Offset = Vector2.new(0, 0), Size = Vector2.new(12, 12) },
+			-- Split into a flanking pair: a single block at the origin sat on the spawn point.
+			{ Offset = Vector2.new(-14, 0), Size = Vector2.new(8, 12) },
+			{ Offset = Vector2.new(14, 0), Size = Vector2.new(8, 12) },
 		},
 		EnemySpawns = {
 			Vector2.new(-52, 44), Vector2.new(52, 44), Vector2.new(-52, -44),

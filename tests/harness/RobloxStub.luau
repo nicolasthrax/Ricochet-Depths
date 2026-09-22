@@ -499,6 +499,34 @@ function typeof(value)
 	return rawTypeof(value)
 end
 
+--// Random ------------------------------------------------------------------
+local RandomMt = { __robloxType = "Random" }
+RandomMt.__index = RandomMt
+
+function RandomMt:NextNumber(minimum, maximum)
+	-- Deterministic LCG; only needs to be repeatable, not statistically strong.
+	self._state = (1103515245 * self._state + 12345) % 2147483648
+	local unit = self._state / 2147483648
+	if minimum and maximum then
+		return minimum + unit * (maximum - minimum)
+	end
+	return unit
+end
+
+function RandomMt:NextInteger(minimum, maximum)
+	return math.floor(self:NextNumber() * (maximum - minimum + 1)) + minimum
+end
+
+function RandomMt:Clone()
+	return setmetatable({ _state = self._state }, RandomMt)
+end
+
+Random = {
+	new = function(seed)
+		return setmetatable({ _state = (seed or 0) % 2147483648 }, RandomMt)
+	end,
+}
+
 --// Raycasting --------------------------------------------------------------
 RaycastParams = {}
 function RaycastParams.new()

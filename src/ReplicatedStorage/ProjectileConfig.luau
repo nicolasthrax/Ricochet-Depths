@@ -19,6 +19,7 @@ return {
 	Lifetime = 4,
 
 	-- Distance the spawn point is pushed ahead of the shooter so the shot reads as leaving the body.
+	-- Clamped at fire time so a shot taken against a wall never starts inside it.
 	MuzzleOffset = 3,
 	-- Collision casts start this far behind the projectile, so a surface it is sitting exactly on
 	-- (an exact corner hit puts it flush against the perpendicular wall) is still detected.

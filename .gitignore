@@ -3,3 +3,4 @@
 *.rbxm
 *.rbxmx
 *.rbxlx.lock
+.test-build/

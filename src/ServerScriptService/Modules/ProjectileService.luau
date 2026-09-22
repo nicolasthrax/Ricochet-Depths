@@ -25,8 +25,21 @@ function ProjectileService.new(poolParent, collisionRoot, planeY)
 	return self
 end
 
+-- Resolves the spawn point ahead of the shooter, pulled back to the near face of anything in
+-- between. A projectile spawned inside geometry would never register a hit and would escape.
+function ProjectileService:_resolveMuzzle(base, direction)
+	local blocked = workspace:Raycast(base, direction * ProjectileConfig.MuzzleOffset, self._rayParams)
+	if not blocked then
+		return base + direction * ProjectileConfig.MuzzleOffset
+	end
+
+	local clearance = math.max(blocked.Distance - (ProjectileConfig.Radius + ProjectileConfig.SurfaceSkin), 0)
+	return base + direction * clearance
+end
+
 function ProjectileService:Fire(shooter, origin, direction, power)
-	local part = self._pool:Acquire(Vector3.new(origin.X, self._planeY, origin.Z))
+	local base = Vector3.new(origin.X, self._planeY, origin.Z)
+	local part = self._pool:Acquire(self:_resolveMuzzle(base, direction))
 	if not part then
 		return false
 	end

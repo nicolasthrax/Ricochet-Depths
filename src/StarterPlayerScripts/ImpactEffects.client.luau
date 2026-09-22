@@ -32,10 +32,10 @@ for index = 1, EffectConfig.PoolSize do
 	free[index] = part
 end
 
-projectileImpact.OnClientEvent:Connect(function(position, normal)
+local function spawnBurst(position, normal)
 	local count = #free
 	if count == 0 then
-		return -- pool dry: drop the burst rather than allocating
+		return false -- pool dry: drop the burst rather than allocating
 	end
 
 	local part = free[count]
@@ -45,6 +45,20 @@ projectileImpact.OnClientEvent:Connect(function(position, normal)
 	part.Transparency = 0
 	part.CFrame = CFrame.lookAlong(position + normal * 0.1, normal)
 	table.insert(active, { part = part, startedAt = os.clock() })
+	return true
+end
+
+-- The server batches contacts, so one remote carries many impacts.
+projectileImpact.OnClientEvent:Connect(function(positions, normals)
+	if type(positions) ~= "table" or type(normals) ~= "table" then
+		return
+	end
+	for index, position in positions do
+		local normal = normals[index]
+		if normal and not spawnBurst(position, normal) then
+			break
+		end
+	end
 end)
 
 RunService.RenderStepped:Connect(function()

@@ -3,6 +3,19 @@
 Two layers: an automated headless suite that runs on every change, and manual Studio passes for
 anything that needs a real engine, a real character or a real second client.
 
+**What "passing" means here.** The headless suite runs the real production modules against a
+stubbed engine (`tests/harness/`). The stub models box raycasting, the engine's
+origin-inside-a-part behaviour, RaycastParams filtering, CanQuery, signals, instance parenting
+and a virtual clock. It does **not** model the physics solver, replication, character
+controllers, rendering, input or DataStore. A green suite means the logic is consistent with
+those assumptions — not that the game works in Roblox. Nothing here has been run in Studio; see
+`docs/STUDIO_VALIDATION_CHECKLIST.md`.
+
+**Areas with no headless coverage at all:** every view (`HudView`, `CardPickerView`,
+`ResultsView`, `OnboardingView`, `SettingsView`, `UiTheme`), `AimController` input handling,
+`ImpactEffects`, `DebugOverlay`, and `GameBootstrap.Start` end to end. These are Studio-only by
+nature and are covered by V1–V6 of the Studio checklist.
+
 ## Running the automated suite
 
 ```bash
@@ -52,8 +65,36 @@ deterministic. Game source is never modified for tests.
 | Soak: projectiles | `soak.test.luau` | ~3600 frames of continuous fire: active + free always equals the pool size, and the folder never grows. 5000 fire attempts never exceed the pool. |
 | Soak: enemies | `soak.test.luau` | 200 spawn/step/clear cycles leave the pool at exactly its configured size. |
 | Soak: runs | `soak.test.luau` | 25 consecutive runs end in the lobby with pools full and a flat total instance count from run 3 onward. |
+| Reflection law | `physics.test.luau` | Verified at 30/60/90/120/150 degree headings and 5–85 degree incidences: each contact's outgoing heading is the exact reflection of the incoming one, speed and travel plane preserved. |
+| Box geometry | `physics.test.luau` | Pillar hits with correct face normals; containment across all four shipped layouts at 36 headings each; a ray from inside a box reports nothing, matching the engine; CanQuery and include filters honoured. |
+| Moving targets | `physics.test.luau` | A target moving into the path is hit; one that has left is not; a thin target at triple speed cannot be tunnelled; an enemy that slides over a projectile still takes damage. |
+| Same-frame collisions | `physics.test.luau` | Twelve and then a full pool of projectiles contacting on one frame all resolve, per-projectile damage and bounce budgets stay separate, and only the projectile whose handler asks is consumed. |
+| Fuzz: projectiles | `fuzz.test.luau` | 40 randomised tuning permutations: pool accounting and containment hold every frame; damage is never negative or non-finite. |
+| Fuzz: enemies | `fuzz.test.luau` | 30 randomised archetype permutations: active caps, pool size, bounds, kill-once semantics; a shield arc can never make an enemy unkillable. |
+| Fuzz: upgrades | `fuzz.test.luau` | 200 random player states produce only distinct, eligible offers of the right size; derived stats never degenerate; stack caps hold under randomised limits; malformed selections never mutate state. |
+| Fuzz: state machine | `fuzz.test.luau` | 25 random 1200-event sequences; every transition checked at its source against an explicit legal edge set; participants never duplicated; an untouched run always reaches the lobby. |
+| Config integrity | `integrity.test.luau` | Cross-references between configs: rooms point at real layouts, spawns name real archetypes, behaviours have implementations, fusion prerequisites are reachable, migrations exist for every old version, obstacles stay clear of the spawn point. |
+| Remote boundary | `services.test.luau` | Token-bucket limits per player and action; the router rate limits before touching state, rejects mistyped payloads, and leaves no listeners behind across bind/destroy cycles. |
+| Telemetry | `services.test.luau` | Per-event budgets and window resets; players identified only by an opaque per-session index; error detail truncated; nothing emitted when disabled. |
+| Room construction | `services.test.luau` | Every layout builds; an unknown layout is refused with a reason; the previous room is destroyed on load; escorts replace while the elite lives and stop when it dies; the spawn point is clear of cover in every layout. |
+| Support modules | `services.test.luau` | LobbyBuilder output, DataStoreProvider degradation, PartPool lifecycle, RunSummary contents, and each EnemyBehaviour function in isolation. |
+
+## Dry-run simulator
+
+```bash
+./scripts/dryrun.sh
+```
+
+Drives a scripted bot through the real services with collision against the actual layouts, and
+reports per-room and whole-run timings. **Lower-bound estimates, not measurements** — the bots
+have exact enemy positions, never hesitate, and cannot plan a bank shot. Current output and the
+hypotheses it raises are recorded in `docs/PROGRESS.md`. No balance value has been changed on
+the strength of it.
 
 ## Manual Studio test cases
+
+The ordered first-session procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`. The cases below
+are the fuller catalogue to work through afterwards.
 
 ### Setup
 1. `rojo serve` in the repo root.

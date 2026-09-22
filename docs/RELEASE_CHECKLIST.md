@@ -3,7 +3,8 @@
 Gate for putting a build in front of invited testers. Nothing here is a formality: an unchecked
 box that is not explicitly waived blocks the playtest.
 
-**Build:** `0.4.0-dev` · **Status:** not releasable — no Studio validation has been performed.
+**Build:** `0.5.0-dev` · **Status:** not releasable — no Studio validation has been performed.
+The ordered procedure for section 2 is `docs/STUDIO_VALIDATION_CHECKLIST.md`.
 
 ## 1. Build status
 
@@ -12,7 +13,8 @@ box that is not explicitly waived blocks the playtest.
 | `luau-compile` on all sources | PASS | 47 modules + 8 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 120 tests, 0 failures |
+| Headless test suite | PASS | 225 tests, 0 failures |
+| Property-based fuzz suite | PASS | randomised config and event sequences, all seeded |
 | Soak: 25 consecutive runs | PASS | instance count flat from run 3 onward |
 | Soak: ~3600 frames of continuous fire | PASS | pool constant at 150 throughout |
 | No secrets, keys, cookies or private IDs in the repo | PASS | `DebugConfig.AllowedUserIds` ships empty by design |
@@ -78,7 +80,8 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 4 | Telemetry only prints to the Studio output; no transport. | Medium | Wire once an analytics destination is chosen. |
 | 5 | Effects are placeholder parts; no particles. | Low | Post-playtest polish. |
 | 6 | Balance numbers are first-pass guesses, never played. | High | Tune from playtest data. |
-| 7 | Run length target of 6–8 minutes is unverified against real play. | High | Measure in the first playtest. |
+| 7 | Run length target of 6–8 minutes is unverified against real play. The dry-run simulator puts the floor well below it, but that is a bot estimate. | High | Measure in the first playtest. |
+| 8 | 85% of simulated runs end in room 3. May be an artifact of a bot that cannot bank shots. | Medium | Watch in the first playtest before changing anything. |
 
 ## 7. Rollback
 

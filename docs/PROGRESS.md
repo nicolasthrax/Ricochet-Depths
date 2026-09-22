@@ -5,10 +5,33 @@ presentation from any existing game.
 
 ## Current milestone
 
-**Blocked on manual Studio validation.** Milestones 1–11 are implemented and the automated gate
-is green, but nothing has been run inside Roblox Studio. Until the checks in
-`docs/RELEASE_CHECKLIST.md` sections 2–5 pass, this is not a playable build, only a plausible
-one.
+**Headless hardening complete. Blocked on manual Studio validation.**
+
+Milestones 1–11 are implemented and the automated gate is green. Nothing has been run inside
+Roblox Studio, and nothing in this repository should be read as engine-validated. The work since
+the last entry pushed the headless ceiling as high as it will go — 225 tests, box-accurate
+collision, property-based fuzzing, and a dry-run simulator — specifically so that the first
+Studio session is execution rather than discovery. Run `docs/STUDIO_VALIDATION_CHECKLIST.md`
+top to bottom when Studio is available.
+
+### Verified headless vs requires Studio
+
+Everything below is stated against a **stubbed engine**. The stub models axis-aligned box
+raycasting, the engine's origin-inside-a-part behaviour, RaycastParams filtering, CanQuery,
+signals, instance parenting and a virtual clock. It does **not** model the real physics solver,
+replication, character controllers, rendering, input, or DataStore.
+
+| Area | Verified headless | Still requires Studio |
+|---|---|---|
+| Ricochet maths | Reflection law across heading and incidence sweeps; containment in all four layouts at 36 headings; anti-tunnelling; same-frame multi-projectile resolution | That the real solver moves parts the way the stub assumes, and that it looks right |
+| Pools | Exact size held across 25 runs, ~3600 frames of fire and 200 enemy churn cycles | Instance counts in a live Explorer tree |
+| Enemies | Spawn, damage, shield arc, contact cadence, bounds, telegraph phases, cleanup | Whether the behaviour reads clearly on screen |
+| Run loop | Full four-room run, defeat, replay, four soft-lock guards, every state transition legal under 25 random 1200-event sequences | Teleports landing players somewhere sensible |
+| Co-op | 2/3/4-player runs, per-player offers, late join, partial-team death | Real clients, real replication, real latency |
+| Persistence | Schema migration, retries, read-only fallback, reward ledger, autosave | Actual DataStore behaviour and quotas |
+| UI | Nothing. Views are constructed but never rendered | All of it: layout, scaling, touch, readability |
+| Input | Nothing | All of it: drag-to-aim on mouse and touch |
+| Performance | Instance counts and pool accounting only | Frame time, replication cost, mobile headroom |
 
 ## Completed milestones
 
@@ -132,6 +155,21 @@ confirmed by hand; see `docs/TEST_PLAN.md` for the steps.
 - [ ] MS-13 2, 3 and 4 simulated clients complete a run together.
 
 ## Changelog
+
+### 0.5.0-dev — headless hardening
+- Harness upgraded from four infinite planes to box-accurate raycasting, reproducing the
+  engine's origin-inside-a-part behaviour, face normals, filters and CanQuery.
+- Fixed: a moving enemy could slide over a projectile and take no damage, because the next
+  swept cast started inside its body.
+- Fixed: exhausting the per-frame bounce allowance could push a projectile out of the arena.
+- Fixed: two of four layouts had cover on the room centre, where players are teleported. Both
+  layouts adjusted, and the spawn point now searches outward for clear ground.
+- Added property-based fuzzing over projectile, enemy and upgrade configuration, plus random
+  event sequences checked against an explicit legal state-transition set.
+- Added direct coverage for RemoteGuard, RemoteRouter, TelemetryService, RoomBuilder,
+  RoomService, LobbyBuilder, DataStoreProvider, PartPool, RunSummary and EnemyBehaviour.
+- Added the dry-run simulator and `docs/STUDIO_VALIDATION_CHECKLIST.md`.
+- 120 → 225 tests.
 
 ### 0.4.0-dev — co-op, persistence, release package
 - Co-op membership with an explicit late-join rule and per-player upgrade offers.

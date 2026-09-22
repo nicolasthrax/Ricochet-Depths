@@ -28,6 +28,7 @@ rojo build -o build.rbxlx   # or produce a place file directly
 ./scripts/check.sh                            # syntax + lint + rojo build + tests
 python3 tests/run.py                          # tests only
 python3 tests/run.py tests/match.test.luau    # a single test file
+./scripts/dryrun.sh                           # simulated run-length estimate
 ```
 
 Tool paths are overridable with `LUAU_BIN`, `LUAU_COMPILE_BIN`, `LUAU_ANALYZE_BIN` and `ROJO_BIN`.
@@ -93,14 +94,25 @@ the plain Luau CLI. Roblox-style `require(Instance)` calls are rewritten to a fl
 and `os.clock` is redirected to a virtual clock, making time-dependent behaviour deterministic.
 Game source is never modified for tests.
 
-120 tests cover projectile physics and containment, pool integrity, enemy lifecycle and
+The stub models box raycasting (including the engine's origin-inside-a-part behaviour),
+RaycastParams filtering, CanQuery, signals, instance parenting and a virtual clock. It does not
+model the physics solver, replication, character controllers, rendering, input or DataStore, so
+a green suite means the logic is consistent with those assumptions — not that the game works in
+Roblox.
+
+225 tests cover projectile physics and containment, the reflection law across heading and
+incidence sweeps, moving-target and same-frame collisions, pool integrity, enemy lifecycle and
 shielding, upgrade offers and stacking, the full run loop, soft-lock guards, co-op membership,
-persistence and migration, reward idempotency, and soak runs. See
+persistence and migration, reward idempotency, soak runs, config cross-references, the remote
+boundary, and property-based fuzzing over configuration and random event sequences. See
 [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
+
+Views, input handling and effects have **no** headless coverage; they are Studio-only by nature.
 
 ## Documentation
 
-- [docs/PROGRESS.md](docs/PROGRESS.md) — milestones, limitations, changelog
+- [docs/PROGRESS.md](docs/PROGRESS.md) — milestones, limitations, simulated timings, changelog
+- [docs/STUDIO_VALIDATION_CHECKLIST.md](docs/STUDIO_VALIDATION_CHECKLIST.md) — ordered procedure for the first Studio session
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md) — automated coverage and manual Studio cases
 - [docs/PLAYTEST.md](docs/PLAYTEST.md) — what testers should do and report
 - [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) — gate before a closed playtest

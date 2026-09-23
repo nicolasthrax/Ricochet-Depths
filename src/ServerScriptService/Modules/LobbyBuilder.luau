@@ -243,7 +243,8 @@ function LobbyBuilder._buildHall(lobby, signs, origin)
 			origin + wall[3] + Vector3.new(0, HALL_HEIGHT / 2 + 0.2, 0), TRIM, Enum.Material.Neon)
 	end
 
-	-- Pillars on the walls, clear of the gates, kiosks and banners.
+	-- Pillars on the walls, clear of the gates, kiosks and banners. Solid, like the lamp posts:
+	-- anything a player can see standing on the floor, they should not walk through.
 	local pillars = {
 		Vector3.new(-HALF_X + 2, 0, -HALF_Z + 2), Vector3.new(HALF_X - 2, 0, -HALF_Z + 2),
 		Vector3.new(-HALF_X + 2, 0, HALF_Z - 2), Vector3.new(HALF_X - 2, 0, HALF_Z - 2),
@@ -254,7 +255,7 @@ function LobbyBuilder._buildHall(lobby, signs, origin)
 	for index, spot in pillars do
 		local height = HALL_HEIGHT + 2
 		local position = origin + spot + Vector3.new(0, floorY + height / 2, 0)
-		block(dressing, "Pillar" .. index, Vector3.new(2.6, height, 2.6), position, STONE, Enum.Material.Slate)
+		block(dressing, "Pillar" .. index, Vector3.new(2.6, height, 2.6), position, STONE, Enum.Material.Slate, true)
 		block(dressing, "PillarCap" .. index, Vector3.new(3.2, 0.5, 3.2), position + Vector3.new(0, height / 2 + 0.25, 0),
 			TRIM, Enum.Material.Neon)
 	end
@@ -263,7 +264,7 @@ function LobbyBuilder._buildHall(lobby, signs, origin)
 	for index, corner in { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } } do
 		local base = origin + Vector3.new(corner[1] * 22, floorY, corner[2] * 38)
 		block(dressing, "LampPost" .. index, Vector3.new(0.6, 8, 0.6), base + Vector3.new(0, 4, 0),
-			Color3.fromRGB(40, 42, 52), Enum.Material.Metal)
+			Color3.fromRGB(40, 42, 52), Enum.Material.Metal, true)
 		local head = block(dressing, "LampHead" .. index, Vector3.new(1.6, 1.6, 1.6), base + Vector3.new(0, 8.6, 0),
 			LAMP_GLOW, Enum.Material.Neon)
 		head.Shape = Enum.PartType.Ball

@@ -15,6 +15,14 @@ local function snapshot(state)
 end
 
 describe("HudView", function()
+	it("starts in the lobby layout, since lobby players are sent no run state", function()
+		local hud = HudView.new(Instance.new("Folder"))
+		expect(hud.upgradePanel.Visible).toBe(false)
+		expect(hud.storeButton.Visible).toBe(true)
+		expect(hud.roomLabel.Text).toBe("Ricochet Depths")
+		expect(hud.objectiveLabel.Text).never().toBe("")
+	end)
+
 	it("hides the upgrades panel in the lobby and shows the Store button there instead", function()
 		local hud = HudView.new(Instance.new("Folder"))
 		hud:UpdateRun(snapshot(RunConfig.States.Lobby))

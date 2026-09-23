@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.0.0` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `1.0.1` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -15,7 +15,7 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 | `luau-compile` on all sources | PASS | 84 sources + 32 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 502 tests, 0 failures |
+| Headless test suite | PASS | 506 tests, 0 failures |
 | Concurrent arenas | PASS | two groups run side by side, isolated; slots freed and reused; payout keys unique per slot |
 | Multiplayer gates | PASS | 2-player minimum, 8-player cap with overflow, 15s/5s countdowns, cancel on leave |
 | Coins | PASS | drops, magnet, collection, room-clear sweep, payout, defeat rules, leaver paid once |
@@ -44,7 +44,8 @@ fallback. Everything else is unverified.
 - [ ] Upgrades panel hidden in the lobby; Store button hidden in a run (V9.7)
 - [ ] Armory and Cosmetics tabs sell and equip; balance updates after a run (V9.9)
 - [ ] The whole V8 section (camera, flicker, models, zones, mechanics, boss)
-- [ ] No errors or warnings in the Output window across a full run
+- [ ] No errors or warnings in the Output window across a full run, including no `[place]`
+      warnings at startup (streaming, template Baseplate, stray SpawnLocations)
 
 ## 3. Multiplayer validation (Studio → Test → Local Server with 2–4 players)
 
@@ -75,7 +76,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
 
-## 6. Known issues at 1.0.0
+## 6. Known issues at 1.0.1
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|
@@ -110,7 +111,10 @@ These cannot be done from this repository and need a human with account access.
 1. **Create the experience.** Build the place with `rojo build -o RicochetDepths.rbxlx`, open it
    in Studio, and publish it.
 2. **Delete the Baseplate template's parts** (`Baseplate` and `SpawnLocation`) before publishing,
-   if the place started from the Baseplate template. The lobby has its own spawn.
+   if the place started from the Baseplate template. The lobby has its own spawn. The server
+   prints a `[place]` warning in Output while either is still there.
+   **Check that `Workspace.StreamingEnabled` is off.** The project sets it, but if Rojo's live
+   sync cannot write it, untick it by hand; the server warns while it is on.
 3. **Create a separate test experience** and publish the same place there for sections 2–4.
 4. **Enable API services** on the test experience (Game Settings → Security).
 5. **Set max players to 20** (Game Settings → Players). Two gates of 8 plus solo players, each

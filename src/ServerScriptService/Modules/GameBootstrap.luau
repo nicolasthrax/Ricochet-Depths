@@ -36,7 +36,11 @@ local NET_EVENTS = {
 function GameBootstrap.Start()
 	local seed = os.time() % 2147483647
 
-	local _, soloPrompt, lobbyParts = LobbyBuilder.Build(workspace)
+	local lobby, soloPrompt, lobbyParts = LobbyBuilder.Build(workspace)
+	-- Only reported, never changed: the place file is the owner's to edit.
+	for _, message in GameBootstrap._placeWarnings(workspace, lobby) do
+		warn("[place] " .. message)
+	end
 
 	-- Arena slots live under one folder, far from the lobby.
 	local arenas = Instance.new("Folder")
@@ -337,6 +341,34 @@ function GameBootstrap.Start()
 		gates = gates,
 		monetization = monetization,
 	}
+end
+
+-- Settings and leftovers in the place file that break the game in ways the code cannot fix by
+-- itself. Returns player-facing sentences; nothing is modified.
+function GameBootstrap._placeWarnings(root, lobby)
+	local warnings = {}
+	local ok, streaming = pcall(function()
+		return root.StreamingEnabled
+	end)
+	if ok and streaming == true then
+		table.insert(warnings, "Workspace.StreamingEnabled is on. Arenas sit hundreds of studs from the lobby and "
+			.. "players are teleported between them, so a room may not have streamed in when they land. "
+			.. "Turn it off: Workspace > Properties > StreamingEnabled.")
+	end
+	local baseplate = root:FindFirstChild("Baseplate")
+	if baseplate and baseplate:IsA("BasePart") then
+		table.insert(warnings, "Workspace.Baseplate (from the Studio template) is still here. Its top is level "
+			.. "with the lobby and arena floors, so they will flicker. Delete it before publishing.")
+	end
+	local lobbySpawn = lobby and lobby:FindFirstChild("LobbySpawn")
+	for _, descendant in root:GetDescendants() do
+		if descendant:IsA("SpawnLocation") and descendant ~= lobbySpawn then
+			local parent = descendant.Parent
+			table.insert(warnings, string.format("SpawnLocation '%s.%s' is outside the lobby, so players may spawn "
+				.. "there instead of the hall. Delete it.", parent and parent.Name or "?", descendant.Name))
+		end
+	end
+	return warnings
 end
 
 function GameBootstrap._debugSnapshot(director, player, telemetry, persistence)

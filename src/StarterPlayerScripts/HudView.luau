@@ -97,6 +97,10 @@ function HudView.new(playerGui)
 	self.bannerLabel.Size = UDim2.fromScale(1, 1)
 	self.bannerLabel.TextXAlignment = Enum.TextXAlignment.Center
 
+	-- Players in the lobby belong to no match, so no run state reaches them before their first
+	-- descent: start in the lobby layout (Store shown, upgrades hidden) rather than a blank one.
+	self:UpdateRun({ State = RunConfig.States.Lobby, RoomIndex = 0, RoomCount = 0, RoomName = "", EnemiesRemaining = 0 })
+
 	return self
 end
 

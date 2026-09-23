@@ -5,8 +5,8 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.0.0: the launch build. Feature-complete and green headlessly (502 tests); awaiting Studio
-and published-server validation (V9, and the launch checklist).**
+**1.0.1: the launch build plus a pre-Studio audit. Feature-complete and green headlessly (506
+tests); awaiting Studio and published-server validation (V9, and the launch checklist).**
 
 This build answers the third playtest's notes and adds what a public launch needs:
 
@@ -266,6 +266,25 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.0.1 — pre-Studio audit
+
+The 1.0 code was read against the real engine rather than the test stub. Fixes:
+
+- **Lobby HUD on join.** Lobby players belong to no match, so no run state reached them before
+  their first descent. The HUD started blank, with the empty upgrades panel showing, and the
+  lobby hint never appeared. `HudView` now starts in the lobby layout, and `ClientMain` shows the
+  lobby hint once the first profile says whether it has been seen.
+- **Coins lay flat.** `CoinVisuals` tipped each coin's axis upright, which lays a cylinder on its
+  face, where its spin is invisible. Coins now stand on edge and visibly spin.
+- **Daylight flash in the Abyss.** Its ClockTime was 0.5, and a tween from 18.1 runs back
+  through noon. It is now 23.6. A test keeps every zone in the evening.
+- **Streaming off.** `default.project.json` sets `Workspace.StreamingEnabled = false`. Arenas
+  are 500+ studs from the lobby, and a teleported player could land before the room streamed in.
+- **Place warnings.** At startup the server warns in Output (and changes nothing) if streaming
+  is on, the template `Baseplate` is still there (its top is level with every floor, so they
+  flicker), or a SpawnLocation sits outside the lobby.
+- **Solid props.** Lobby pillars and lamp posts could be walked through; they are solid now.
 
 ### 1.0.0 — launch build
 

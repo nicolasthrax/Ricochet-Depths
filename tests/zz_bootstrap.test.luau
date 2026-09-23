@@ -97,3 +97,37 @@ describe("GameBootstrap wiring", function()
 		expect(results[#results][1].Reason).toBe("shop closed")
 	end)
 end)
+
+describe("place checks", function()
+	local function place()
+		local root = Instance.new("Folder")
+		local lobby = Instance.new("Folder")
+		lobby.Name = "Lobby"
+		lobby.Parent = root
+		local spawn = Instance.new("SpawnLocation")
+		spawn.Name = "LobbySpawn"
+		spawn.Parent = lobby
+		return root, lobby
+	end
+
+	it("is quiet for a clean place", function()
+		local root, lobby = place()
+		expect(#GameBootstrap._placeWarnings(root, lobby)).toBe(0)
+	end)
+
+	it("reports streaming, the template Baseplate and stray spawns without touching them", function()
+		local root, lobby = place()
+		root.StreamingEnabled = true
+		local baseplate = Instance.new("Part")
+		baseplate.Name = "Baseplate"
+		baseplate.Parent = root
+		local stray = Instance.new("SpawnLocation")
+		stray.Name = "SpawnLocation"
+		stray.Parent = root
+		local warnings = GameBootstrap._placeWarnings(root, lobby)
+		expect(#warnings).toBe(3)
+		expect(table.concat(warnings, "\n"):find("StreamingEnabled")).toBeTruthy()
+		expect(baseplate.Parent).toBe(root)
+		expect(stray.Parent).toBe(root)
+	end)
+end)

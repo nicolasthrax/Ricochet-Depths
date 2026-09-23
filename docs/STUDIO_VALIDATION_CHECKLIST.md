@@ -32,7 +32,7 @@ has the wrong extension. `.server.luau` → Script, `.client.luau` → LocalScri
 | # | Do this | Expect |
 |---|---|---|
 | 1.1 | Press **F5** (Play). Not F8 — several steps need a real server. | Character spawns. |
-| 1.2 | Look at the Output window. | `[data] scope=dev_v1 schema=v3`. Possibly a `[data] profile load failed … read-only` warning — that is expected without API services and is checked properly in V6. **No red errors.** |
+| 1.2 | Look at the Output window. | `[data] scope=dev_v1 schema=v4`. Possibly a `[data] profile load failed … read-only` warning — that is expected without API services and is checked properly in V6. **No red errors.** |
 | 1.3 | Look around. | A dark 80×80 lobby floor, a cyan spawn pad, and a glowing cyan pedestal a few studs away. |
 | 1.4 | Check the HUD. | Bottom-left health panel reading `100 / 100`. Top-centre panel reading `Ricochet Depths` with `Use the pedestal to begin a descent` beneath it. Bottom-right `Options` button. |
 | 1.5 | Wait a moment without moving. | A hint appears near the bottom: *"Walk to the glowing pedestal and hold to begin a descent."* It fades after about 6 seconds. |
@@ -162,7 +162,7 @@ cause is something calling into `PlayerDataService` without checking `IsLoaded`.
 |---|---|---|
 | 6b.1 | Publish the place to a **separate test experience**, not a live one. | Published. |
 | 6b.2 | Game Settings → Security → turn **Enable Studio Access to API Services** **on**. | On. |
-| 6b.3 | Play and join. | `[data] scope=dev_v1 schema=v3` and **no** read-only warning. |
+| 6b.3 | Play and join. | `[data] scope=dev_v1 schema=v4` and **no** read-only warning. |
 | 6b.4 | Complete a run and note the exact salvage figure on the results panel. | A number greater than 0. Write it down. |
 | 6b.5 | Stop, then Play again and reach the lobby. | No read-only warning. |
 | 6b.6 | Server command bar:<br>`local p = _G.RicochetDepths.persistence print(p:GetPublicProfile(game.Players:GetPlayers()[1]).Salvage)` | The figure from 6b.4, carried across the restart. |

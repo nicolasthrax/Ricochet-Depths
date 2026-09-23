@@ -1,8 +1,12 @@
 # Persistence: Shutdown and Session Lifecycle — Design Proposal
 
-**Status: approved and being implemented one step at a time.** Live progress is tracked under
-*Persistence plan progress* in `docs/PROGRESS.md`. Sections 1–2 describe the code as it was before
-implementation began; sections 3–5 describe the design as approved.
+**Status: implemented. All five steps have landed** (0.5.3-dev to 0.5.7-dev), each with
+regression tests that failed before its fix. Sections 1–2 describe the code as it was before
+implementation began; sections 3–5 describe the design as approved. Where the implementation
+departed from this design, the changelog in `docs/PROGRESS.md` says so. The notable departures:
+pending currency is tracked per run rather than as one total, because idempotency is decided per
+run; ledger timestamps come from wall-clock time rather than `os.clock()`; and schema v4 was
+needed after all, for the ledger's timestamps, though currency's stored format is unchanged.
 
 Platform limits relied on here: `BindToClose` handlers get up to **30 seconds**. There is **no
 per-key write cooldown** — the old six-second same-key limit was removed in June 2023 — so writes

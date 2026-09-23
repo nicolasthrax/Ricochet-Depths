@@ -100,7 +100,7 @@ model the physics solver, replication, character controllers, rendering, input o
 a green suite means the logic is consistent with those assumptions — not that the game works in
 Roblox.
 
-225 tests cover projectile physics and containment, the reflection law across heading and
+290 tests cover projectile physics and containment, the reflection law across heading and
 incidence sweeps, moving-target and same-frame collisions, pool integrity, enemy lifecycle and
 shielding, upgrade offers and stacking, the full run loop, soft-lock guards, co-op membership,
 persistence and migration, reward idempotency, soak runs, config cross-references, the remote

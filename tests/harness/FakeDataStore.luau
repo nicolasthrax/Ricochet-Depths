@@ -50,6 +50,7 @@ function FakeDataStore.new()
 		-- call synchronous; anything above zero makes the caller yield on the harness scheduler.
 		readLatency = 0,
 		writeLatency = 0,
+		keyWriteLatency = {}, -- per-key override of writeLatency, e.g. one hanging profile
 
 		versions = {}, -- per-key commit counter, for optimistic concurrency
 		inFlight = {}, -- per-key calls currently between read and commit
@@ -96,8 +97,9 @@ function FakeDataStore:UpdateAsync(key, transform)
 			end
 			local encoded = serialise(updated)
 
-			if self.writeLatency > 0 then
-				task.wait(self.writeLatency)
+			local writeLatency = self.keyWriteLatency[key] or self.writeLatency
+			if writeLatency > 0 then
+				task.wait(writeLatency)
 			end
 
 			if (self.versions[key] or 0) == readVersion then

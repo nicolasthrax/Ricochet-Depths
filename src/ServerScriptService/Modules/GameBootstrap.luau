@@ -142,10 +142,16 @@ function GameBootstrap.Start()
 	end)
 
 	-- Last chance to flush before the server closes.
+	-- Saves run in parallel under a shared budget inside Roblox's 30-second limit; a write
+	-- still hanging at the deadline is reported rather than waited on.
 	game:BindToClose(function()
-		local failures = persistence:SaveAll(os.clock())
-		for _, failure in failures do
-			telemetry:LogError("ShutdownSaveFailed", failure.error, os.clock())
+		local report = persistence:SaveAllOnShutdown(os.clock())
+		for _, failure in report.failures do
+			telemetry:LogError(
+				failure.timedOut and "ShutdownSaveTimedOut" or "ShutdownSaveFailed",
+				failure.error,
+				os.clock()
+			)
 		end
 	end)
 

@@ -827,3 +827,131 @@ describe("step 4: money changes only through grants", function()
 		expect(store:Peek("profile_8203").Flags.OnboardingSeen).toBe(true)
 	end)
 end)
+
+--// Step 5: parallel shutdown saves under a shared deadline ---------------------
+
+describe("step 5 (P1): shutdown saves run in parallel under a deadline", function()
+	local function dirtyPlayers(store, count, firstUserId)
+		local persistence = PlayerDataService.new(store)
+		local players = {}
+		for index = 1, count do
+			local player = { Name = "Shut" .. index, UserId = firstUserId + index }
+			persistence:Load(player)
+			persistence:GrantReward(player, "run-final", 10 * index)
+			table.insert(players, player)
+		end
+		Harness.setClock(0)
+		return persistence, players
+	end
+
+	it("takes about as long as the slowest save, not the sum of all of them", function()
+		local store = countingStore()
+		local persistence, players = dirtyPlayers(store, 4, 9000)
+		store.writeLatency = 3 -- every save sits in flight for three seconds
+
+		local started = Harness.now()
+		local failures = persistence:SaveAll(0)
+		local elapsed = Harness.now() - started
+
+		-- Serial: 4 x 3s = 12s. Parallel: bounded by the slowest single write.
+		expect(elapsed).toBeGreaterThanOrEqual(3)
+		expect(elapsed).toBeLessThan(3.2)
+		expect(#failures).toBe(0)
+		for index, player in players do
+			expect(store:Peek("profile_" .. player.UserId).Currency.Salvage).toBe(10 * index)
+		end
+	end)
+
+	it("returns at the 25s deadline when one write hangs, and names the one that timed out", function()
+		local store = countingStore()
+		local persistence, players = dirtyPlayers(store, 4, 9100)
+		store.writeLatency = 1
+		local hanging = players[2]
+		store.keyWriteLatency["profile_" .. hanging.UserId] = 40 -- would outlive Roblox's 30s cutoff
+
+		local started = Harness.now()
+		local failures = persistence:SaveAll(0)
+		local elapsed = Harness.now() - started
+
+		expect(elapsed).toBeGreaterThanOrEqual(25)
+		expect(elapsed).toBeLessThan(25.2) -- not 43s, and not waiting on the hung write
+		expect(#failures).toBe(1)
+		expect(failures[1].player).toBe(hanging)
+		expect(string.find(failures[1].error, "deadline", 1, true)).never().toBeNil()
+		for _, player in players do
+			if player ~= hanging then
+				expect(store:Peek("profile_" .. player.UserId).Currency.Salvage).toBeGreaterThan(0)
+			end
+		end
+	end)
+
+	it("keeps one player's failure from stopping anyone else's save", function()
+		local store = countingStore()
+		local persistence, players = dirtyPlayers(store, 3, 9200)
+		store.writeLatency = 1
+		-- Corrupt player 1's session so saving it raises outside any retry: a stand-in for any
+		-- unexpected error in one worker.
+		persistence:GetSession(players[1]).revision = nil
+
+		local ok, failures = pcall(function()
+			return persistence:SaveAll(0)
+		end)
+
+		expect(ok).toBe(true) -- the shutdown handler itself must never throw
+		expect(#failures).toBe(1)
+		expect(failures[1].player).toBe(players[1])
+		for index = 2, 3 do
+			expect(store:Peek("profile_" .. players[index].UserId).Currency.Salvage).toBe(10 * index)
+		end
+	end)
+
+	it("does not start a retry that could not finish before the deadline", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Doomed", UserId = 9301 }
+		persistence:Load(player)
+		persistence:GrantReward(player, "run-final", 5)
+		store.failing = true -- every write fails from here on
+		Harness.setClock(0)
+		local callsBefore = store.calls
+
+		-- A 3s budget. Backoff is 0.5s, then 1s, then 2s: that third pause would end past the
+		-- deadline, so the worker has to stop there rather than sleep into the cutoff.
+		local started = Harness.now()
+		local failures = persistence:SaveAll(0, 3)
+		local elapsed = Harness.now() - started
+
+		expect(#failures).toBe(1)
+		expect(elapsed).toBeLessThan(3)
+		expect(store.calls - callsBefore).toBe(3)
+	end)
+end)
+
+describe("step 5: the shutdown report", function()
+	it("skips clean sessions, flags a timeout as one, and reports elapsed time", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local clean = { Name = "Clean", UserId = 9401 }
+		local fast = { Name = "Fast", UserId = 9402 }
+		local stuck = { Name = "Stuck", UserId = 9403 }
+		for _, player in { clean, fast, stuck } do
+			persistence:Load(player)
+		end
+		persistence:GrantReward(fast, "run-final", 1)
+		persistence:GrantReward(stuck, "run-final", 1)
+		store.writeLatency = 1
+		store.keyWriteLatency["profile_9403"] = 60
+		Harness.setClock(0)
+		local writesBefore = store.writes
+
+		local report = persistence:SaveAllOnShutdown(0)
+
+		expect(report.attempted).toBe(2) -- nothing to write for the clean session, so no request
+		expect(report.saved).toBe(1)
+		expect(#report.failures).toBe(1)
+		expect(report.failures[1].player).toBe(stuck)
+		expect(report.failures[1].timedOut).toBe(true)
+		expect(report.elapsed).toBeCloseTo(25, 0.1)
+		expect(store.writes - writesBefore).toBe(1)
+	end)
+end)

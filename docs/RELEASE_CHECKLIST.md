@@ -13,7 +13,7 @@ The ordered procedure for section 2 is `docs/STUDIO_VALIDATION_CHECKLIST.md`.
 | `luau-compile` on all sources | PASS | 47 modules + 8 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 225 tests, 0 failures |
+| Headless test suite | PASS | 290 tests, 0 failures |
 | Property-based fuzz suite | PASS | randomised config and event sequences, all seeded |
 | Soak: 25 consecutive runs | PASS | instance count flat from run 3 onward |
 | Soak: ~3600 frames of continuous fire | PASS | pool constant at 150 throughout |
@@ -60,7 +60,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] A repeated completion for the same run key pays nothing
 - [ ] With API services disabled, the session goes read-only, the run still completes, and no
       reward is granted or duplicated
-- [ ] A v2 profile migrates to v3 without losing currency or ledger entries
+- [ ] An older (v2 or v3) profile migrates to v4 without losing currency or ledger entries
 
 ## 5. Mobile validation — **NOT STARTED**
 
@@ -82,7 +82,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 6 | Balance numbers are first-pass guesses, never played. | High | Tune from playtest data. |
 | 7 | Run length target of 6–8 minutes is unverified against real play. The dry-run simulator puts the floor well below it, but that is a bot estimate. | High | Measure in the first playtest. |
 | 8 | 85% of simulated runs end in room 3. May be an artifact of a bot that cannot bank shots. | Medium | Watch in the first playtest before changing anything. |
-| 9 | Persistence data-loss races: a reward granted mid-save can vanish; a cross-server rejoin can erase a payout that the ledger then refuses to re-grant. | **High** | Proposal in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`, pending review. Should be resolved before any playtest where salvage matters. |
+| 9 | Persistence data-loss races (mid-save changes, cross-server payouts, ledger double-pay, shutdown overrun). | Medium | Fixed and regression-tested headlessly in 0.5.3–0.5.7-dev. Still to confirm against a real DataStore in section 4 before salvage matters in a playtest. |
 
 ## 7. Rollback
 

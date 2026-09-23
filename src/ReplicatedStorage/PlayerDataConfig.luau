@@ -16,6 +16,15 @@ PlayerDataConfig.RetryMaxDelay = 8
 PlayerDataConfig.AutosaveInterval = 120
 -- Writes one save chain may make for a single request, to catch changes that land mid-write.
 PlayerDataConfig.MaxChainedWrites = 3
+
+-- Shutdown. Roblox allows BindToClose handlers 30 seconds; saves share this budget, leaving a
+-- 5-second cushion before the engine cuts the process off.
+PlayerDataConfig.ShutdownBudget = 25
+-- How often the shutdown handler checks whether every save has finished.
+PlayerDataConfig.ShutdownPollInterval = 0.05
+-- Roughly how long one UpdateAsync takes. A retry is not started unless its backoff plus this
+-- much still fits inside the deadline; a write that cannot finish in time is not worth starting.
+PlayerDataConfig.ExpectedWriteSeconds = 1
 -- A run can only be paid once; this many recent runs are remembered per profile, both in memory
 -- and in the stored copy. Pruning is strictly oldest-first by the wall-clock time of the grant.
 -- At one run every six to eight minutes, 25 covers roughly the last three hours: far longer than

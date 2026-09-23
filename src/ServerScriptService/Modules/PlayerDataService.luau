@@ -27,6 +27,9 @@ end
 -- Returned by Load when its result arrived after the player left or a newer load took over.
 PlayerDataService.STALE_LOAD = "stale load"
 
+-- Reported for a save that could not finish inside the shutdown budget.
+PlayerDataService.DEADLINE_REACHED = "shutdown deadline reached"
+
 -- Fields the store owns. A save never copies these from memory: currency and the run ledger
 -- change only through grants applied inside the transform, and the rest are the save's own
 -- bookkeeping. Every other profile field is copied, so a field added to the schema is saved
@@ -77,7 +80,10 @@ end
 
 -- stillWanted, if given, is checked before every attempt: a load whose player has gone should
 -- stop spending request budget rather than retry for a session that no longer exists.
-function PlayerDataService:_retry(label, operation, stillWanted)
+-- deadline, if given, is an os.clock() time the work must finish by. No attempt starts after it,
+-- and no backoff starts unless it and one more write would still fit before it. os.clock() is
+-- right here: this is one process timing itself, never a value compared across servers.
+function PlayerDataService:_retry(label, operation, stillWanted, deadline)
 	local delay = PlayerDataConfig.RetryBaseDelay
 	local lastError
 
@@ -85,15 +91,23 @@ function PlayerDataService:_retry(label, operation, stillWanted)
 		if stillWanted and not stillWanted() then
 			return false, PlayerDataService.STALE_LOAD
 		end
+		if deadline and os.clock() >= deadline then
+			return false, string.format("%s: %s", PlayerDataService.DEADLINE_REACHED, tostring(lastError))
+		end
 		local ok, result = pcall(operation)
 		if ok then
 			return true, result
 		end
 		lastError = result
 		if attempt < PlayerDataConfig.MaxRetries then
+			local pause = math.min(delay, PlayerDataConfig.RetryMaxDelay)
+			if deadline and os.clock() + pause + PlayerDataConfig.ExpectedWriteSeconds > deadline then
+				-- The next attempt could not finish in time, so do not sleep toward it.
+				return false, string.format("%s: %s", PlayerDataService.DEADLINE_REACHED, tostring(lastError))
+			end
 			self._stats.retries += 1
 			-- Exponential backoff, capped, so a struggling datastore is not hammered.
-			task.wait(math.min(delay, PlayerDataConfig.RetryMaxDelay))
+			task.wait(pause)
 			delay *= 2
 		end
 	end
@@ -330,7 +344,7 @@ function PlayerDataService:Update(player, mutator)
 end
 
 -- One UpdateAsync attempt sequence for the session's current state.
-function PlayerDataService:_writeOnce(session, now)
+function PlayerDataService:_writeOnce(session, now, deadline)
 	local profile = session.profile
 	local writtenRevision = session.revision
 	local applied = {}
@@ -367,7 +381,7 @@ function PlayerDataService:_writeOnce(session, now)
 			merged.LastSaved = now or 0
 			return merged
 		end)
-	end)
+	end, nil, deadline)
 
 	if not ok then
 		self._stats.saveFailures += 1
@@ -409,7 +423,7 @@ end
 -- Writes until the store has caught up with every change, including ones that arrived while
 -- an earlier write in the chain was in flight. Capped, so a session changing continuously
 -- cannot hold a write open forever; anything left over stays pending for the next save.
-function PlayerDataService:_saveChain(session, now)
+function PlayerDataService:_saveChain(session, now, deadline)
 	session.saving = true
 	local completed, ok, err = pcall(function()
 		local chainOk, chainErr = true, nil
@@ -417,7 +431,11 @@ function PlayerDataService:_saveChain(session, now)
 			if session.revision <= session.savedRevision then
 				break
 			end
-			chainOk, chainErr = self:_writeOnce(session, now)
+			if deadline and os.clock() >= deadline then
+				chainOk, chainErr = false, PlayerDataService.DEADLINE_REACHED
+				break
+			end
+			chainOk, chainErr = self:_writeOnce(session, now, deadline)
 			if not chainOk then
 				break
 			end
@@ -445,14 +463,17 @@ function PlayerDataService:Save(player, now)
 	return self:_saveSession(session, now)
 end
 
-function PlayerDataService:_saveSession(session, now)
+function PlayerDataService:_saveSession(session, now, deadline)
 	while session.saving do
+		if deadline and os.clock() >= deadline then
+			return false, PlayerDataService.DEADLINE_REACHED
+		end
 		task.wait()
 	end
 	if session.revision <= session.savedRevision then
 		return true
 	end
-	return self:_saveChain(session, now)
+	return self:_saveChain(session, now, deadline)
 end
 
 -- Idempotent payout. A run key is only ever credited once per profile, whatever replays,
@@ -567,22 +588,83 @@ function PlayerDataService:Release(player, now)
 	return ok, err
 end
 
-function PlayerDataService:SaveAll(now)
-	local failures = {}
-	-- A snapshot: saves yield, and a player leaving in the meantime removes their session.
-	local sessions = {}
+-- Server shutdown. Every session with something to write gets its own worker, all running at
+-- once, so the whole flush takes about as long as the slowest single save instead of the sum of
+-- all of them. The handler returns when every worker has finished or the shared budget runs
+-- out, whichever comes first; a write still hanging at the deadline is reported, not waited on.
+-- Each worker is isolated: an error in one is recorded as that player's failure and cannot stop
+-- anyone else's save or escape into the BindToClose handler.
+--
+-- Returns a report: { attempted, saved, failures = { { player, error, timedOut } }, elapsed }.
+function PlayerDataService:SaveAllOnShutdown(now, budgetSeconds)
+	local startedAt = os.clock()
+	local deadline = startedAt + (budgetSeconds or PlayerDataConfig.ShutdownBudget)
+
+	-- A snapshot: saves yield, and players leaving during shutdown remove their sessions. The check
+	-- runs per session under pcall, because it runs on the handler's own thread: one corrupt
+	-- session must not take the whole flush down before a single worker has started. A session
+	-- whose check throws is handed to a worker anyway, so its failure is reported, not skipped.
+	local targets = {}
 	for _, session in self._sessions do
-		table.insert(sessions, session)
-	end
-	for _, session in sessions do
-		if session.loaded and not session.failed then
-			local ok, err = self:_saveSession(session, now)
-			if not ok then
-				table.insert(failures, { player = session.player, error = err })
-			end
+		local checked, needsSave = pcall(function()
+			return session.loaded
+				and not session.failed
+				and (session.saving or session.revision > session.savedRevision)
+		end)
+		if not checked or needsSave then
+			table.insert(targets, session)
 		end
 	end
-	return failures
+
+	local results = {}
+	local remaining = #targets
+	for _, session in targets do
+		task.spawn(function()
+			local ran, ok, err = pcall(function()
+				return self:_saveSession(session, now, deadline)
+			end)
+			if not ran then
+				ok, err = false, ok -- the worker itself raised; err holds the message
+			end
+			results[session] = { ok = ok, err = err }
+			remaining -= 1
+		end)
+	end
+
+	while remaining > 0 do
+		local left = deadline - os.clock()
+		if left <= 0 then
+			break
+		end
+		task.wait(math.min(PlayerDataConfig.ShutdownPollInterval, left))
+	end
+
+	local report = { attempted = #targets, saved = 0, failures = {}, elapsed = os.clock() - startedAt }
+	for _, session in targets do
+		local result = results[session]
+		if result == nil then
+			self._stats.shutdownTimeouts = (self._stats.shutdownTimeouts or 0) + 1
+			table.insert(report.failures, {
+				player = session.player,
+				error = PlayerDataService.DEADLINE_REACHED,
+				timedOut = true,
+			})
+		elseif result.ok then
+			report.saved += 1
+		else
+			table.insert(report.failures, {
+				player = session.player,
+				error = tostring(result.err),
+				timedOut = string.find(tostring(result.err), PlayerDataService.DEADLINE_REACHED, 1, true) ~= nil,
+			})
+		end
+	end
+	return report
+end
+
+-- The failures from a shutdown flush. Kept for callers that only need that list.
+function PlayerDataService:SaveAll(now, budgetSeconds)
+	return self:SaveAllOnShutdown(now, budgetSeconds).failures
 end
 
 -- Called every frame from Heartbeat. Saves start in the background and are never waited on

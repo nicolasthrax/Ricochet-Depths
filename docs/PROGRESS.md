@@ -9,7 +9,7 @@ presentation from any existing game.
 
 Milestones 1–11 are implemented and the automated gate is green. Nothing has been run inside
 Roblox Studio, and nothing in this repository should be read as engine-validated. The work since
-the last entry pushed the headless ceiling as high as it will go — 225 tests, box-accurate
+the last entry pushed the headless ceiling as high as it will go — now 290 tests, box-accurate
 collision, property-based fuzzing, and a dry-run simulator — specifically so that the first
 Studio session is execution rather than discovery. Run `docs/STUDIO_VALIDATION_CHECKLIST.md`
 top to bottom when Studio is available.
@@ -22,8 +22,8 @@ defect; each is an untested assumption.
 
 | # | Assumption the stub makes | What the engine does instead | Watch for |
 |---|---|---|---|
-| 1 | `task.wait` returns immediately, so `PlayerDataService` retries cost nothing. | Real backoff yields up to ~7.5s per profile. `BindToClose` calls `SaveAll` **synchronously**, so four struggling profiles could exceed Roblox's ~30s shutdown budget. | Data loss on a server shutdown while the datastore is slow. Studio step V6b. See `docs/PERSISTENCE_SHUTDOWN_PLAN.md` P1–P2. |
-| 2 | No yielding means no interleaving, so a load can never overlap a leave, a rejoin or another save. | A player can leave or rejoin while their `Load` yields, and a reward can be granted while a save yields. The latter loses the reward outright. | Lost salvage after a run, or a stale profile after a fast rejoin. See `docs/PERSISTENCE_SHUTDOWN_PLAN.md` P3–P5. |
+| 1 | *Now modelled.* The harness scheduler makes `task.wait` really suspend, and the fake DataStore holds writes in flight, so retry cost and shutdown timing are tested headlessly. Shutdown saves now run in parallel under a 25s budget. | Real DataStore latency, throttling under load and the exact BindToClose behaviour are still assumptions. | Studio step V6b; a shutdown with a slow store. |
+| 2 | *Now modelled.* Loads, saves, leaves and rejoins interleave under the scheduler, and every race in `docs/PERSISTENCE_SHUTDOWN_PLAN.md` (P1–P5) has a regression test and a fix. | Real request ordering, and two genuinely separate servers, are still simulated with two service instances sharing one fake store. | A real cross-server rejoin during playtest. |
 | 3 | `WorldAdapter.Teleport` always finds a `HumanoidRootPart`. | A player mid-respawn has no character. `Teleport` returns false and **`_beginRoom` ignores it**, leaving that player at the previous room's coordinates after the geometry is destroyed. | A player falling out of the world at a room transition. |
 | 4 | RemoteEvent arguments pass by reference with no serialisation. | Roblox deep-copies and drops non-string/number keys, functions and metatables, with a 1MB cap. Payloads were reviewed and are all primitives, but nothing tests this. | Malformed or empty payloads client-side. |
 | 5 | One shared virtual clock across "server" and "client". | `os.clock()` is per-process and unrelated across machines. *(This one did bite — see the upgrade countdown fix in 0.5.1-dev.)* | Any other cross-machine time comparison. |
@@ -99,7 +99,7 @@ replication, character controllers, rendering, input, or DataStore.
   only when the last participant leaves.
 
 ### Milestone 8 — Persistence and rewards
-- Versioned profile schema (v3) with safe defaults and ordered forward migrations.
+- Versioned profile schema (now v4) with safe defaults and ordered forward migrations.
 - `UpdateAsync` writes with capped exponential backoff; a failed load yields a read-only session
   where the run still plays but nothing is written and no reward is persisted.
 - Two-layer reward idempotency: an in-memory per-server ledger and a bounded per-profile run
@@ -151,7 +151,7 @@ replication, character controllers, rendering, input, or DataStore.
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 | 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
 | 10a | Profile `Stats` (runs started, best chain and so on) are still last-write-wins across servers, so two servers finishing runs for one account at once can undercount them. Not money, and not in the approved plan. | Candidate follow-up: counters as deltas, bests merged with `max`. |
-| 10 | **Persistence has known data-loss races, being fixed in five steps.** A change made during an in-flight save is lost; a cross-server rejoin can overwrite a payout while the ledger marks it paid, so it can never be re-granted; concurrent `Release` and `SaveAll` double-write one key; sequential shutdown saves can exceed Roblox's 30s budget. | Approved plan in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`; progress tracked under *Persistence plan progress*. |
+| 10 | *Resolved headlessly.* The persistence data-loss races (P1–P5) are fixed and regression-tested; see *Persistence plan progress*. What remains is confirming the model against a real DataStore. | Studio step V6b, then a playtest with salvage enabled. |
 | 11 | Duplicate small idioms across modules: flattening a Vector3 to XZ (five places), point-in-box tests (`EnemyService.FindEnclosingMover`, `RoomService.GetSpawnPoint`), and list removal. | Flagged only; consolidating would move code between modules, which needs approval. |
 
 ## Manual Studio validation still required
@@ -183,7 +183,12 @@ report after every step.
 | 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | **Landed** |
 | 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, same-server P5 | **Landed** |
 | 4 | Grant-based currency applied inside the save transform; time-ordered, capped ledger | Cross-server P5, ledger double-pay and growth | **Landed** |
-| 5 | Parallel shutdown saves under a shared 25s deadline | P1 | Not started |
+| 5 | Parallel shutdown saves under a shared 25s deadline, deadline-aware retries, isolated workers | P1 | **Landed** |
+
+**All five steps have landed; the persistence overhaul is complete.** Every problem in the plan
+has a regression test that failed before its fix. What none of it can prove headlessly is how a
+real DataStore behaves under load, so Studio step V6b and a salvage-enabled playtest remain the
+final checks.
 
 The interim P3 exposure Step 1 introduced is closed by Step 2.
 
@@ -220,6 +225,24 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.5.7-dev — persistence step 5; overhaul complete
+- Fixed P1: shutdown saved players one after another, so the flush took the sum of every save.
+  Four players at 3s each took 12s, and one hanging write stretched it to 43s, past Roblox's 30s
+  cutoff, losing every save queued after it. `SaveAllOnShutdown` gives each session with
+  something to write its own worker and waits until all finish or a shared 25s budget runs out,
+  whichever is first. It returns a report naming any save that timed out.
+- Retries honour the deadline: no attempt starts after it, and no backoff starts unless it plus
+  one more write (`ExpectedWriteSeconds`) still fits. A doomed retry no longer sleeps into the
+  cutoff.
+- Workers are isolated: an error in one is recorded as that player's failure and cannot stop
+  another player's save or escape the handler. The scan that picks which sessions to save runs
+  per session under `pcall` too, after the test showed one corrupt session could take the whole
+  handler down before any worker had started.
+- `BindToClose` logs timed-out saves as `ShutdownSaveTimedOut`, separately from other failures.
+- `SaveAll` remains, returning just the failure list, now backed by the parallel flush.
+- Fixed stale docs: the Studio checklist expected `schema=v3` in the Output window, which would
+  have made two correct steps look failed after the v4 bump.
 
 ### 0.5.6-dev — persistence step 4
 - Fixed cross-server P5: currency was written as an absolute balance, last write wins, so a

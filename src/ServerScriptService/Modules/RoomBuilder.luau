@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RoomGeometry = require(ReplicatedStorage:WaitForChild("RoomGeometry"))
+local RoomDressing = require(script.Parent.RoomDressing)
 
 local RoomBuilder = {}
 
@@ -265,6 +266,7 @@ function RoomBuilder.Build(parent, layoutId)
 
 	buildSpawnPad(room, decor, floorY, layout.AccentColor or RoomConfig.WallColor, trimColor)
 	buildFloorMechanics(room, layout, floorY)
+	RoomDressing.Build(room, layoutId, layout)
 
 	local bounds = {
 		center = Vector3.new(0, floorY, 0),

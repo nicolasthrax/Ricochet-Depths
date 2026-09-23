@@ -5,14 +5,25 @@ presentation from any existing game.
 
 ## Current milestone
 
-**Milestone 12 (0.6.0-dev): content, juice, touch and the salvage shop. Built headlessly;
-awaiting Studio validation (V7).**
+**Milestone 13 (0.7.0-dev): playtest fixes and the content pass. Built headlessly; awaiting
+Studio validation (V8).**
 
-The core loop has now run in Studio. A first Play Solo session (reported by the owner) confirmed
-the server bootstrap, room 1 spawning with 6 targets, aiming with a visible aim line, firing,
-wall ricochets, projectile pooling, telemetry logging and the read-only datastore fallback.
-Everything added in Milestone 12 has only been tested headlessly: 385 tests, up from 290. Run
-`docs/STUDIO_VALIDATION_CHECKLIST.md` V2–V7 next.
+A second Studio session reported a spawn on the template baseplate, a locked camera, a
+flickering spawn pad, a blue line at the cursor, box enemies and too little game and map
+design. All of these are addressed:
+
+- **Spawn:** the Baseplate template's floor and SpawnLocation are removed at bootstrap.
+- **Camera:** right-drag or Q/E turns it, pitch tilts between 40° and 80°, and the wheel or a
+  pinch zooms.
+- **Cursor line:** the screen-space drag line is gone.
+- **Flicker:** floor layers are now 0.08 studs apart instead of 0.02, the aim cues float clear
+  of them, and a test fails on any z-fighting pair.
+- **Enemies:** every archetype has a multi-part client model.
+- **Content:** three zones, 13 layouts, randomised seven-room runs, four room mechanics, four
+  new enemies and a three-phase boss.
+- **Dressing:** a walled lobby hall, per-zone room dressing, and lighting per zone.
+
+449 headless tests, up from 387. Run `docs/STUDIO_VALIDATION_CHECKLIST.md` V8 next.
 
 ### Where the stub is more forgiving than the engine
 
@@ -144,7 +155,7 @@ replication, character controllers, rendering, input, or DataStore.
 
 | # | Limitation | Impact |
 |---|---|---|
-| 1 | **Nothing has been run in Roblox Studio.** Every claim of correctness rests on static checks and the headless harness, which stubs the engine. UI and input have no headless coverage at all. | Blocker for playtest. |
+| 1 | **Studio coverage is partial.** Two Play Solo sessions covered bootstrap, aiming, firing and ricochets. Everything in 0.6.0-dev and 0.7.0-dev is headless-only, and UI and input have no headless coverage at all. | Blocker for playtest. |
 | 2 | Co-op is verified only headlessly. 2–4 real clients have never connected. | Blocker for playtest. |
 | 3 | Balance numbers are first-pass guesses. The simulated floor suggests runs are well under the 6–8 minute target, but that is a bot estimate, not a measurement. | Tune from playtest data only. |
 | 3a | The dry-run bots cannot plan bank shots, so they understate how fast a skilled player clears cover-heavy rooms and overstate how lethal room 3 is. | Inherent to the tool; stated wherever its numbers appear. |
@@ -153,6 +164,9 @@ replication, character controllers, rendering, input, or DataStore.
 | 5a | The dry-run bots walk through cover and cannot bank, so they measure nothing about flank geometry; Room 3's layout changes are checked by geometry tests, not by the bots. | Inherent to the tool. |
 | 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
 | 7 | Impact bursts are still placeholder parts, not particles. Damage numbers and camera shake are in. | Post-playtest polish. |
+| 7a | Enemy models are client-side parts that follow the server hitbox each frame. Their silhouettes roughly match their hitboxes but are not identical, so a shot can visibly graze a model and miss. | Check in V8.5; tighten models if players notice. |
+| 7b | Sweepers and breakables are modelled statically in the dry run's physics (sweepers at rest, breakables never break), and orbs are blocked by a broken breakable's footprint until the room ends. | Minor; the dry run is an estimate anyway. |
+| 7c | The Warden Prime's numbers (80 health, orb rings, summons) are first guesses; bots killed a 36-health version in ~6s. | Tune from playtest data. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 | 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
 | 10a | Profile `Stats` (runs started, best chain and so on) are still last-write-wins across servers, so two servers finishing runs for one account at once can undercount them. Not money, and not in the approved plan. | Candidate follow-up: counters as deltas, bests merged with `max`. |
@@ -208,14 +222,25 @@ Studio (V6b).
 From `./scripts/dryrun.sh`. **Lower-bound estimates, not measurements.** The bots know exactly
 where every enemy is, never hesitate, and cannot plan a bank shot — the game's central skill.
 
-| Bot | Room 1 | Room 2 | Room 3 | Room 4 | Modelled run floor |
-|---|---|---|---|---|---|
-| Direct fire, exact aim | 49.0s | 15.4s | 11.9s (n=2) | no clears | not enough samples |
-| Direct fire with aim error | 8.3s | 8.1s | 11.9s | 7.6s | ~46s |
-| Probing (throws shots off-angle when blocked) | 7.7s | 8.6s | 16.0s | 3.8s | ~47s |
+Since 0.7.0-dev, rooms are drawn at random per run, so columns are run-shape slots rather than
+fixed rooms (the dry run seeds its plans, so these repeat exactly).
 
-Medians, 0.6.0-dev. The run floor is the sum of per-room medians plus fixed pacing; full-run
-samples are too scarce to quote because the bots keep dying.
+| Bot | Ruins 1 | Ruins 2 | Foundry 1 | Foundry 2 | Abyss 1 | Vault | Throne | Run floor | Extracted |
+|---|---|---|---|---|---|---|---|---|---|
+| Direct fire, exact aim | 25.3s | 12.8s | 7.3s | 74.0s | 152.5s | 8.6s | 6.6s (n=1) | ~5.1 min* | 2% |
+| Direct fire with aim error | 9.2s | 8.2s | 7.8s | 12.2s | 12.1s | 8.5s | 7.5s (n=1) | ~1.4 min | 2% |
+| Probing (throws shots off-angle when blocked) | 8.8s | 10.2s | 7.3s | 13.0s | 10.2s | 8.9s | 8.7s (n=2) | ~1.4 min | 5% |
+
+Medians, 0.7.0-dev. The run floor is the sum of per-slot medians plus fixed pacing.
+
+\* The exact-aim bot never probes. It stalls against targets behind cover, such as Sentinels
+posted behind the Spire's stones, until the room's 150s limit clears the room. That is a bot
+limitation, not a room defect.
+
+Runs are now seven rooms (up from four), and the bots mostly die to Bulwark lunges in the second
+Ruins and second Foundry slots. Few runs reach the Throne, so its numbers are thin. The Warden
+Prime is at 80 health after a 36-health version fell in about 6 seconds; treat that as a first
+guess.
 
 ### Room 3 audit (0.6.0-dev)
 
@@ -248,6 +273,51 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.7.0-dev — Milestone 13: playtest fixes and the content pass
+
+Studio feedback, then content. One commit per phase, each green on `scripts/check.sh`.
+
+- **Playtest fixes.**
+  - The Studio Baseplate template's spawn and floor are removed at bootstrap.
+  - The tactical camera turns (right-drag, Q/E, two-finger twist), tilts within 40–80° and
+    zooms (wheel, pinch). Aiming reads the live camera, and a touch camera gesture drops any
+    aim in progress.
+  - The cursor drag line is removed.
+  - Floor decor layers step 0.08 studs (up from 0.02). The aim ground cues float above every
+    floor layer, bank-shot trims sit above wall trims where they overlap, and the spawn pad is
+    a low plinth with a neon ring that casts no shadow.
+  - New test: no two overlapping visible top faces in any layout sit within 0.05 studs.
+- **Enemy models.** `EnemyVisualConfig` describes a multi-part model per archetype, and
+  `EnemyVisuals` draws it on the client over the server hitbox. Models follow and face the
+  hitbox, bob and spin, and take its live colour so telegraphs flash. Turn them off with
+  `FeatureFlags.EnemyModels`.
+- **Zones and random runs.**
+  - Three zones (Upper Ruins, The Foundry, The Abyss), each with its own floor, grid and wall
+    style.
+  - Eight new layouts (Cistern, Smelter, Conveyor, Crucible, Forgeworks, Rift, Spire,
+    Hollow) plus the Throne boss arena.
+  - `RunPlanner` draws each run from `RunConfig.RunShape`: two Ruins rooms, two Foundry rooms,
+    one Abyss room, the Warden Vault, then the Throne.
+  - New layout rules: the spawn is open 20 studs in all eight directions, and every shielded
+    post is flankable and 36+ studs from the spawn.
+- **Room mechanics** (`RoomMechanics`):
+  - sweeping reflectors;
+  - laser gates, which burn players on a telegraphed cycle and never block shots;
+  - breakable cover;
+  - amp pads, which add +1 damage to a shot that crosses them.
+- **New enemies and a boss.**
+  - Splitter, which dies into two Shards.
+  - Sentinel, a turret firing pooled, dodgeable orbs that die on cover.
+  - Phaser, which blinks out, is untouchable while blinking, and reappears near a player.
+  - Warden Prime: its shield spins, then tracks the player while it summons Shards and fires
+    orb rings, then drops while it fires faster spiral rings.
+  - The HUD shows a boss bar.
+- **Lobby and dressing.**
+  - The lobby is now a walled hall with pillars, lamps, a well ring round the pedestal,
+    numbered pads, a kiosk canopy and zone banners.
+  - Rooms get per-zone dressing (`RoomDressing`), held outside the play space by a tested rule.
+  - Lighting tweens per zone (`ZoneAmbience`).
 
 ### 0.6.0-dev — Milestone 12: content, juice, touch and the salvage shop
 Includes the post-Studio fixes from PRs #1 and #2 (desktop aim line, tactical camera, aim

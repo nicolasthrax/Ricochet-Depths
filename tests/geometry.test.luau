@@ -431,7 +431,8 @@ describe("floor layers never z-fight", function()
 			for _, entry in visibleParts(room) do
 				local top = entry.box.top
 				-- Floor-level decor (tiles, grid, border, foot trims, the spawn pad) sits below.
-				if top < 1 then
+				-- Dressing is left out: it stays outside the play space (see RoomDressing).
+				if top < 1 and entry.part.Parent.Name ~= "Dressing" then
 					expect(cueBottom - top).toBeGreaterThanOrEqual(Z_FIGHT_GAP)
 				end
 			end

@@ -185,7 +185,7 @@ Everything below was built and tested headlessly only. Run it after V1–V6 pass
 | 7.2 | Fire straight at one of the diagonal reflectors. | The shot turns 90° and carries on. Nothing gets stuck behind a corner bevel. |
 | 7.3 | Hit a Chaser once, then shoot a Bulwark in the face. | A floating **1** rises over the Chaser; **BLOCKED** rises over the Bulwark. |
 | 7.4 | Kill an enemy, then set Options → Screen shake to **Off** and kill another. | The camera kicks on the first kill and stays still on the second. |
-| 7.5 | Reach room 3 (Fractured Crossing). | HUD reads `5 targets left`: four Chasers and **one** Bulwark, which starts in the north-west area with open ground around it. |
+| 7.5 | Reach the Fractured Crossing (room 2 in about half of runs since 0.7.0-dev). | HUD reads `5 targets left`: four Chasers and **one** Bulwark, which starts in the north-west area with open ground around it. |
 | 7.6 | Audio. Sound ids ship as placeholders and `FeatureFlags.Audio` is off, so the game is silent. To check the hooks, put any sound id into `SoundConfig.Cues.WallBounce.SoundId`, set `FeatureFlags.Audio = true`, and bank a shot several times. | Each bounce plays, higher-pitched than the last, up to twice the base pitch. No Output warnings with the flag off. |
 | 7.7 | In the lobby, stand on one of the four pads behind the pedestal. | The pad lights green, the HUD reads `Descending in 3...`, and the run starts on its own. Stepping off before zero cancels it. |
 | 7.8 | Use the **Salvage Shop** kiosk prompt with no salvage and press Buy on anything. | The shop opens with your balance; buying says `Not enough salvage` and nothing changes. |
@@ -196,6 +196,29 @@ Everything below was built and tested headlessly only. Run it after V1–V6 pass
 **Pass:** 7.2, 7.5, 7.7 and 7.9 are the must-haves.
 **On failure at 7.2:** a shot passing through a reflector or escaping the room means the engine
 disagrees with the harness's rotated-box model; capture the heading and position.
+
+## V8 — Playtest fixes, enemy models, zones, mechanics and the boss (0.7.0-dev)
+
+Built and tested headlessly only. Run it after V7.
+
+| # | Do this | Expect |
+|---|---|---|
+| 8.1 | In a run, hold the right mouse button and drag, then press Q and E, then scroll. | The view turns around your character and tilts between steep and shallow (never flat, never straight down). Q/E turn it. The wheel zooms. |
+| 8.2 | After turning the camera, aim and fire at an enemy. | The aim line and the shot follow the rotated view; drag direction still matches shot direction on screen. |
+| 8.3 | Drag to aim. | No blue line at the cursor. The world aim line, its floor shadow, the reticle and the power bar remain. |
+| 8.4 | Stand on the room's spawn pad and move the camera around; aim across the floor. | The pad (a low plinth with a glowing ring) does **not** flicker, and neither does the floor under the aim line. |
+| 8.5 | Look at the enemies. | Models, not boxes: Drifter eye with orbiting motes, Chaser with legs and fins, Bulwark with a visor, Warden core in spinning rings. A Bulwark or Warden flashes its whole model before lunging. |
+| 8.6 | Play three runs. | Rooms differ between runs. The HUD reads `Room n / 7 - <zone>: <room>`; lighting shifts warmer in The Foundry and violet in The Abyss, and returns to normal in the lobby. |
+| 8.7 | Foundry room with a laser gate (Cold Smelter, Stalled Conveyor or Forgeworks). | The beam dims, turns orange, then red. Standing in it while red costs health in ticks; shots pass through it at any time. |
+| 8.8 | Foundry room with crates (Cold Smelter, Crucible or Forgeworks). Shoot one repeatedly. | It darkens at half health, then vanishes, and shots then pass where it was. |
+| 8.9 | Abyss room with a sweeper (Hanging Spire or Starless Hollow). | The amber bumper swings back and forth; shots bounce off wherever it is. |
+| 8.10 | Room with an amp pad (Rift, Spire, Warden Vault or Throne). Fire across the gold strip. | The shot turns gold and hits for one more. |
+| 8.11 | Meet each new enemy. | Splitter breaks into two small Shards. Sentinel stays put, flashes, fires a slow red orb that stops on cover. Phaser flashes, goes see-through (shots pass it), and reappears near you. |
+| 8.12 | Reach the Throne. | A boss bar reads `Warden Prime`. Its shield spins at first; below ~60% the bar says phase 2 and Shards and orb rings appear; below ~25% (phase 3) the shield is gone and rings come faster. Killing it extracts. |
+| 8.13 | In the lobby. | Walls on every side (you cannot walk off), pillars and four lamps, a glowing ring round the pedestal, numbered ready pads, a canopy over the shop, and three zone banners on the north wall. |
+| 8.14 | Look above and beyond the room walls. | Ruins: broken columns on the walls, rubble in the corners. Foundry: pipes, vents, hazard stripes. Abyss: floating crystals and glow lines. None of it blocks a shot. |
+
+**Pass:** 8.1–8.4 (the playtest fixes), 8.6, 8.7 and 8.12 are the must-haves.
 
 ---
 
@@ -212,6 +235,7 @@ disagrees with the harness's rotated-box model; capture the heading and position
 | V6a read-only fallback | | |
 | V6b persistence | | |
 | V7 content, juice, touch, shop | | |
+| V8 camera, flicker, models, zones, mechanics, boss | | |
 
 For any failure, capture: the step number, the full Output text including the stack trace, what
 you saw instead, and a clip if it is visual. Those four things are enough to reproduce it

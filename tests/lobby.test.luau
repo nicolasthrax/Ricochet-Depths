@@ -164,3 +164,73 @@ describe("Studio template cleanup", function()
 		expect(camera.Parent).toBe(world)
 	end)
 end)
+
+-- XZ bounds of a part, allowing for a yaw turn.
+local function bounds(part)
+	local cframe = part.CFrame
+	local right, look = cframe.RightVector, cframe.LookVector
+	local size = part.Size
+	local hx = math.abs(right.X) * size.X / 2 + math.abs(look.X) * size.Z / 2
+	local hz = math.abs(right.Z) * size.X / 2 + math.abs(look.Z) * size.Z / 2
+	return { minX = part.Position.X - hx, maxX = part.Position.X + hx, minZ = part.Position.Z - hz, maxZ = part.Position.Z + hz }
+end
+
+local function overlaps(a, b, margin)
+	return a.minX < b.maxX + margin and b.minX < a.maxX + margin and a.minZ < b.maxZ + margin and b.minZ < a.maxZ + margin
+end
+
+describe("lobby hub", function()
+	local world = Instance.new("Folder")
+	local lobby = LobbyBuilder.Build(world)
+	local dressing = lobby:FindFirstChild("Dressing")
+
+	it("is walled in on all four sides, so nobody walks off into the void", function()
+		expect(dressing).toBeTruthy()
+		local walls = 0
+		for _, part in dressing:GetChildren() do
+			if part.Name:find("^HallWall") then
+				walls += 1
+				expect(part.CanCollide).toBe(true)
+				expect(part.Size.Y).toBeGreaterThanOrEqual(8)
+			end
+		end
+		expect(walls).toBe(4)
+	end)
+
+	it("keeps props clear of the spawn, pedestal, ready pads and kiosk", function()
+		local keepClear = { lobby:FindFirstChild("LobbySpawn"), lobby:FindFirstChild("DescentPedestal"), lobby:FindFirstChild("ShopKiosk") }
+		for _, pad in lobby:FindFirstChild("ReadyZone"):GetChildren() do
+			table.insert(keepClear, pad)
+		end
+		for _, prop in dressing:GetDescendants() do
+			-- Floor-level glow (the well ring) may run under things; anything standing may not.
+			if prop:IsA("BasePart") and prop.Size.Y > 1 then
+				for _, feature in keepClear do
+					if overlaps(bounds(prop), bounds(feature), 2) then
+						error(("%s crowds %s"):format(prop.Name, feature.Name))
+					end
+				end
+			end
+		end
+	end)
+
+	it("lights the hall and shows a banner for each zone", function()
+		local lamps, banners = 0, 0
+		for _, part in dressing:GetDescendants() do
+			if part:IsA("PointLight") then
+				lamps += 1
+			end
+			if part.Name:find("^ZoneBanner") then
+				banners += 1
+			end
+		end
+		expect(lamps).toBeGreaterThanOrEqual(4)
+		expect(banners).toBe(3)
+	end)
+
+	it("labels every ready pad", function()
+		for _, pad in lobby:FindFirstChild("ReadyZone"):GetChildren() do
+			expect(pad:FindFirstChild("PadLabel")).toBeTruthy()
+		end
+	end)
+end)

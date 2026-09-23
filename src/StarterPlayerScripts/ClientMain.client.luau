@@ -74,6 +74,9 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
 	publishState(snapshot.State)
+	-- ZoneAmbience tweens the lighting from this.
+	local inRun = snapshot.State ~= RunConfig.States.Lobby and snapshot.State ~= RunConfig.States.Results
+	player:SetAttribute("Zone", inRun and type(snapshot.Zone) == "string" and snapshot.Zone ~= "" and snapshot.Zone or "Lobby")
 	if snapshot.State ~= RunConfig.States.Lobby then
 		shopView:Close() -- the shop is lobby-only
 	end

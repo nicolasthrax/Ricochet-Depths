@@ -4,8 +4,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
-local States = RunConfig.States
-
 local Broadcast = { methods = {} }
 
 function Broadcast.methods:GetRunSnapshot()
@@ -20,18 +18,7 @@ function Broadcast.methods:GetRunSnapshot()
 		RoomKind = definition and definition.Kind or "",
 		EnemiesRemaining = self._rooms:GetRemaining(),
 		Players = #self._participants,
-		StateEndsAt = self:_stateEndsAt(),
 	}
-end
-
-function Broadcast.methods:_stateEndsAt()
-	local durations = {
-		[States.Starting] = RunConfig.StartCountdown,
-		[States.Transition] = RunConfig.TransitionDuration,
-		[States.Results] = RunConfig.ResultsDuration,
-	}
-	local duration = durations[self._state]
-	return duration and (self._stateEnteredAt + duration) or nil
 end
 
 function Broadcast.methods:_broadcastRunState(now, force)

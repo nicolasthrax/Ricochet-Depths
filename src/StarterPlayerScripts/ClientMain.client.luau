@@ -23,8 +23,18 @@ local updateSettings = Remotes.Get("UpdateSettings")
 local purchaseShopItem = Remotes.Get("PurchaseShopItem")
 local equipShopItem = Remotes.Get("EquipShopItem")
 
+-- Cosmetic scripts read these attributes rather than each opening their own remote.
+local function publishSettings(settings)
+	player:SetAttribute("EffectIntensity", settings.EffectIntensity)
+	player:SetAttribute("ReducedFlash", settings.ReducedFlash)
+	player:SetAttribute("ScreenShake", settings.ScreenShake)
+end
+
 local hud = HudView.new(playerGui)
 local settingsView = SettingsView.new(playerGui, function(settings)
+	-- Applied here at once, not only when the server echoes the saved profile back: a read-only
+	-- session never echoes, and comfort options must still work there.
+	publishSettings(settings)
 	updateSettings:FireServer(settings)
 end)
 settingsView:SetVersion("Build " .. RunConfig.Version)
@@ -94,7 +104,6 @@ Remotes.Get("PlayerStateChanged").OnClientEvent:Connect(function(snapshot)
 	end
 end)
 
--- Cosmetic scripts read these attributes rather than each opening their own remote.
 Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	if type(profile) ~= "table" then
 		return
@@ -104,10 +113,7 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	end
 	shopView:SetProfile(profile)
 	settingsView:Apply(profile.Settings)
-	local settings = settingsView:GetSettings()
-	player:SetAttribute("EffectIntensity", settings.EffectIntensity)
-	player:SetAttribute("ReducedFlash", settings.ReducedFlash)
-	player:SetAttribute("ScreenShake", settings.ScreenShake)
+	publishSettings(settingsView:GetSettings())
 end)
 
 Remotes.Get("ShopOpen").OnClientEvent:Connect(function()

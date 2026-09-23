@@ -24,7 +24,7 @@ defect; each is an untested assumption.
 |---|---|---|---|
 | 1 | *Now modelled.* The harness scheduler makes `task.wait` really suspend, and the fake DataStore holds writes in flight, so retry cost and shutdown timing are tested headlessly. Shutdown saves now run in parallel under a 25s budget. | Real DataStore latency, throttling under load and the exact BindToClose behaviour are still assumptions. | Studio step V6b; a shutdown with a slow store. |
 | 2 | *Now modelled.* Loads, saves, leaves and rejoins interleave under the scheduler, and every race in `docs/PERSISTENCE_SHUTDOWN_PLAN.md` (P1–P5) has a regression test and a fix. | Real request ordering, and two genuinely separate servers, are still simulated with two service instances sharing one fake store. | A real cross-server rejoin during playtest. |
-| 3 | `WorldAdapter.Teleport` always finds a `HumanoidRootPart`. | A player mid-respawn has no character. `Teleport` returns false and **`_beginRoom` ignores it**, leaving that player at the previous room's coordinates after the geometry is destroyed. | A player falling out of the world at a room transition. |
+| 3 | *Fixed in 0.6.0-dev.* A participant whose character respawns mid-run (a reset, a fall, or a room start that caught them mid-respawn) is sent back to the current room by `HandleCharacterAdded`. | Whether `CharacterAdded` and the root part arrive in the order assumed. | A player stuck in the lobby during a run. |
 | 4 | RemoteEvent arguments pass by reference with no serialisation. | Roblox deep-copies and drops non-string/number keys, functions and metatables, with a 1MB cap. Payloads were reviewed and are all primitives, but nothing tests this. | Malformed or empty payloads client-side. |
 | 5 | One shared virtual clock across "server" and "client". | `os.clock()` is per-process and unrelated across machines. *(This one did bite — see the upgrade countdown fix in 0.5.1-dev.)* | Any other cross-machine time comparison. |
 | 6 | Raycasts only see boxes the test registered. | The Include filter covers everything under `Arena`, including the `Room` folder's floor and spawn pad and the enemy pool folder. | Shots stopping on geometry the tests never modelled. |
@@ -138,7 +138,7 @@ replication, character controllers, rendering, input, or DataStore.
 - Build version surfaced in the Options panel.
 - Telemetry funnel: run start, room start, room clear, card offered, card chosen, shot fired,
   enemy defeated, player down, late join, run end with outcome, plus categorised errors. Rate
-  limited per event, and identities reduced to an opaque per-session index.
+  limited per event. No event carries a player identity.
 
 ## Known limitations
 

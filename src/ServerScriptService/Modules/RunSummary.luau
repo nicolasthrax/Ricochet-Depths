@@ -1,6 +1,7 @@
 -- Builds the end-of-run summary shown on the results screen. Pure data assembly.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
 local RewardService = require(script.Parent.RewardService)
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("UpgradeConfig"))
 
@@ -35,7 +36,7 @@ function RunSummary.ForPlayer(playerState, context)
 		Survived = playerState.alive,
 		Upgrades = upgradeList(playerState),
 		Reward = reward,
-		CurrencyName = require(ReplicatedStorage:WaitForChild("RewardConfig")).CurrencyName,
+		CurrencyName = RewardConfig.CurrencyName,
 	}
 end
 

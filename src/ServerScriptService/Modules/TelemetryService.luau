@@ -1,5 +1,5 @@
--- Rate-limited gameplay event logging. Deliberately thin: it never records names, user ids or
--- anything else that identifies a person, only an opaque per-session participant index.
+-- Rate-limited gameplay event logging. Deliberately thin: no event carries a name, a user id or
+-- anything else that identifies a person.
 local TelemetryService = {}
 TelemetryService.__index = TelemetryService
 
@@ -21,28 +21,12 @@ function TelemetryService.new(sink, rules)
 		_windows = {},
 		_dropped = 0,
 		_emitted = 0,
-		_participants = {},
-		_nextParticipant = 0,
 		_enabled = true,
 	}, TelemetryService)
 end
 
 function TelemetryService:SetEnabled(enabled)
 	self._enabled = enabled
-end
-
--- Maps a player to a stable, meaningless index for the lifetime of this server.
-function TelemetryService:ParticipantId(player)
-	if player == nil then
-		return 0
-	end
-	local existing = self._participants[player]
-	if existing then
-		return existing
-	end
-	self._nextParticipant += 1
-	self._participants[player] = self._nextParticipant
-	return self._nextParticipant
 end
 
 function TelemetryService:_budgetFor(eventName)
@@ -83,10 +67,6 @@ end
 
 function TelemetryService:GetStats()
 	return { emitted = self._emitted, dropped = self._dropped }
-end
-
-function TelemetryService:Clear(player)
-	self._participants[player] = nil
 end
 
 return TelemetryService

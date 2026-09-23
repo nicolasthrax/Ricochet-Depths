@@ -188,6 +188,13 @@ function GameBootstrap.Start()
 
 	local function onPlayerAdded(player)
 		match:RegisterPlayer(player)
+		-- A mid-run respawn lands in the lobby; send the character back to the room once its
+		-- root part exists.
+		player.CharacterAdded:Connect(function(character)
+			if character:WaitForChild("HumanoidRootPart", 5) then
+				match:HandleCharacterAdded(player)
+			end
+		end)
 		-- Loading yields, so it runs off the join thread.
 		task.spawn(function()
 			local profile, err = persistence:Load(player)

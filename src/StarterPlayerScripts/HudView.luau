@@ -65,10 +65,6 @@ function HudView.new(playerGui)
 	return self
 end
 
-function HudView:SetVisible(visible)
-	self.gui.Enabled = visible
-end
-
 function HudView:UpdatePlayer(snapshot)
 	if not snapshot then
 		return

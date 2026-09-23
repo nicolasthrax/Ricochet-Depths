@@ -59,9 +59,6 @@ function Membership.methods:UnregisterPlayer(player, now)
 	self._upgrades:Clear(player)
 	self._states[player] = nil
 	MatchCombat.ClearPlayer(player)
-	if self._telemetry then
-		self._telemetry:Clear(player)
-	end
 
 	-- A run with nobody left in it ends rather than ticking on forever.
 	if #self._participants == 0 and self:IsRunActive() then

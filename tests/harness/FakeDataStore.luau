@@ -45,6 +45,16 @@ function FakeDataStore.new()
 		failuresRemaining = 0, -- fail this many calls, then recover
 		conflicts = 0, -- simulate another server writing between our read and our write
 		externalWrite = nil, -- what that other server writes: function(storedCopy) -> newValue
+
+		-- Latency, in virtual seconds, before the read and before the commit. Zero keeps every
+		-- call synchronous; anything above zero makes the caller yield on the harness scheduler.
+		readLatency = 0,
+		writeLatency = 0,
+
+		versions = {}, -- per-key commit counter, for optimistic concurrency
+		inFlight = {}, -- per-key calls currently between read and commit
+		peakInFlight = {}, -- the most concurrent calls ever seen on each key
+		transformReruns = 0, -- transforms re-run because another write committed first
 	}, FakeDataStore)
 end
 
@@ -58,21 +68,54 @@ function FakeDataStore:UpdateAsync(key, transform)
 		error("simulated datastore failure", 0)
 	end
 
-	if self.conflicts > 0 then
-		self.conflicts -= 1
-		if self.externalWrite then
-			self.data[key] = serialise(self.externalWrite(serialise(self.data[key])))
-		end
-	end
+	self.inFlight[key] = (self.inFlight[key] or 0) + 1
+	self.peakInFlight[key] = math.max(self.peakInFlight[key] or 0, self.inFlight[key])
 
-	-- The transform works on a copy, and what is kept is a copy of what it returns.
-	local updated = transform(serialise(self.data[key]))
-	if updated == nil then
-		return nil -- a nil result cancels the write, as in the engine
+	local ok, result = pcall(function()
+		if self.readLatency > 0 then
+			task.wait(self.readLatency)
+		end
+
+		if self.conflicts > 0 then
+			self.conflicts -= 1
+			if self.externalWrite then
+				self.data[key] = serialise(self.externalWrite(serialise(self.data[key])))
+				self.versions[key] = (self.versions[key] or 0) + 1
+			end
+		end
+
+		-- Optimistic concurrency, as the engine does it: if another write to this key commits
+		-- while this one is in flight, the transform is run again against the newer value.
+		for _ = 1, 10 do
+			local readVersion = self.versions[key] or 0
+			-- The transform works on a copy, and what is kept is a copy of what it returns,
+			-- taken at the moment it returns.
+			local updated = transform(serialise(self.data[key]))
+			if updated == nil then
+				return nil -- a nil result cancels the write, as in the engine
+			end
+			local encoded = serialise(updated)
+
+			if self.writeLatency > 0 then
+				task.wait(self.writeLatency)
+			end
+
+			if (self.versions[key] or 0) == readVersion then
+				self.data[key] = encoded
+				self.versions[key] = readVersion + 1
+				self.writes += 1
+				return serialise(encoded)
+			end
+			self.transformReruns += 1
+		end
+		error("UpdateAsync gave up after repeated write conflicts", 0)
+	end)
+
+	self.inFlight[key] -= 1
+	if not ok then
+		error(result, 0)
 	end
-	self.data[key] = serialise(updated)
-	self.writes += 1
-	return serialise(self.data[key])
+	return result
 end
 
 -- A copy of what is stored under key, for assertions. Reading it cannot affect the store.

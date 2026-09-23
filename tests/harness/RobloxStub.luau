@@ -640,26 +640,122 @@ game = setmetatable({}, {
 __bindToClose = {}
 __services = services
 
---// task --------------------------------------------------------------------
-local scheduled = {}
-task = {
-	spawn = function(fn, ...)
-		if type(fn) == "thread" then
-			coroutine.resume(fn, ...)
-		else
-			fn(...)
+--// task ----------------------------------------------------------------------
+-- A deterministic cooperative scheduler, so code that yields actually yields.
+--
+-- The earlier stub ran task.spawn synchronously and made task.wait return at once, so no two
+-- threads could ever interleave. Any bug that needs one thread to be suspended while another
+-- runs, such as a save still waiting on the DataStore when the next change arrives, was
+-- invisible. Here:
+--
+--   * task.spawn resumes the new thread immediately and returns when it first yields, as in
+--     the engine.
+--   * task.wait inside a spawned thread suspends it until the virtual clock reaches its wake
+--     time. On the main test thread, which cannot yield, it lets the time pass instead and runs
+--     every thread that falls due meanwhile, which is what the engine does for other threads
+--     while one is blocked.
+--   * Threads wake in (time, then scheduling order) order, so every run is reproducible.
+--   * An error in a spawned thread is recorded, and fails the test that caused it.
+
+local queue = {}
+local sequence = 0
+local taskErrors = {}
+
+local function enqueue(at, thread, ...)
+	sequence += 1
+	table.insert(queue, { at = at, seq = sequence, thread = thread, args = table.pack(...) })
+end
+
+local function resumeThread(thread, ...)
+	local ok, err = coroutine.resume(thread, ...)
+	if not ok then
+		table.insert(taskErrors, tostring(err))
+	end
+end
+
+local function popDue(limit)
+	local bestIndex
+	for index, entry in queue do
+		if entry.at <= limit then
+			local best = bestIndex and queue[bestIndex]
+			if not best or entry.at < best.at or (entry.at == best.at and entry.seq < best.seq) then
+				bestIndex = index
+			end
 		end
+	end
+	return bestIndex and table.remove(queue, bestIndex) or nil
+end
+
+-- Wakes every thread due at or before limit, moving the clock to each wake time in turn.
+local function runUntil(limit)
+	while true do
+		local entry = popDue(limit)
+		if not entry then
+			break
+		end
+		if entry.at > clockValue then
+			clockValue = entry.at
+		end
+		resumeThread(entry.thread, table.unpack(entry.args, 1, entry.args.n))
+	end
+	if limit > clockValue then
+		clockValue = limit
+	end
+end
+
+-- The engine's frame length, used when task.wait is called with no duration.
+local FRAME = 1 / 60
+
+-- The CLI runs the test script itself inside a coroutine, so isyieldable() is true even on the
+-- main test thread. Yielding it would suspend the whole run, so it is identified explicitly.
+local mainThread = coroutine.running()
+
+local function canSuspend()
+	return coroutine.running() ~= mainThread and coroutine.isyieldable()
+end
+
+-- task.* accepts either a function or an existing thread.
+local function asThread(target)
+	if type(target) == "thread" then
+		return target
+	end
+	return coroutine.create(target :: any)
+end
+
+task = {
+	spawn = function(target, ...)
+		local thread = asThread(target)
+		resumeThread(thread, ...)
+		return thread
 	end,
-	defer = function(fn, ...)
-		table.insert(scheduled, { at = clockValue, fn = fn, args = table.pack(...) })
+	defer = function(target, ...)
+		local thread = asThread(target)
+		enqueue(clockValue, thread, ...)
+		return thread
 	end,
-	delay = function(seconds, fn, ...)
-		table.insert(scheduled, { at = clockValue + seconds, fn = fn, args = table.pack(...) })
+	delay = function(seconds, target, ...)
+		local thread = asThread(target)
+		enqueue(clockValue + (seconds or 0), thread, ...)
+		return thread
 	end,
 	wait = function(seconds)
-		return seconds or 0
+		local duration = seconds or FRAME
+		local startedAt = clockValue
+		if canSuspend() then
+			enqueue(clockValue + duration, coroutine.running())
+			coroutine.yield()
+		else
+			runUntil(clockValue + duration)
+		end
+		return clockValue - startedAt
 	end,
-	cancel = function() end,
+	cancel = function(thread)
+		for index = #queue, 1, -1 do
+			if queue[index].thread == thread then
+				table.remove(queue, index)
+			end
+		end
+	end,
 }
 wait = task.wait
 
@@ -670,30 +766,55 @@ function Harness.now()
 	return clockValue
 end
 
+-- Jumps the clock without waking anything. Tests that manage time by hand use this.
 function Harness.setClock(value)
 	clockValue = value
 end
 
-local function drainScheduled()
-	local ran = true
-	while ran do
-		ran = false
-		for index, job in scheduled do
-			if job.at <= clockValue then
-				table.remove(scheduled, index)
-				job.fn(table.unpack(job.args, 1, job.args.n))
-				ran = true
-				break
-			end
+-- Lets `seconds` of virtual time pass, waking every thread that falls due.
+function Harness.advance(seconds)
+	runUntil(clockValue + seconds)
+end
+
+-- Runs until no thread is waiting, or maxSeconds of virtual time have passed. Stops at the
+-- last wake time rather than jumping to the limit.
+function Harness.settle(maxSeconds)
+	local limit = clockValue + (maxSeconds or 120)
+	while #queue > 0 do
+		local nextAt = math.huge
+		for _, entry in queue do
+			nextAt = math.min(nextAt, entry.at)
 		end
+		if nextAt > limit then
+			break
+		end
+		runUntil(nextAt)
 	end
+	return #queue
+end
+
+function Harness.pendingThreads()
+	return #queue
+end
+
+-- Errors raised inside spawned threads since the last call. The runner fails a test that
+-- leaves any behind; a test that expects one can take it here first.
+function Harness.takeTaskErrors()
+	local errors = taskErrors
+	taskErrors = {}
+	return errors
+end
+
+-- Called by the runner before each test so one test's sleeping threads cannot wake in another.
+function Harness.resetScheduler()
+	table.clear(queue)
+	taskErrors = {}
 end
 
 -- Advances the virtual clock and fires Heartbeat exactly as Roblox would.
 function Harness.step(deltaTime, steps)
 	for _ = 1, steps or 1 do
-		clockValue += deltaTime
-		drainScheduled()
+		runUntil(clockValue + deltaTime)
 		runServiceStub.Heartbeat:Fire(deltaTime)
 	end
 end

@@ -10,7 +10,13 @@ end
 
 function it(name, body)
 	local label = results.suite ~= "" and (results.suite .. " > " .. name) or name
+	Harness.resetScheduler()
 	local ok, err = pcall(body)
+	-- A spawned thread that errored is a failure of this test, even if the body returned cleanly.
+	local threadErrors = Harness.takeTaskErrors()
+	if ok and #threadErrors > 0 then
+		ok, err = false, "error in a spawned thread: " .. threadErrors[1]
+	end
 	if ok then
 		results.passed += 1
 	else

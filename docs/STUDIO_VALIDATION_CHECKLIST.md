@@ -220,6 +220,28 @@ Built and tested headlessly only. Run it after V7.
 
 **Pass:** 8.1–8.4 (the playtest fixes), 8.6, 8.7 and 8.12 are the must-haves.
 
+## V9 — Launch build: gates, solo portal, coins, regen, shops, cinematic (1.0.0)
+
+Built and tested headlessly only. V9.10–9.11 need **Test → Clients and Servers → Local Server**
+with 2–4 players; V9.12 needs a published test experience with real Robux ids.
+
+| # | Do this | Expect |
+|---|---|---|
+| 9.1 | Walk round the lobby. | Readable signs on boards: SOLO DESCENT at the north, ARMORY and COSMETICS on the east kiosks, a board in each west gate, and the three zone names on the north wall. |
+| 9.2 | Climb a lamp, pillar or canopy and try to jump out. | An invisible wall stops you everywhere; you cannot leave the hall. |
+| 9.3 | Use the Solo Portal. | The camera falls down a glowing shaft with `DESCENDING · UPPER RUINS`, fades to black, then the room fades in under `Room 1 · <name>`. |
+| 9.4 | Kill enemies. | Gold coins spin where they die and fly to you when you get close; the HUD shows `+N  Coins N`. Leftovers fly to you when the room clears. |
+| 9.5 | Take a hit, then avoid damage for 5 seconds. | Health starts climbing slowly after about 4 seconds and stops at full. |
+| 9.6 | Watch a Bulwark. | Its shield turns steadily on its own; shots into the open side land. |
+| 9.7 | Look at the HUD in the lobby, then in a run. | Lobby: STORE button, no upgrades panel. Run: upgrades panel, no STORE button. |
+| 9.8 | Finish or lose a run. | Results show `Coins earned`; the balance in the player list and the shop matches. |
+| 9.9 | Use the Armory, then Cosmetics. | Each opens on its own tab; buying and equipping work; the Gold trail says VIP only. |
+| 9.10 | Two players stand in Gate I; then one steps out. | The board shows `GATE I 2/8 · 15s` counting down; stepping out cancels it. Back in, it restarts and both descend together. One player alone never starts. |
+| 9.11 | While that group plays, two more players use Gate II. | They start in a different arena; neither group sees the other's enemies, HUD or results. |
+| 9.12 | (Published test place, real ids.) Buy a coin pack, then 2x Coins. | The pack credits once; the next run pays double; the Store shows the pass as Owned. |
+
+**Pass:** 9.2, 9.3, 9.4, 9.10 and 9.11 are the must-haves.
+
 ---
 
 ## Record your results
@@ -236,6 +258,7 @@ Built and tested headlessly only. Run it after V7.
 | V6b persistence | | |
 | V7 content, juice, touch, shop | | |
 | V8 camera, flicker, models, zones, mechanics, boss | | |
+| V9 gates, solo, coins, regen, shops, cinematic | | |
 
 For any failure, capture: the step number, the full Output text including the stack trace, what
 you saw instead, and a clip if it is visual. Those four things are enough to reproduce it

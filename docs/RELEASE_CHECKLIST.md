@@ -14,7 +14,7 @@ Solo); everything added in 0.6.0-dev is headless-only. The ordered procedure for
 | `luau-compile` on all sources | PASS | 59 modules + 22 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 388 tests, 0 failures |
+| Headless test suite | PASS | 385 tests, 0 failures |
 | Geometry integrity | PASS | every layout: bevels and reflectors at 45°, inside the walls, clear of the spawn pad and every enemy marker; room 3 flank and spawn sightlines |
 | Shop purchases | PASS | including cross-server double-charge and overspend |
 | No binary files in git | PASS | rooms, lobby, kiosk and pads are all built at runtime from config |

@@ -41,8 +41,9 @@ local function makeDecor(name, size, position, color, material, parent)
 	return part
 end
 
--- Floor layers, bottom to top, each a hair above the last so nothing z-fights.
-local LAYER = 0.02
+-- Floor layers, bottom to top. Each sits a clear step above the last: at the tactical camera's
+-- range, layers a few hundredths of a stud apart z-fight and shimmer as the camera moves.
+local LAYER = RoomConfig.Decor.LayerStep
 local function layerY(floorY, level)
 	return floorY + LAYER * (level - 0.5)
 end
@@ -112,7 +113,10 @@ end
 local function outlineSolid(decor, solid, floorY, height, color)
 	local config = RoomConfig.Decor
 	local inset = config.TrimInset
-	local capHeight = config.TopTrimHeight
+	-- Bank-shot trims stand a step taller than wall trims: where a bevel meets a wall their
+	-- trims overlap, and at equal heights the two colours would z-fight.
+	local lift = if solid.Kind == "Bevel" or solid.Kind == "Reflector" then config.HazardTrimLift else 0
+	local capHeight = config.TopTrimHeight + lift
 	local cap = makeDecor(
 		solid.Name .. "Cap",
 		Vector3.new(solid.Size.X + inset * 2, capHeight, solid.Size.Y + inset * 2),
@@ -123,7 +127,7 @@ local function outlineSolid(decor, solid, floorY, height, color)
 	)
 	orient(cap, Vector3.new(solid.Center.X, floorY + height + capHeight / 2, solid.Center.Y), solid.Yaw)
 
-	local baseHeight = config.BaseTrimHeight
+	local baseHeight = config.BaseTrimHeight + lift
 	local base = makeDecor(
 		solid.Name .. "Base",
 		Vector3.new(solid.Size.X + inset * 4, baseHeight, solid.Size.Y + inset * 4),
@@ -133,6 +137,30 @@ local function outlineSolid(decor, solid, floorY, height, color)
 		decor
 	)
 	orient(base, Vector3.new(solid.Center.X, floorY + baseHeight / 2, solid.Center.Y), solid.Yaw)
+end
+
+-- A low plinth with a glowing ring inset on top. It casts no shadow: the character standing on
+-- it would otherwise throw a shadow that shimmers across its face as the camera follows.
+local function buildSpawnPad(room, decor, floorY, color, ringColor)
+	local size = RoomConfig.SpawnPadSize
+	local pad = makePart("PlayerSpawn", size, Vector3.new(0, floorY + size.Y / 2, 0), color, room)
+	pad.Material = Enum.Material.SmoothPlastic
+	pad.CastShadow = false
+
+	local config = RoomConfig.Decor
+	local width, height = config.SpawnRingWidth, config.SpawnRingHeight
+	local reach = size.X / 2 - config.SpawnRingInset
+	local y = floorY + size.Y + height / 2
+	local strips = {
+		{ "SpawnRingNorth", Vector3.new(reach * 2, height, width), Vector3.new(0, y, reach - width / 2) },
+		{ "SpawnRingSouth", Vector3.new(reach * 2, height, width), Vector3.new(0, y, -reach + width / 2) },
+		{ "SpawnRingEast", Vector3.new(width, height, reach * 2 - width * 2), Vector3.new(reach - width / 2, y, 0) },
+		{ "SpawnRingWest", Vector3.new(width, height, reach * 2 - width * 2), Vector3.new(-reach + width / 2, y, 0) },
+	}
+	for _, strip in strips do
+		makeDecor(strip[1], strip[2], strip[3], ringColor, Enum.Material.Neon, decor)
+	end
+	return pad
 end
 
 -- Colour and trim for each kind of solid. Bank-shot pieces wear hazard trim so they read as
@@ -191,10 +219,7 @@ function RoomBuilder.Build(parent, layoutId)
 		outlineSolid(decor, solid, floorY, height, trim)
 	end
 
-	local padSize = RoomConfig.SpawnPadSize
-	local wallColor = layout.AccentColor or RoomConfig.WallColor
-	local spawnPad = makePart("PlayerSpawn", padSize, Vector3.new(0, floorY + padSize.Y / 2, 0), wallColor, room)
-	spawnPad.CanCollide = true
+	buildSpawnPad(room, decor, floorY, layout.AccentColor or RoomConfig.WallColor, trimColor)
 
 	local bounds = {
 		center = Vector3.new(0, floorY, 0),

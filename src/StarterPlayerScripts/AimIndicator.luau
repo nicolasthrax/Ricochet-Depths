@@ -1,5 +1,5 @@
--- Aim feedback: a neon line in the world from the character along the shot, plus a
--- screen-space drag line from the pointer and a power bar.
+-- Aim feedback: a neon line in the world from the character along the shot, ground cues under
+-- it, and a power bar. Nothing is drawn at the pointer: the world line is the aim.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AimConfig = require(ReplicatedStorage:WaitForChild("AimConfig"))
@@ -38,7 +38,7 @@ function AimIndicator.new(playerGui, worldParent, groundY)
 	local tip = AimConfig.WorldTipSize
 	local reticle = AimConfig.ReticleSize
 	local core = AimConfig.ReticleCoreSize
-	local flat = AimConfig.GroundLift
+	local flat = AimConfig.GroundCueThickness
 	self._worldLine = makeWorldPart("AimLine", Enum.PartType.Block, Vector3.new(thickness, thickness, 1), worldFolder)
 	self._worldTip = makeWorldPart("AimTip", Enum.PartType.Ball, Vector3.new(tip, tip, tip), worldFolder)
 	self._groundLine = makeWorldPart("AimGroundLine", Enum.PartType.Block, Vector3.new(1, flat, 1), worldFolder)
@@ -59,19 +59,7 @@ function AimIndicator.new(playerGui, worldParent, groundY)
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "AimUi"
 	screenGui.ResetOnSpawn = false
-	-- InputObject.Position is measured below the top-bar inset, so the GUI must be too, or
-	-- the drag line starts offset from the pointer.
-	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = playerGui
-
-	local line = Instance.new("Frame")
-	line.Name = "AimLine"
-	line.AnchorPoint = Vector2.new(0, 0.5)
-	line.BackgroundColor3 = AimConfig.LineColor
-	line.BackgroundTransparency = AimConfig.LineTransparency
-	line.BorderSizePixel = 0
-	line.Visible = false
-	line.Parent = screenGui
 
 	local bar = Instance.new("Frame")
 	bar.Name = "PowerBar"
@@ -90,7 +78,6 @@ function AimIndicator.new(playerGui, worldParent, groundY)
 	fill.BorderSizePixel = 0
 	fill.Parent = bar
 
-	self._line = line
 	self._bar = bar
 	self._fill = fill
 
@@ -114,10 +101,10 @@ function AimIndicator:_showWorld(muzzle, worldDirection, power, color)
 	self._worldTip.CFrame = CFrame.new(tipPosition)
 
 	-- Ground cues: the same segment projected onto the floor, joined to the tip by a drop line.
-	local groundY = self._groundY + AimConfig.GroundLift / 2
+	local groundY = self._groundY + AimConfig.GroundCueHeight
 	local groundStart = Vector3.new(muzzle.X, groundY, muzzle.Z)
 	local groundTip = Vector3.new(tipPosition.X, groundY, tipPosition.Z)
-	self._groundLine.Size = Vector3.new(AimConfig.GroundLineWidth, AimConfig.GroundLift, length)
+	self._groundLine.Size = Vector3.new(AimConfig.GroundLineWidth, AimConfig.GroundCueThickness, length)
 	self._groundLine.CFrame = CFrame.lookAt((groundStart + groundTip) / 2, groundTip)
 
 	local dropHeight = math.max(tipPosition.Y - groundY, 0.01)
@@ -141,20 +128,10 @@ function AimIndicator:_hideWorld()
 	end
 end
 
--- aimDirection is a unit Vector2 in screen space; power is 0..1. ready is false while the
--- shot would be refused for cooldown, which tints the line instead of silently doing nothing.
--- muzzle (on the projectile plane) and worldDirection place the world line; either may be nil
--- (no character yet).
-function AimIndicator:Show(originPixels, aimDirection, power, ready, muzzle, worldDirection)
-	local length = AimConfig.LineMinLength + (AimConfig.LineMaxLength - AimConfig.LineMinLength) * power
-
-	self._line.Position = UDim2.fromOffset(originPixels.X, originPixels.Y)
-	self._line.Size = UDim2.fromOffset(length, AimConfig.LineThickness)
-	-- Frames rotate about their AnchorPoint, which is pinned to the drag origin.
-	self._line.Rotation = math.deg(math.atan2(aimDirection.Y, aimDirection.X))
-	self._line.Visible = true
-	self._line.BackgroundColor3 = ready == false and AimConfig.CooldownColor or AimConfig.LineColor
-
+-- power is 0..1. ready is false while the shot would be refused for cooldown, which tints the
+-- line instead of silently doing nothing. muzzle (on the projectile plane) and worldDirection
+-- place the world line; either may be nil (no character yet).
+function AimIndicator:Show(power, ready, muzzle, worldDirection)
 	self._fill.Size = UDim2.fromScale(power, 1)
 	self._fill.BackgroundColor3 = ready == false and AimConfig.CooldownColor or AimConfig.PowerBarFillColor
 	self._bar.Visible = true
@@ -164,7 +141,6 @@ end
 
 function AimIndicator:Hide()
 	self:_hideWorld()
-	self._line.Visible = false
 	self._bar.Visible = false
 end
 

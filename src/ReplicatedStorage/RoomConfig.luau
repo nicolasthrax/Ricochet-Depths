@@ -35,9 +35,17 @@ RoomConfig.Decor = {
 	BaseTrimHeight = 0.35,
 	-- How far trims stand proud of the surface they outline, so they are not z-fighting.
 	TrimInset = 0.05,
+	-- Bank-shot trims are this much taller than wall trims where the two overlap.
+	HazardTrimLift = 0.12,
+	-- Height between floor layers (tiles, grid, border). Must stay >= 0.05 or they shimmer.
+	LayerStep = 0.08,
+	-- The glowing square inset on top of the spawn pad.
+	SpawnRingWidth = 0.4,
+	SpawnRingHeight = 0.08,
+	SpawnRingInset = 0.6,
 }
 
-RoomConfig.SpawnPadSize = Vector3.new(8, 1, 8)
+RoomConfig.SpawnPadSize = Vector3.new(8, 0.4, 8)
 
 -- Angled bank-shot geometry (see RoomGeometry). Bevels cut the four inner corners at 45
 -- degrees; reflectors are free-standing 45 degree slabs placed to open flank angles.

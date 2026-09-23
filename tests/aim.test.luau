@@ -71,7 +71,7 @@ describe("AimIndicator world line", function()
 	it("spans from the muzzle along the shot, scaled by power, and hides again", function()
 		local indicator, line, tip = newIndicator()
 		local muzzle = Vector3.new(10, 3, 5)
-		indicator:Show(Vector2.new(0, 0), Vector2.new(0, -1), 1, true, muzzle, Vector3.new(1, 0, 0))
+		indicator:Show(1, true, muzzle, Vector3.new(1, 0, 0))
 
 		expect(line.Transparency).toBe(AimConfig.WorldLineTransparency)
 		expect(line.Size.Z).toBeCloseTo(AimConfig.WorldLineMaxLength)
@@ -87,8 +87,19 @@ describe("AimIndicator world line", function()
 
 	it("hides the world line when there is no character", function()
 		local indicator, line = newIndicator()
-		indicator:Show(Vector2.new(0, 0), Vector2.new(0, -1), 0.5, true, nil, Vector3.new(1, 0, 0))
+		indicator:Show(0.5, true, nil, Vector3.new(1, 0, 0))
 		expect(line.Transparency).toBe(1)
+	end)
+end)
+
+describe("AimIndicator screen UI", function()
+	it("draws no line at the cursor, only the power bar", function()
+		local gui = Instance.new("Folder")
+		local indicator = AimIndicator.new(gui, Instance.new("Folder"), 0)
+		indicator:Show(1, true, Vector3.new(0, 3, 0), Vector3.new(0, 0, -1))
+		local screen = gui:FindFirstChild("AimUi")
+		expect(screen:FindFirstChild("AimLine")).toBe(nil)
+		expect(screen:FindFirstChild("PowerBar").Visible).toBe(true)
 	end)
 end)
 
@@ -101,16 +112,17 @@ describe("AimIndicator ground cues", function()
 		local drop = folder:FindFirstChild("AimDropLine")
 		local reticle = folder:FindFirstChild("AimReticle")
 
-		indicator:Show(Vector2.new(0, 0), Vector2.new(0, -1), 0, true, Vector3.new(0, 3, 0), Vector3.new(0, 0, -1))
+		indicator:Show(0, true, Vector3.new(0, 3, 0), Vector3.new(0, 0, -1))
 		local tipZ = -AimConfig.WorldLineMinLength
 
 		expect(reticle.Transparency).toBe(AimConfig.ReticleTransparency)
 		expect(reticle.CFrame.Position.Z).toBeCloseTo(tipZ)
-		expect(reticle.CFrame.Position.Y).toBeLessThan(0.1)
+		-- Ground cues float clear of every floor decor layer, so they never z-fight with it.
+		expect(reticle.CFrame.Position.Y).toBeCloseTo(AimConfig.GroundCueHeight)
 		expect(groundLine.CFrame.Position.Z).toBeCloseTo(tipZ / 2)
 		expect(groundLine.Size.Z).toBeCloseTo(AimConfig.WorldLineMinLength)
 		-- The drop line spans the gap between the floor and the aim tip on the projectile plane.
-		expect(drop.Size.Y + AimConfig.GroundLift / 2).toBeCloseTo(3)
+		expect(drop.Size.Y + AimConfig.GroundCueHeight).toBeCloseTo(3)
 		expect(drop.CFrame.Position.Z).toBeCloseTo(tipZ)
 
 		indicator:Hide()

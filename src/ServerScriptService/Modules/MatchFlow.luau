@@ -186,7 +186,7 @@ function Flow.methods:_cleanup(now)
 		if state then
 			state:ResetRun()
 			if self._world then
-				self._world.Teleport(player, RunConfig.LobbyPosition)
+				self._world.Teleport(player, RunConfig.LobbyReturnPosition)
 				if self._world.SetWalkSpeed then
 					self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed)
 				end

@@ -163,27 +163,32 @@ function HudView:UpdateRun(snapshot)
 	end
 end
 
--- The lobby line: ready-pad progress when anyone is gathering, otherwise how to start.
+-- The lobby line: your gate's party and countdown when you are in one, otherwise how to start.
 function HudView:_renderLobbyObjective()
-	local ready = self._lobbyReady
-	if ready and ready.Countdown then
-		self.objectiveLabel.Text = string.format("Descending in %d...", ready.Countdown)
+	local status = self._lobbyStatus
+	if status and status.Notice then
+		self.objectiveLabel.Text = status.Notice
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Warning
+	elseif status and status.Gate and status.Countdown then
+		self.objectiveLabel.Text = string.format("%s  %d/%d  -  descending in %d...", status.Gate, status.Count,
+			status.Capacity, status.Countdown)
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Health
-	elseif ready and ready.Ready > 0 then
-		self.objectiveLabel.Text = string.format("Ready %d / %d  -  everyone onto a pad", ready.Ready, ready.Total)
+	elseif status and status.Gate then
+		self.objectiveLabel.Text = string.format("%s  %d/%d  -  waiting for %d more", status.Gate, status.Count,
+			status.Capacity, math.max(status.MinPlayers - status.Count, 1))
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	else
-		self.objectiveLabel.Text = "Stand on a ready pad, or use the pedestal to descend"
+		self.objectiveLabel.Text = "Step into a Gate with friends (2-8), or use the Solo Portal"
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	end
 end
 
--- snapshot is the LobbyReadyState payload.
+-- snapshot is the LobbyReadyState payload: this player's gate status.
 function HudView:SetLobbyReady(snapshot)
 	if type(snapshot) ~= "table" then
 		return
 	end
-	self._lobbyReady = snapshot.Active and snapshot or nil
+	self._lobbyStatus = snapshot
 	if snapshot.Active then
 		self:_renderLobbyObjective()
 	end

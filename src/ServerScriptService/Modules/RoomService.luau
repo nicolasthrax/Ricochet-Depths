@@ -11,8 +11,11 @@ local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RoomService = {}
 RoomService.__index = RoomService
 
-function RoomService.new(arenaFolder, enemyService, planeY, random)
+-- origin (default the world origin) is where this service's rooms are centred: each arena slot
+-- builds its rooms at its own origin, so several runs can share a server.
+function RoomService.new(arenaFolder, enemyService, planeY, random, origin)
 	return setmetatable({
+		_origin = origin or Vector3.zero,
 		_arena = arenaFolder,
 		_enemies = enemyService,
 		_planeY = planeY,
@@ -66,23 +69,26 @@ function RoomService:_spawnPositionFor(layout, index)
 	local marker = markers[((index - 1) % #markers) + 1]
 	local jitter = 3
 	return Vector3.new(
-		marker.X + (self._random:NextNumber() * 2 - 1) * jitter,
+		self._origin.X + marker.X + (self._random:NextNumber() * 2 - 1) * jitter,
 		self._planeY,
-		marker.Y + (self._random:NextNumber() * 2 - 1) * jitter
+		self._origin.Z + marker.Y + (self._random:NextNumber() * 2 - 1) * jitter
 	)
 end
 
 function RoomService:Load(roomDefinition, now)
 	self:Unload()
 
-	local room, bounds, layout = RoomBuilder.Build(self._arena, roomDefinition.Layout)
+	local room, bounds, layout = RoomBuilder.Build(self._arena, roomDefinition.Layout, self._origin)
 	if not room then
 		return nil, bounds -- bounds carries the error string on failure
 	end
 
 	self._room = room
 	self._enemies:SetBounds(bounds.center, bounds.half, bounds.diagonal)
-	self._enemies:SetObstacles(RoomGeometry.Footprints(layout, RoomConfig))
+	self._enemies:SetObstacles(RoomGeometry.Translate(
+		RoomGeometry.Footprints(layout, RoomConfig),
+		Vector2.new(self._origin.X, self._origin.Z)
+	))
 
 	local spawned, failed = 0, 0
 	local elite, boss = nil, nil
@@ -102,7 +108,7 @@ function RoomService:Load(roomDefinition, now)
 	end
 
 	self._current = {
-		mechanics = RoomMechanics.new(room, layout),
+		mechanics = RoomMechanics.new(room, layout, self._origin),
 		definition = roomDefinition,
 		bounds = bounds,
 		layout = layout,
@@ -181,8 +187,9 @@ local SPAWN_SEARCH_STEP = 6
 -- spirals outward until it finds somewhere clear.
 function RoomService:GetSpawnPoint()
 	local current = self._current
-	local floorY = current and current.bounds.center.Y or 0
-	local fallback = Vector3.new(0, floorY + SPAWN_HEIGHT, 0)
+	local origin = self._origin
+	local floorY = current and current.bounds.center.Y or origin.Y
+	local fallback = Vector3.new(origin.X, floorY + SPAWN_HEIGHT, origin.Z)
 	if not current then
 		return fallback
 	end
@@ -218,7 +225,7 @@ function RoomService:GetSpawnPoint()
 			local x, z = math.cos(angle) * radius, math.sin(angle) * radius
 			local score = clearanceAt(x, z)
 			if score >= 0 then
-				return Vector3.new(x, floorY + SPAWN_HEIGHT, z)
+				return Vector3.new(origin.X + x, floorY + SPAWN_HEIGHT, origin.Z + z)
 			end
 			if score > bestClearance then
 				bestX, bestZ, bestClearance = x, z, score
@@ -228,7 +235,11 @@ function RoomService:GetSpawnPoint()
 
 	-- Nothing is fully clear. Take the least-bad point rather than the centre, which is the one
 	-- place already known to be blocked.
-	return Vector3.new(bestX, floorY + SPAWN_HEIGHT, bestZ)
+	return Vector3.new(origin.X + bestX, floorY + SPAWN_HEIGHT, origin.Z + bestZ)
+end
+
+function RoomService:GetOrigin()
+	return self._origin
 end
 
 function RoomService:Destroy()

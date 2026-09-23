@@ -1,15 +1,8 @@
--- Lobby: the four-pad co-op ready-up zone and the shop kiosk.
+-- Lobby: the hall, the two multiplayer gates, the solo portal, the shop kiosks, the invisible
+-- barrier, and signs that actually render.
 local LobbyBuilder = __require("LobbyBuilder")
-local LobbyReady = __require("LobbyReady")
+local PartyRooms = __require("PartyRooms")
 local RunConfig = __require("RunConfig")
-
-local function pads(count)
-	local out = {}
-	for index = 1, count do
-		table.insert(out, { Center = Vector3.new(index * 10, 0, 0), HalfSize = Vector2.new(3, 3) })
-	end
-	return out
-end
 
 -- Positions keyed by player; `nil` means no character.
 local function positionsOf(map)
@@ -18,121 +11,95 @@ local function positionsOf(map)
 	end
 end
 
-local function onPad(index)
-	return Vector3.new(index * 10 + 1, 3, -1)
+local function room(id)
+	return { Id = id or "GateI", Center = Vector3.new(0, 0, 0), HalfSize = Vector2.new(7, 7), Capacity = 8, MinPlayers = 2 }
 end
 
-describe("LobbyBuilder ready zone and kiosk", function()
-	it("builds four ready pads and a shop kiosk with its own prompt", function()
-		local lobby, startPrompt, extras = LobbyBuilder.Build(Instance.new("Folder"))
-		expect(startPrompt).toBeTruthy()
-		expect(#extras.readyPads).toBe(RunConfig.Lobby.ReadyPadCount)
-		expect(RunConfig.Lobby.ReadyPadCount).toBe(4)
-		for index, pad in extras.readyPads do
-			expect(pad.Name).toBe("ReadyPad" .. index)
-			expect(pad.Parent).toBe(lobby:FindFirstChild("ReadyZone"))
-		end
+local function players(count, inside)
+	local list, positions = {}, {}
+	for index = 1, count do
+		local player = { Name = "P" .. index }
+		table.insert(list, player)
+		positions[player] = inside and Vector3.new(index % 5 - 2, 3, 1) or Vector3.new(40, 3, 40)
+	end
+	return list, positions
+end
 
-		local kiosk = lobby:FindFirstChild("ShopKiosk")
-		expect(kiosk).toBeTruthy()
-		expect(extras.shopPrompt.ClassName).toBe("ProximityPrompt")
-		expect(extras.shopPrompt.Parent).toBe(kiosk)
-		expect(extras.shopPrompt).never().toBe(startPrompt)
+local function stepFor(rooms, list, positions, from, seconds)
+	local result
+	local now = from
+	for _ = 1, math.ceil(seconds / 0.1) do
+		now += 0.1
+		result = rooms:Step(now, list, positionsOf(positions))
+	end
+	return result, now
+end
+
+describe("PartyRooms", function()
+	local config = RunConfig.Lobby
+
+	it("never starts a gate with one player in it", function()
+		local rooms = PartyRooms.new({ room() })
+		local list, positions = players(1, true)
+		local result = stepFor(rooms, list, positions, 0, config.GateCountdown + 5)
+		expect(result.GateI.Start).toBe(false)
+		expect(result.GateI.Countdown).toBeNil()
+		expect(#result.GateI.Members).toBe(1)
 	end)
 
-	it("keeps the pads apart and clear of the lobby spawn", function()
-		local lobby, _, extras = LobbyBuilder.Build(Instance.new("Folder"))
-		local spawn = lobby:FindFirstChild("LobbySpawn")
-		for index, pad in extras.readyPads do
-			local gap = Vector3.new(pad.Position.X - spawn.Position.X, 0, pad.Position.Z - spawn.Position.Z)
-			expect(gap.Magnitude).toBeGreaterThan(8)
-			for other = index + 1, #extras.readyPads do
-				local between = extras.readyPads[other].Position - pad.Position
-				expect(Vector3.new(between.X, 0, between.Z).Magnitude).toBeGreaterThan(pad.Size.X)
+	it("starts two players after the countdown, exactly once", function()
+		local rooms = PartyRooms.new({ room() })
+		local list, positions = players(2, true)
+		local first = rooms:Step(0, list, positionsOf(positions))
+		expect(first.GateI.Countdown).toBeCloseTo(config.GateCountdown)
+		local starts, now = 0, 0
+		for _ = 1, math.ceil((config.GateCountdown + 2) / 0.1) do
+			now += 0.1
+			if rooms:Step(now, list, positionsOf(positions)).GateI.Start then
+				starts += 1
 			end
 		end
+		expect(starts).toBe(1)
 	end)
 
-	it("describes each pad's footprint for the ready check", function()
-		local _, _, extras = LobbyBuilder.Build(Instance.new("Folder"))
-		local footprints = LobbyReady.PadsFromParts(extras.readyPads)
-		expect(#footprints).toBe(4)
-		expect(footprints[1].HalfSize.X).toBeCloseTo(extras.readyPads[1].Size.X / 2)
-	end)
-end)
-
-describe("LobbyReady", function()
-	it("never starts an empty lobby", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 1 })
-		local snapshot = ready:Step(10, {}, positionsOf({}))
-		expect(snapshot.Start).toBe(false)
-		expect(snapshot.Total).toBe(0)
+	it("shortens the countdown when the gate fills", function()
+		local rooms = PartyRooms.new({ room() })
+		local list, positions = players(8, true)
+		local result = rooms:Step(0, list, positionsOf(positions))
+		expect(result.GateI.Countdown).toBeCloseTo(config.FullCountdown)
+		expect(config.FullCountdown).toBeLessThan(config.GateCountdown)
 	end)
 
-	it("counts down once everyone is on a pad and starts exactly once", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 3 })
-		local a, b = { Name = "A" }, { Name = "B" }
-		local where = positionsOf({ [a] = onPad(1), [b] = onPad(2) })
-
-		local first = ready:Step(0, { a, b }, where)
-		expect(first.Ready).toBe(2)
-		expect(first.Total).toBe(2)
-		expect(first.Countdown).toBeCloseTo(3)
-		expect(first.Start).toBe(false)
-		expect(ready:Step(2.9, { a, b }, where).Start).toBe(false)
-
-		local fired = ready:Step(3, { a, b }, where)
-		expect(fired.Start).toBe(true)
-		expect(fired.Starter).toBe(a)
-		expect(ready:Step(3.1, { a, b }, where).Start).toBe(false)
+	it("holds at most eight and reports the rest as overflow", function()
+		local rooms = PartyRooms.new({ room() })
+		local list, positions = players(10, true)
+		local result = rooms:Step(0, list, positionsOf(positions))
+		expect(#result.GateI.Members).toBe(8)
+		expect(#result.GateI.Overflow).toBe(2)
 	end)
 
-	it("holds while anyone is off a pad and resets the countdown when someone steps off", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 2 })
-		local a, b = { Name = "A" }, { Name = "B" }
-		local map = { [a] = onPad(1), [b] = Vector3.new(500, 3, 500) }
-		local where = positionsOf(map)
-
-		local waiting = ready:Step(0, { a, b }, where)
-		expect(waiting.Ready).toBe(1)
-		expect(waiting.Countdown).toBeNil()
-
-		map[b] = onPad(3)
-		ready:Step(1, { a, b }, where)
-		map[b] = nil -- respawning: no character counts as not ready
-		expect(ready:Step(2.5, { a, b }, where).Countdown).toBeNil()
-		map[b] = onPad(3)
-		expect(ready:Step(3, { a, b }, where).Countdown).toBeCloseTo(2)
-		expect(ready:Step(4.9, { a, b }, where).Start).toBe(false)
-		expect(ready:Step(5, { a, b }, where).Start).toBe(true)
+	it("cancels the countdown when the gate drops below two", function()
+		local rooms = PartyRooms.new({ room() })
+		local list, positions = players(2, true)
+		local _, now = stepFor(rooms, list, positions, 0, config.GateCountdown / 2)
+		positions[list[2]] = Vector3.new(50, 3, 50)
+		local result = rooms:Step(now + 0.1, list, positionsOf(positions))
+		expect(result.GateI.Countdown).toBeNil()
+		positions[list[2]] = Vector3.new(0, 3, 0)
+		result = rooms:Step(now + 0.2, list, positionsOf(positions))
+		-- A fresh countdown, not the one that was half spent.
+		expect(result.GateI.Countdown).toBeCloseTo(config.GateCountdown)
 	end)
 
-	it("counts two players crowding one pad as one pad filled", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 1 })
-		local a, b = { Name = "A" }, { Name = "B" }
-		local snapshot = ready:Step(0, { a, b }, positionsOf({ [a] = onPad(1), [b] = onPad(1) }))
-		expect(snapshot.Ready).toBe(1)
-		expect(snapshot.Countdown).toBeNil()
-	end)
-
-	it("starts with every pad filled even if more players are in the lobby than pads", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 1 })
-		local players, map = {}, {}
-		for index = 1, 5 do
-			local player = { Name = "P" .. index }
-			players[index] = player
-			map[player] = index <= 4 and onPad(index) or Vector3.new(0, 3, 300)
-		end
-		ready:Step(0, players, positionsOf(map))
-		expect(ready:Step(1, players, positionsOf(map)).Start).toBe(true)
-	end)
-
-	it("reports which pads are occupied, for lighting them up", function()
-		local ready = LobbyReady.new(pads(4), { countdown = 1 })
-		local a = { Name = "A" }
-		local snapshot = ready:Step(0, { a }, positionsOf({ [a] = onPad(3) }))
-		expect(snapshot.Occupied[3]).toBe(true)
-		expect(snapshot.Occupied[1]).toBe(false)
+	it("keeps each gate's players separate, and skips anyone it is told is busy", function()
+		local rooms = PartyRooms.new({ room("GateI"), { Id = "GateII", Center = Vector3.new(30, 0, 0), HalfSize = Vector2.new(7, 7), Capacity = 8, MinPlayers = 2 } })
+		local list, positions = players(3, true)
+		positions[list[3]] = Vector3.new(30, 3, 0)
+		local result = rooms:Step(0, list, positionsOf(positions), function(player)
+			return player == list[2]
+		end)
+		expect(#result.GateI.Members).toBe(1)
+		expect(#result.GateII.Members).toBe(1)
 	end)
 end)
 
@@ -150,31 +117,77 @@ local function overlaps(a, b, margin)
 	return a.minX < b.maxX + margin and b.minX < a.maxX + margin and a.minZ < b.maxZ + margin and b.minZ < a.maxZ + margin
 end
 
-describe("lobby hub", function()
+local function inside(point, part)
+	local b = bounds(part)
+	local halfY = part.Size.Y / 2
+	return point.X > b.minX and point.X < b.maxX and point.Z > b.minZ and point.Z < b.maxZ
+		and point.Y > part.Position.Y - halfY and point.Y < part.Position.Y + halfY
+end
+
+describe("lobby layout", function()
 	local world = Instance.new("Folder")
-	local lobby = LobbyBuilder.Build(world)
+	local lobby, soloPrompt, parts = LobbyBuilder.Build(world)
 	local dressing = lobby:FindFirstChild("Dressing")
 
-	it("is walled in on all four sides, so nobody walks off into the void", function()
-		expect(dressing).toBeTruthy()
-		local walls = 0
-		for _, part in dressing:GetChildren() do
-			if part.Name:find("^HallWall") then
+	it("has a solo portal, two gates and two shop kiosks, each with its prompt", function()
+		expect(soloPrompt.ClassName).toBe("ProximityPrompt")
+		expect(soloPrompt.Parent.Name).toBe("DescentPedestal")
+		expect(#parts.gates).toBe(2)
+		for _, gate in parts.gates do
+			expect(gate.zone:IsA("BasePart")).toBe(true)
+			expect(gate.zone.CanCollide).toBe(false)
+			expect(gate.board).toBeTruthy()
+			expect(gate.capacity).toBe(RunConfig.Lobby.GateCapacity)
+		end
+		expect(parts.armoryPrompt.Parent.Name).toBe("ArmoryKiosk")
+		expect(parts.cosmeticsPrompt.Parent.Name).toBe("CosmeticsKiosk")
+	end)
+
+	it("puts the gates on the west side and the shops on the east", function()
+		local origin = RunConfig.LobbyPosition
+		for _, gate in parts.gates do
+			expect(gate.zone.Position.X - origin.X).toBeLessThan(-20)
+		end
+		expect(lobby:FindFirstChild("ArmoryKiosk").Position.X - origin.X).toBeGreaterThan(20)
+		expect(lobby:FindFirstChild("CosmeticsKiosk").Position.X - origin.X).toBeGreaterThan(20)
+	end)
+
+	it("is sealed by an invisible barrier and ceiling nobody can jump over", function()
+		local barrier = lobby:FindFirstChild("Barrier")
+		expect(barrier).toBeTruthy()
+		local walls, ceiling = 0, false
+		for _, part in barrier:GetChildren() do
+			expect(part.Transparency).toBe(1)
+			expect(part.CanCollide).toBe(true)
+			if part.Name:find("^BarrierWall") then
 				walls += 1
-				expect(part.CanCollide).toBe(true)
-				expect(part.Size.Y).toBeGreaterThanOrEqual(8)
+				expect(part.Size.Y).toBeGreaterThanOrEqual(60)
+			elseif part.Name == "BarrierCeiling" then
+				ceiling = true
 			end
 		end
 		expect(walls).toBe(4)
+		expect(ceiling).toBe(true)
+		-- Everything a player can stand on sits inside the barrier.
+		local floor = lobby:FindFirstChild("LobbyFloor")
+		for _, part in barrier:GetChildren() do
+			if part.Name:find("^BarrierWall") then
+				expect(overlaps(bounds(part), bounds(floor), -0.01)).toBe(false)
+			end
+		end
 	end)
 
-	it("keeps props clear of the spawn, pedestal, ready pads and kiosk", function()
-		local keepClear = { lobby:FindFirstChild("LobbySpawn"), lobby:FindFirstChild("DescentPedestal"), lobby:FindFirstChild("ShopKiosk") }
-		for _, pad in lobby:FindFirstChild("ReadyZone"):GetChildren() do
-			table.insert(keepClear, pad)
+	it("keeps props clear of the spawn, portal, gates and kiosks", function()
+		local keepClear = {
+			lobby:FindFirstChild("LobbySpawn"),
+			lobby:FindFirstChild("DescentPedestal"),
+			lobby:FindFirstChild("ArmoryKiosk"),
+			lobby:FindFirstChild("CosmeticsKiosk"),
+		}
+		for _, gate in parts.gates do
+			table.insert(keepClear, gate.zone)
 		end
 		for _, prop in dressing:GetDescendants() do
-			-- Floor-level glow (the well ring) may run under things; anything standing may not.
 			if prop:IsA("BasePart") and prop.Size.Y > 1 then
 				for _, feature in keepClear do
 					if overlaps(bounds(prop), bounds(feature), 2) then
@@ -198,10 +211,65 @@ describe("lobby hub", function()
 		expect(lamps).toBeGreaterThanOrEqual(4)
 		expect(banners).toBe(3)
 	end)
+end)
 
-	it("labels every ready pad", function()
-		for _, pad in lobby:FindFirstChild("ReadyZone"):GetChildren() do
-			expect(pad:FindFirstChild("PadLabel")).toBeTruthy()
+describe("lobby signs", function()
+	local lobby, _, parts = LobbyBuilder.Build(Instance.new("Folder"))
+
+	it("prints every board on a SurfaceGui with real text", function()
+		local boards = 0
+		for _, gui in lobby:GetDescendants() do
+			if gui.ClassName == "SurfaceGui" then
+				boards += 1
+				local label = gui:FindFirstChild("Text")
+				expect(label).toBeTruthy()
+				expect(#label.Text).toBeGreaterThan(0)
+				expect(label.TextScaled).toBe(true)
+				expect(gui.Parent:IsA("BasePart")).toBe(true)
+			end
 		end
+		-- Two gates, two shops, three zone banners, the solo portal.
+		expect(boards).toBeGreaterThanOrEqual(8)
+		for _, text in { "ARMORY", "COSMETICS", "SOLO DESCENT" } do
+			local found = false
+			for _, gui in lobby:GetDescendants() do
+				if gui.ClassName == "TextLabel" and gui.Text == text then
+					found = true
+				end
+			end
+			if not found then
+				error("no sign reads " .. text)
+			end
+		end
+	end)
+
+	it("sizes floating labels in studs and never buries them inside a part", function()
+		local solids = {}
+		for _, part in lobby:GetDescendants() do
+			if part:IsA("BasePart") and part.Transparency < 1 then
+				table.insert(solids, part)
+			end
+		end
+		for _, gui in lobby:GetDescendants() do
+			if gui.ClassName == "BillboardGui" then
+				-- Scale, not pixels: the label grows and shrinks with distance like the world.
+				expect(gui.Size.X.Scale).toBeGreaterThan(0)
+				expect(gui.Size.X.Offset).toBe(0)
+				local anchor = gui.Parent.Position + gui.StudsOffsetWorldSpace
+				for _, part in solids do
+					if part ~= gui.Parent and inside(anchor, part) then
+						error(("%s's label sits inside %s"):format(gui.Parent.Name, part.Name))
+					end
+				end
+			end
+		end
+	end)
+
+	it("updates a gate's board with its count and countdown", function()
+		local gate = parts.gates[1]
+		LobbyBuilder.SetGateStatus(gate, 3, 12)
+		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  3/8  ·  12s")
+		LobbyBuilder.SetGateStatus(gate, 1, nil)
+		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  1/8  ·  need 2")
 	end)
 end)

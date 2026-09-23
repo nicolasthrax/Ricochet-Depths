@@ -6,9 +6,12 @@ local EffectConfig = require(ReplicatedStorage:WaitForChild("EffectConfig"))
 local EffectBroadcaster = {}
 EffectBroadcaster.__index = EffectBroadcaster
 
-function EffectBroadcaster.new(remote)
+-- recipients, when given, returns the players who should see these effects (one arena's
+-- players); without it every client does.
+function EffectBroadcaster.new(remote, recipients)
 	return setmetatable({
 		_remote = remote,
+		_recipients = recipients,
 		_positions = {},
 		_normals = {},
 		_kinds = {},
@@ -51,7 +54,13 @@ function EffectBroadcaster:Flush()
 	local details = { Kinds = take(self._kinds), Contacts = take(self._contacts), Damage = take(self._damage) }
 
 	self._count = 0
-	self._remote:FireAllClients(positions, normals, details)
+	if self._recipients then
+		for _, player in self._recipients() do
+			self._remote:FireClient(player, positions, normals, details)
+		end
+	else
+		self._remote:FireAllClients(positions, normals, details)
+	end
 	return count
 end
 

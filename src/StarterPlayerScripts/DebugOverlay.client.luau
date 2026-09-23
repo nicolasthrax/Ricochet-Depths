@@ -65,7 +65,7 @@ RunService.Heartbeat:Connect(function()
 		return
 	end
 	label.Text = string.format(
-		"Ricochet Depths %s\nfps        %5.1f\nstate      %s\nroom       %d / %d\nenemies    %d live\nprojectile %d active / %d free\nplayers    %d\neffects    %d dropped\ntelemetry  %d sent / %d dropped\ndata       %d saves / %d fail / %d retry\n\nF3 to hide",
+		"Ricochet Depths %s\nfps        %5.1f\nstate      %s\nroom       %d / %d\nenemies    %d live (all arenas)\nprojectile %d active (all arenas)\nplayers    %d in this run\narenas     %d busy / %d built\ntelemetry  %d sent / %d dropped\ndata       %d saves / %d fail / %d retry\n\nF3 to hide",
 		RunConfig.Version,
 		averageFps(),
 		tostring(latest.State),
@@ -73,9 +73,9 @@ RunService.Heartbeat:Connect(function()
 		latest.RoomCount,
 		latest.EnemiesActive,
 		latest.ProjectilesActive,
-		latest.ProjectilesFree,
 		latest.Participants,
-		latest.EffectsDropped,
+		latest.ArenasBusy or 0,
+		latest.ArenaSlots or 0,
 		latest.TelemetryEmitted,
 		latest.TelemetryDropped,
 		latest.DataSaves,

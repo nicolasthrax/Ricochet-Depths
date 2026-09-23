@@ -67,8 +67,10 @@ local function segmentCrossesRect(p, q, centre, size)
 	return true
 end
 
-function RoomMechanics.new(room, layout)
+-- origin is where the room was built (RoomBuilder); specs are relative to it.
+function RoomMechanics.new(room, layout, origin)
 	local self = setmetatable({
+		_origin = origin or Vector3.zero,
 		_sweepers = {},
 		_gates = {},
 		_breakables = {}, -- part -> state
@@ -152,7 +154,7 @@ end
 -- Damage a player at `position` takes from hazards right now (0 if none). The caller spaces
 -- repeated burns out by GateTick.
 function RoomMechanics:HazardAt(position, now)
-	local point = Vector2.new(position.X, position.Z)
+	local point = Vector2.new(position.X - self._origin.X, position.Z - self._origin.Z)
 	for _, gate in self._gates do
 		if RoomMechanics.GatePhase(gate.spec, now) == "On" then
 			if RoomMechanics.DistanceToSegment(point, gate.spec.From, gate.spec.To) <= config.GateHitHalfWidth then
@@ -193,7 +195,8 @@ function RoomMechanics:ApplySegment(entry, from, to)
 	if entry.amped or #self._pads == 0 then
 		return false
 	end
-	local p, q = Vector2.new(from.X, from.Z), Vector2.new(to.X, to.Z)
+	local ox, oz = self._origin.X, self._origin.Z
+	local p, q = Vector2.new(from.X - ox, from.Z - oz), Vector2.new(to.X - ox, to.Z - oz)
 	for _, pad in self._pads do
 		if segmentCrossesRect(p, q, pad.spec.Offset, pad.spec.Size) then
 			entry.amped = true

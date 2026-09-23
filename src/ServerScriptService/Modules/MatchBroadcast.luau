@@ -59,10 +59,13 @@ function Broadcast.methods:_fireClient(name, player, payload)
 	end
 end
 
+-- To everyone in this match, not the whole server: other arenas run other matches.
 function Broadcast.methods:_fireAll(name, ...)
 	local remote = self._net[name]
 	if remote then
-		remote:FireAllClients(...)
+		for player in self._states do
+			remote:FireClient(player, ...)
+		end
 	end
 end
 

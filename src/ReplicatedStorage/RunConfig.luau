@@ -30,8 +30,16 @@ RunConfig.RoomTimeLimit = 150
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
 RunConfig.HardRunTimeLimit = 1200
 
--- Lobby sits far from the arena so room geometry never overlaps it.
+-- Lobby sits far from the arenas so room geometry never overlaps it.
 RunConfig.LobbyPosition = Vector3.new(0, 0, 600)
+-- Where players land when a run ends: beside the lobby spawn.
+RunConfig.LobbyReturnPosition = RunConfig.LobbyPosition + Vector3.new(0, 3, 28)
+
+-- Concurrent runs: each group plays in its own arena slot, centred at X = index * Spacing.
+RunConfig.Arenas = {
+	MaxSlots = 6,
+	Spacing = 500,
+}
 -- Run state is pushed to clients on every transition, and at most this often in between.
 RunConfig.RunStateBroadcastInterval = 0.25
 
@@ -46,13 +54,16 @@ RunConfig.RemoteRules = {
 	EquipShopItem = { Cooldown = 0.3, Burst = 3 },
 }
 
--- Lobby ready-up: players stand on the pads, and once every player in the lobby is on one
--- (or every pad is taken) the descent starts after a short countdown.
+-- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
+-- a countdown runs (shorter when it fills) and its members descend together into their own
+-- arena. A solo portal starts a one-player run at once.
 RunConfig.Lobby = {
-	ReadyPadCount = 4,
-	ReadyCountdown = 3,
-	-- How often the ready state is pushed to clients while it is not changing.
-	ReadyBroadcastInterval = 0.5,
+	GateCapacity = 8,
+	GateMinPlayers = 2,
+	GateCountdown = 15,
+	FullCountdown = 5,
+	-- How often gate state is pushed to clients while it is not changing.
+	GateBroadcastInterval = 0.5,
 }
 
 -- The descent passes through three zones, each with its own look and its own pool of rooms.

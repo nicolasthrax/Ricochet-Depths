@@ -99,14 +99,22 @@ local function facingFor(body, entry, dt)
 	return entry.facing
 end
 
-local function update(dt)
-	local arena = workspace:FindFirstChild("Arena")
-	local pool = arena and arena:FindFirstChild("EnemyPool")
-	if not pool then
-		return
+-- Every arena slot's enemy pool. Runs happen side by side, one slot per group.
+local function enemyPools()
+	local pools = {}
+	local arenas = workspace:FindFirstChild("Arenas")
+	for _, slot in arenas and arenas:GetChildren() or {} do
+		local arena = slot:FindFirstChild("Arena")
+		local pool = arena and arena:FindFirstChild("EnemyPool")
+		if pool then
+			table.insert(pools, pool)
+		end
 	end
-	local now = os.clock()
-	local moveParts, moveFrames = {}, {}
+	return pools
+end
+
+-- Poses every live model in one pool, appending the moves to the frame's batch.
+local function updatePool(pool, now, dt, moveParts, moveFrames)
 	for _, body in pool:GetChildren() do
 		if body:IsA("BasePart") then
 			local entry = entryFor(body)
@@ -128,6 +136,14 @@ local function update(dt)
 				entry.lastPosition = body.Position
 			end
 		end
+	end
+end
+
+local function update(dt)
+	local now = os.clock()
+	local moveParts, moveFrames = {}, {}
+	for _, pool in enemyPools() do
+		updatePool(pool, now, dt, moveParts, moveFrames)
 	end
 	if #moveParts > 0 then
 		workspace:BulkMoveTo(moveParts, moveFrames, Enum.BulkMoveMode.FireCFrameChanged)

@@ -1,7 +1,7 @@
--- End-to-end smoke test of GameBootstrap.Start: the real wiring between remotes, the shop, the
--- lobby ready pads and the run loop. Named to run last: Start connects to Players, Heartbeat
--- and every remote for the life of the process, and nothing tears that down, so any test file
--- after it would have a second game listening to its events.
+-- End-to-end smoke test of GameBootstrap.Start: the real wiring between remotes, the shop
+-- kiosks, the multiplayer gates, the solo portal and the arena director. Named to run last: Start
+-- connects to Players, Heartbeat and every remote for the life of the process, and nothing tears
+-- that down, so any test file after it would have a second game listening to its events.
 local DebugConfig = __require("DebugConfig")
 local GameBootstrap = __require("GameBootstrap")
 local Remotes = __require("Remotes")
@@ -12,8 +12,7 @@ local DT = 1 / 30
 
 describe("GameBootstrap wiring", function()
 	DebugConfig.LogTelemetry = false
-	-- Earlier files leave players behind. They would count as lobby players who are not on a
-	-- pad, which (correctly) holds the ready countdown, so this game starts with an empty server.
+	-- Earlier files leave players behind; this game starts with an empty server.
 	for _, leftover in game:GetService("Players"):GetPlayers() do
 		Harness.removePlayer(leftover)
 	end
@@ -23,11 +22,17 @@ describe("GameBootstrap wiring", function()
 	end)
 	local systems = GameBootstrap.Start()
 	local lobby = workspace:FindFirstChild("Lobby")
-	local player = Harness.addPlayer("Smoke")
-	Harness.giveCharacter(player, RunConfig.LobbyPosition + Vector3.new(0, 3, 8))
-	local root = player.Character:FindFirstChild("HumanoidRootPart")
+	local spawnAt = RunConfig.LobbyReturnPosition
 
-	local function firedTo(remoteName)
+	local first, second, solo = Harness.addPlayer("GateA"), Harness.addPlayer("GateB"), Harness.addPlayer("Solo")
+	for _, player in { first, second, solo } do
+		Harness.giveCharacter(player, spawnAt)
+	end
+	local function root(player)
+		return player.Character:FindFirstChild("HumanoidRootPart")
+	end
+
+	local function firedTo(player, remoteName)
 		local out = {}
 		for _, call in rawget(Remotes.Get(remoteName), "_fired") do
 			if call.player == player then
@@ -37,37 +42,58 @@ describe("GameBootstrap wiring", function()
 		return out
 	end
 
-	it("loads the profile and opens the shop from the kiosk", function()
-		expect(systems.persistence:IsLoaded(player)).toBe(true)
-		local prompt = lobby:FindFirstChild("ShopKiosk"):FindFirstChild("OpenShopPrompt")
-		prompt.Triggered:Fire(player)
-		expect(#firedTo("ShopOpen")).toBe(1)
+	it("loads profiles and opens the shop on the kiosk's tab", function()
+		expect(systems.persistence:IsLoaded(first)).toBe(true)
+		lobby:FindFirstChild("ArmoryKiosk"):FindFirstChild("OpenArmoryPrompt").Triggered:Fire(first)
+		local opened = firedTo(first, "ShopOpen")
+		expect(#opened).toBe(1)
+		expect(opened[1][1]).toBe("Armory")
+		lobby:FindFirstChild("CosmeticsKiosk"):FindFirstChild("OpenCosmeticsPrompt").Triggered:Fire(first)
+		opened = firedTo(first, "ShopOpen")
+		expect(opened[2][1]).toBe("Cosmetics")
 	end)
 
 	it("sells an upgrade through the remote while in the lobby", function()
-		systems.persistence:GrantReward(player, "smoke-seed", 1000)
-		Remotes.Get("PurchaseShopItem").OnServerEvent:Fire(player, "Vitality")
-		expect(systems.persistence:GetMetaLevels(player).Vitality).toBe(1)
-		local results = firedTo("ShopResult")
+		systems.persistence:GrantReward(first, "smoke-seed", 1000)
+		Remotes.Get("PurchaseShopItem").OnServerEvent:Fire(first, "Vitality")
+		expect(systems.persistence:GetMetaLevels(first).Vitality).toBe(1)
+		local results = firedTo(first, "ShopResult")
 		expect(results[#results][1].Ok).toBe(true)
 	end)
 
-	it("starts a descent once the only player stands on a ready pad, with shop bonuses applied", function()
-		local pad = lobby:FindFirstChild("ReadyZone"):FindFirstChild("ReadyPad1")
-		root.Position = pad.Position + Vector3.new(0, 3, 0)
-		Harness.step(DT, math.ceil((RunConfig.Lobby.ReadyCountdown + 0.5) / DT))
-		expect(systems.match:GetState()).never().toBe(RunConfig.States.Lobby)
+	it("holds a gate with one player, then descends two together with shop bonuses applied", function()
+		local zone = lobby:FindFirstChild("Gates"):FindFirstChild("Gate1Zone")
+		root(first).Position = zone.Position + Vector3.new(-2, 3, 0)
+		Harness.step(DT, math.ceil((RunConfig.Lobby.GateCountdown + 1) / DT))
+		expect(systems.director:MatchFor(first)).toBeNil()
 
-		local state = systems.match:GetPlayerState(player)
+		root(second).Position = zone.Position + Vector3.new(2, 3, 0)
+		Harness.step(DT, math.ceil((RunConfig.Lobby.GateCountdown + 0.5) / DT))
+		local match = systems.director:MatchFor(first)
+		expect(match).toBeTruthy()
+		expect(systems.director:MatchFor(second)).toBe(match)
+		expect(#match:GetParticipants()).toBe(2)
+		expect(systems.director:MatchFor(solo)).toBeNil()
+
+		local state = match:GetPlayerState(first)
 		expect(state.maxHealth).toBe(RunConfig.BaseHealth + ShopConfig.Get("Vitality").Effect.PerLevel)
-		-- The countdown was broadcast to the lobby while it ran.
-		expect(#rawget(Remotes.Get("LobbyReadyState"), "_fired")).toBeGreaterThan(0)
+		-- Each gate member heard the countdown.
+		expect(#firedTo(second, "LobbyReadyState")).toBeGreaterThan(0)
 	end)
 
-	it("closes the shop once the run is under way", function()
-		Remotes.Get("PurchaseShopItem").OnServerEvent:Fire(player, "Velocity")
-		expect(systems.persistence:GetMetaLevels(player).Velocity).toBeNil()
-		local results = firedTo("ShopResult")
+	it("sends the solo player into a separate arena through the portal", function()
+		local prompt = lobby:FindFirstChild("DescentPedestal"):FindFirstChild("StartRunPrompt")
+		prompt.Triggered:Fire(solo)
+		local match = systems.director:MatchFor(solo)
+		expect(match).toBeTruthy()
+		expect(match).never().toBe(systems.director:MatchFor(first))
+		expect(#match:GetParticipants()).toBe(1)
+	end)
+
+	it("closes the shop to players in a run", function()
+		Remotes.Get("PurchaseShopItem").OnServerEvent:Fire(first, "Velocity")
+		expect(systems.persistence:GetMetaLevels(first).Velocity).toBeNil()
+		local results = firedTo(first, "ShopResult")
 		expect(results[#results][1].Reason).toBe("shop closed")
 	end)
 end)

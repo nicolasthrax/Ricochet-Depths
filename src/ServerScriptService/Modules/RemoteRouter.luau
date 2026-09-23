@@ -9,10 +9,20 @@ local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RemoteRouter = {}
 RemoteRouter.__index = RemoteRouter
 
--- shop is optional; without it the shop remotes are never bound.
-function RemoteRouter.new(match, persistence, onProfileChanged, shop)
+-- `match` is either one MatchService or a function player -> MatchService (or nil while that
+-- player is in the lobby), for servers running several arenas. shop is optional; without it the
+-- shop remotes are never bound. options.onStartRequest(player, now), when given, handles a
+-- client's start request instead of the match (the solo portal's server-side path).
+function RemoteRouter.new(match, persistence, onProfileChanged, shop, options)
+	local resolve = match
+	if type(match) ~= "function" then
+		resolve = function()
+			return match
+		end
+	end
 	return setmetatable({
-		_match = match,
+		_matchFor = resolve,
+		_onStartRequest = options and options.onStartRequest,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
 		_shop = shop,
@@ -35,19 +45,35 @@ end
 
 function RemoteRouter:Bind()
 	self:_connect("FireProjectile", "Fire", function(player, now, direction, power)
-		self._match:HandleFire(player, direction, power, now)
+		local match = self._matchFor(player)
+		if match then
+			match:HandleFire(player, direction, power, now)
+		end
 	end)
 
 	self:_connect("ChooseUpgrade", "ChooseUpgrade", function(player, now, offerId, cardId)
-		self._match:ChooseUpgrade(player, offerId, cardId, now)
+		local match = self._matchFor(player)
+		if match then
+			match:ChooseUpgrade(player, offerId, cardId, now)
+		end
 	end)
 
 	self:_connect("RequestStartRun", "RequestStartRun", function(player, now)
-		self._match:RequestStart(player, now)
+		if self._onStartRequest then
+			self._onStartRequest(player, now)
+			return
+		end
+		local match = self._matchFor(player)
+		if match then
+			match:RequestStart(player, now)
+		end
 	end)
 
 	self:_connect("RequestReturnToLobby", "RequestReturnToLobby", function(player, now)
-		self._match:RequestReturnToLobby(player, now)
+		local match = self._matchFor(player)
+		if match then
+			match:RequestReturnToLobby(player, now)
+		end
 	end)
 
 	self:_connect("UpdateSettings", "UpdateSettings", function(player, _now, settings)

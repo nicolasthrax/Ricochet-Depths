@@ -3,27 +3,21 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local ArenaDirector = require(script.Parent.ArenaDirector)
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
-local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
-local EnemyService = require(script.Parent.EnemyService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
-local LobbyReady = require(script.Parent.LobbyReady)
-local MatchService = require(script.Parent.MatchService)
+local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfig"))
 local PlayerDataService = require(script.Parent.PlayerDataService)
-local ProjectileService = require(script.Parent.ProjectileService)
 local RemoteRouter = require(script.Parent.RemoteRouter)
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
-local RewardService = require(script.Parent.RewardService)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
-local RoomService = require(script.Parent.RoomService)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local ShopService = require(script.Parent.ShopService)
 local TelemetryService = require(script.Parent.TelemetryService)
-local UpgradeService = require(script.Parent.UpgradeService)
 local WorldAdapter = require(script.Parent.WorldAdapter)
 
 local GameBootstrap = {}
@@ -40,17 +34,14 @@ local NET_EVENTS = {
 function GameBootstrap.Start()
 	local seed = os.time() % 2147483647
 
-	-- Everything a projectile may collide with lives under Arena, so one filter covers it all.
-	local arena = Instance.new("Folder")
-	arena.Name = "Arena"
-	arena.Parent = workspace
+	local _, soloPrompt, lobbyParts = LobbyBuilder.Build(workspace)
 
-	local _, startPrompt, lobbyParts = LobbyBuilder.Build(workspace)
+	-- Arena slots live under one folder, far from the lobby.
+	local arenas = Instance.new("Folder")
+	arenas.Name = "Arenas"
+	arenas.Parent = workspace
 
 	local planeY = RoomConfig.FloorY + ProjectileConfig.PlaneHeight
-	local enemies = EnemyService.new(arena, planeY, seed)
-	local projectiles = ProjectileService.new(workspace, arena, planeY)
-	local rooms = RoomService.new(arena, enemies, planeY, Random.new(seed))
 
 	local telemetry
 	telemetry = TelemetryService.new(function(eventName, payload, now)
@@ -86,94 +77,123 @@ function GameBootstrap.Start()
 		end
 	end
 
-	-- The shop is open in the lobby only; `match` is assigned just below, before any request
-	-- can arrive.
-	local match
+	-- The shop is open to anyone in the lobby; `director` is assigned just below, before any
+	-- request can arrive.
+	local director
 	local shop = ShopService.new(persistence, {
-		canShop = function()
-			return match ~= nil and match:GetState() == RunConfig.States.Lobby
+		canShop = function(player)
+			return director ~= nil and director:MatchFor(player) == nil
 		end,
 		onChanged = pushProfile,
 	})
 
-	match = MatchService.new({
-		rooms = rooms,
-		enemies = enemies,
-		upgrades = UpgradeService.new(seed),
-		projectiles = projectiles,
-		rewards = RewardService.new(),
-		effects = EffectBroadcaster.new(Remotes.Get("ProjectileImpact")),
-		telemetry = telemetry,
-		net = net,
-		world = WorldAdapter,
-		persistence = persistence,
-		runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
-		-- Salvage-shop bonuses are read as each run starts; with the shop off, nobody has any.
-		metaProvider = FeatureFlags.SalvageShop and function(player)
-			return shop:GetRunBonuses(player)
-		end or nil,
+	director = ArenaDirector.new({
+		parent = arenas,
+		planeY = planeY,
+		seed = seed,
+		effectsRemote = Remotes.Get("ProjectileImpact"),
+		shared = {
+			telemetry = telemetry,
+			net = net,
+			world = WorldAdapter,
+			persistence = persistence,
+			runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
+			-- Shop bonuses are read as each run starts; with the shop off, nobody has any.
+			metaProvider = FeatureFlags.SalvageShop and function(player)
+				return shop:GetRunBonuses(player)
+			end or nil,
+		},
 	})
 
-	projectiles.OnImpact = function(result, entry)
-		return match:HandleImpact(result, entry, os.clock())
+	local lobbyStatus = Remotes.Get("LobbyReadyState")
+	local function startSolo(player, now)
+		local slot, reason = director:StartGroup({ player }, now)
+		if not slot and reason == "all arenas busy" then
+			lobbyStatus:FireClient(player, { Active = true, Notice = "Every arena is busy. Try again in a moment." })
+		end
 	end
 
-	local router = RemoteRouter.new(match, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil)
+	local router = RemoteRouter.new(function(player)
+		return director:MatchFor(player)
+	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, { onStartRequest = startSolo })
 	router:Bind()
 
-	startPrompt.Triggered:Connect(function(player)
-		match:RequestStart(player, os.clock())
+	soloPrompt.Triggered:Connect(function(player)
+		startSolo(player, os.clock())
 	end)
 
-	-- The kiosk only opens the view; every purchase still goes through ShopService. With the
-	-- shop off there is no entry point at all.
+	-- The kiosks only open the view on their tab; every purchase still goes through ShopService.
+	-- With the shop off there is no entry point at all.
 	local shopOpen, shopResult = Remotes.Get("ShopOpen"), Remotes.Get("ShopResult")
-	if FeatureFlags.SalvageShop then
-		lobbyParts.shopPrompt.Triggered:Connect(function(player)
-			pushProfile(player)
-			shopOpen:FireClient(player)
-		end)
-	else
-		lobbyParts.shopPrompt.Enabled = false
+	for prompt, tab in { [lobbyParts.armoryPrompt] = "Armory", [lobbyParts.cosmeticsPrompt] = "Cosmetics" } do
+		if FeatureFlags.SalvageShop then
+			prompt.Triggered:Connect(function(player)
+				pushProfile(player)
+				shopOpen:FireClient(player, tab)
+			end)
+		else
+			prompt.Enabled = false
+		end
 	end
 
-	-- Ready pads: when everyone in the lobby stands on one, the descent starts by itself.
-	local lobbyReady = LobbyReady.new(LobbyReady.PadsFromParts(lobbyParts.readyPads))
-	local lobbyReadyState = Remotes.Get("LobbyReadyState")
-	local padLit = {}
-	local lastReadyKey, nextReadyPush = nil, 0
+	-- Multiplayer gates: a gate's party descends together when its countdown ends.
+	local gates = PartyRooms.new(PartyRooms.FromGates(lobbyParts.gates))
+	local gateById = {}
+	for _, gate in lobbyParts.gates do
+		gateById[gate.Id] = gate
+	end
+	local lastStatus, nextStatusPush = {}, 0
 	local function stepLobby(now)
-		local inLobby = match:GetState() == RunConfig.States.Lobby
-		local snapshot = inLobby and lobbyReady:Step(now, Players:GetPlayers(), WorldAdapter.GetPosition)
-			or { Ready = 0, Total = 0, Occupied = {} }
-		for index, pad in lobbyParts.readyPads do
-			local lit = snapshot.Occupied[index] == true
-			if padLit[index] ~= lit then
-				padLit[index] = lit
-				LobbyBuilder.SetPadReady(pad, lit)
+		local result = gates:Step(now, Players:GetPlayers(), WorldAdapter.GetPosition, function(player)
+			return director:MatchFor(player) ~= nil
+		end)
+
+		local statusOf = {}
+		for id, entry in result do
+			local gate = gateById[id]
+			LobbyBuilder.SetGateStatus(gate, #entry.Members, entry.Countdown)
+			for _, player in entry.Overflow do
+				WorldAdapter.Teleport(player, gate.mouth)
+			end
+			for _, player in entry.Members do
+				statusOf[player] = {
+					Active = true,
+					Gate = gate.name,
+					Count = #entry.Members,
+					Capacity = gate.capacity,
+					MinPlayers = gate.minPlayers,
+					Countdown = entry.Countdown and math.ceil(entry.Countdown) or nil,
+				}
+			end
+			if entry.Start then
+				local slot = director:StartGroup(entry.Members, now)
+				if not slot then
+					for _, player in entry.Members do
+						statusOf[player].Notice = "Every arena is busy. Starting as soon as one frees up."
+					end
+				end
 			end
 		end
 
-		-- Pushed on every change, and at a steady beat while a countdown runs.
-		local countdown = snapshot.Countdown and math.ceil(snapshot.Countdown) or nil
-		local key = string.format("%s:%d:%d:%s", tostring(inLobby), snapshot.Ready, snapshot.Total, tostring(countdown))
-		if key ~= lastReadyKey or (countdown and now >= nextReadyPush) then
-			lastReadyKey = key
-			nextReadyPush = now + RunConfig.Lobby.ReadyBroadcastInterval
-			lobbyReadyState:FireAllClients({
-				Active = inLobby,
-				Ready = snapshot.Ready,
-				Total = snapshot.Total,
-				Countdown = countdown,
-			})
+		-- Each lobby player hears about their own gate, on change and at a steady beat.
+		local beat = now >= nextStatusPush
+		if beat then
+			nextStatusPush = now + RunConfig.Lobby.GateBroadcastInterval
 		end
-
-		if snapshot.Start then
-			match:RequestStart(snapshot.Starter, now)
+		for _, player in Players:GetPlayers() do
+			if not director:MatchFor(player) then
+				local status = statusOf[player] or { Active = true }
+				local key = string.format("%s:%s:%s:%s", tostring(status.Gate), tostring(status.Count),
+					tostring(status.Countdown), tostring(status.Notice))
+				if key ~= lastStatus[player] or (beat and status.Countdown) then
+					lastStatus[player] = key
+					lobbyStatus:FireClient(player, status)
+				end
+			end
 		end
 	end
 
-	-- A purchase another server beat to the salvage is undone on the next save; tell the player.
+	-- A purchase another server beat to the coins is undone on the next save; tell the player.
 	local function reportRefusedPurchases()
 		for _, player in Players:GetPlayers() do
 			local refused = shop:DrainRejections(player)
@@ -187,12 +207,14 @@ function GameBootstrap.Start()
 	end
 
 	local function onPlayerAdded(player)
-		match:RegisterPlayer(player)
-		-- A mid-run respawn lands in the lobby; send the character back to the room once its
+		-- A mid-run respawn lands in the lobby; send the character back to its room once its
 		-- root part exists.
 		player.CharacterAdded:Connect(function(character)
 			if character:WaitForChild("HumanoidRootPart", 5) then
-				match:HandleCharacterAdded(player)
+				local match = director:MatchFor(player)
+				if match then
+					match:HandleCharacterAdded(player)
+				end
 			end
 		end)
 		-- Loading yields, so it runs off the join thread.
@@ -216,8 +238,9 @@ function GameBootstrap.Start()
 	end
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(function(player)
-		match:UnregisterPlayer(player, os.clock())
+		director:RemovePlayer(player, os.clock())
 		router:ClearPlayer(player)
+		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
 			if not ok and err and err ~= "profile not loaded" then
@@ -243,13 +266,9 @@ function GameBootstrap.Start()
 	local debugStats = Remotes.Get("DebugStats")
 	local nextDebugPush = 0
 
-	local effects = match._effects
 	RunService.Heartbeat:Connect(function(deltaTime)
 		local now = os.clock()
-		enemies:Step(deltaTime, now)
-		projectiles:Step(deltaTime)
-		match:Step(deltaTime, now)
-		effects:Step(now)
+		director:Step(deltaTime, now)
 		persistence:StepAutosave(now)
 		stepLobby(now)
 
@@ -257,29 +276,28 @@ function GameBootstrap.Start()
 		if now >= nextDebugPush then
 			nextDebugPush = now + DebugConfig.OverlayUpdateInterval
 			reportRefusedPurchases()
-			local snapshot = GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, telemetry, persistence)
 			for _, player in Players:GetPlayers() do
 				if DebugConfig.IsDebugUser(player) then
-					debugStats:FireClient(player, snapshot)
+					debugStats:FireClient(player, GameBootstrap._debugSnapshot(director, player, telemetry, persistence))
 				end
 			end
 		end
 	end)
 
 	return {
-		match = match,
-		rooms = rooms,
-		enemies = enemies,
-		projectiles = projectiles,
+		director = director,
 		router = router,
 		telemetry = telemetry,
 		persistence = persistence,
 		shop = shop,
+		gates = gates,
 	}
 end
 
-function GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, telemetry, persistence)
-	local run = match:GetRunSnapshot()
+function GameBootstrap._debugSnapshot(director, player, telemetry, persistence)
+	local match = director:MatchFor(player)
+	local run = match and match:GetRunSnapshot() or { State = RunConfig.States.Lobby, RoomIndex = 0, RoomCount = 0, EnemiesRemaining = 0, Players = 0 }
+	local arenas = director:GetStats()
 	local telemetryStats = telemetry:GetStats()
 	local dataStats = persistence:GetStats()
 	return {
@@ -288,10 +306,10 @@ function GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, tele
 		RoomCount = run.RoomCount,
 		EnemiesRemaining = run.EnemiesRemaining,
 		Participants = run.Players,
-		ProjectilesActive = projectiles:GetActiveCount(),
-		ProjectilesFree = projectiles:GetFreeCount(),
-		EnemiesActive = enemies:GetActiveCount(),
-		EffectsDropped = effects:GetDroppedCount(),
+		ArenasBusy = arenas.Busy,
+		ArenaSlots = arenas.Slots,
+		ProjectilesActive = arenas.ProjectilesActive,
+		EnemiesActive = arenas.EnemiesActive,
 		TelemetryEmitted = telemetryStats.emitted,
 		TelemetryDropped = telemetryStats.dropped,
 		DataSaves = dataStats.saves,

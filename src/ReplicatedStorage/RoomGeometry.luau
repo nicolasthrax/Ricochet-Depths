@@ -135,6 +135,20 @@ function RoomGeometry.Footprints(layout, roomConfig)
 	return out
 end
 
+-- A copy of `solids` moved by `offset` (Vector2, XZ): a room's solids in its arena slot.
+function RoomGeometry.Translate(solids, offset)
+	if offset.X == 0 and offset.Y == 0 then
+		return solids
+	end
+	local out = table.create(#solids)
+	for index, solid in solids do
+		local moved = table.clone(solid)
+		moved.Center = Vector2.new(solid.Center.X + offset.X, solid.Center.Y + offset.Y)
+		out[index] = moved
+	end
+	return out
+end
+
 function RoomGeometry.Corners(solid)
 	local halfX, halfZ = solid.Size.X / 2, solid.Size.Y / 2
 	return {

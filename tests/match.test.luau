@@ -157,7 +157,7 @@ describe("run loop", function()
 		expect(ctx.match:GetState()).toBe(States.Lobby)
 		expect(ctx.enemies:GetActiveCount()).toBe(0)
 		expect(ctx.projectiles:GetActiveCount()).toBe(0)
-		expect(ctx.positions[player]).toEqual(RunConfig.LobbyPosition)
+		expect(ctx.positions[player]).toEqual(RunConfig.LobbyReturnPosition)
 		expect(ctx.match:GetPlayerState(player).roomsCleared).toBe(0)
 	end)
 

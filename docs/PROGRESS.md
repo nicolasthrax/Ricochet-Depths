@@ -140,39 +140,100 @@ replication, character controllers, rendering, input, or DataStore.
 
 | # | Limitation | Impact |
 |---|---|---|
-| 1 | **Nothing has been run in Roblox Studio.** Every claim of correctness rests on static checks and the headless harness, which stubs the engine. Physics feel, replication, character handling and UI layout are all unverified against the real engine. | Blocker for playtest. |
+| 1 | **Nothing has been run in Roblox Studio.** Every claim of correctness rests on static checks and the headless harness, which stubs the engine. UI and input have no headless coverage at all. | Blocker for playtest. |
 | 2 | Co-op is verified only headlessly. 2–4 real clients have never connected. | Blocker for playtest. |
-| 3 | Balance numbers are first-pass guesses. The 6–8 minute run target has never been measured. | Tune from playtest data. |
+| 3 | Balance numbers are first-pass guesses. The simulated floor suggests runs are well under the 6–8 minute target, but that is a bot estimate, not a measurement. | Tune from playtest data only. |
+| 3a | The dry-run bots cannot plan bank shots, so they understate how fast a skilled player clears cover-heavy rooms and overstate how lethal room 3 is. | Inherent to the tool; stated wherever its numbers appear. |
 | 4 | No audio; `FeatureFlags.Audio` is off and no sound assets are wired. | Post-playtest. |
 | 5 | Enemies clamp to arena bounds but do not path around pillars. | Revisit if playtests flag it. |
 | 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
 | 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 | 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
-| 10 | **Persistence has known, unfixed data-loss races.** A change made during an in-flight save is lost; a cross-server rejoin can overwrite a payout while the ledger marks it paid, so it can never be re-granted; concurrent `Release` and `SaveAll` double-write one key; sequential shutdown saves can exceed Roblox's 30s budget. None is reachable headlessly. | Proposal in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`, awaiting review. Do not change persistence code until approved. |
+| 10 | **Persistence has known data-loss races, being fixed in five steps.** A change made during an in-flight save is lost; a cross-server rejoin can overwrite a payout while the ledger marks it paid, so it can never be re-granted; concurrent `Release` and `SaveAll` double-write one key; sequential shutdown saves can exceed Roblox's 30s budget. | Approved plan in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`; progress tracked under *Persistence plan progress*. |
 | 11 | Duplicate small idioms across modules: flattening a Vector3 to XZ (five places), point-in-box tests (`EnemyService.FindEnclosingMover`, `RoomService.GetSpawnPoint`), and list removal. | Flagged only; consolidating would move code between modules, which needs approval. |
 
 ## Manual Studio validation still required
 
-Nothing in this project has been run inside Roblox Studio yet — every result below is from
-`luau-compile`, `luau-analyze`, `rojo build` and the headless test harness. The following must be
-confirmed by hand; see `docs/TEST_PLAN.md` for the steps.
+**None of it has been done.** The ordered procedure lives in
+`docs/STUDIO_VALIDATION_CHECKLIST.md`, with the exact thing to click, the exact output to expect,
+and the likely cause of each failure.
 
-- [ ] MS-1 Rojo connects and syncs with no red errors.
-- [ ] MS-2 Player spawns in the lobby; the pedestal prompt appears and starts a run.
-- [ ] MS-3 Drag-aim fires; the projectile travels flat and ricochets visibly.
-- [ ] MS-4 Enemies take damage, die, and the room-clear banner appears.
-- [ ] MS-5 Three upgrade cards appear; clicking one applies it and the HUD updates.
-- [ ] MS-6 Auto-pick fires after 10s of inactivity.
-- [ ] MS-7 All four rooms complete and the results screen shows correct totals.
-- [ ] MS-8 Return to lobby resets everything; a second run behaves identically.
-- [ ] MS-9 `Workspace/ProjectilePool` holds exactly 150 parts at all times.
-- [ ] MS-10 `Arena/EnemyPool` holds exactly 36 parts at all times.
-- [ ] MS-11 Bulwark blocks head-on shots and dies to a flanking ricochet.
-- [ ] MS-12 Touch aiming works under device emulation (iPhone and iPad targets).
-- [ ] MS-13 2, 3 and 4 simulated clients complete a run together.
+- [ ] V0 Rojo connects and the instance tree matches
+- [ ] V1 Lobby loads with HUD, pedestal prompt and options panel
+- [ ] V2 A run reaches room 2: aiming, firing, visible ricochet, kills, upgrade pick
+- [ ] V3 Both pools hold their exact configured size throughout sustained fire
+- [ ] V4 Results screen dismisses without error *(engine-side confirmation of the closure fix)*
+- [ ] V5 Co-op with 2–4 clients, per-player offers, and the late-join boundary
+- [ ] V6a Read-only fallback with API services off: playable, warned, pays nothing
+- [ ] V6b Persistence with API services on: salvage survives a restart, no double-credit
+
+Deferred to a later Studio session: mobile emulation, sustained performance, escort-respawn
+detail, full shield-arc sweep, and anything to do with balance.
+
+## Persistence plan progress
+
+Implementing `docs/PERSISTENCE_SHUTDOWN_PLAN.md` one step at a time, each test-first, with a
+report after every step.
+
+| Step | Change | Fixes | Status |
+|---|---|---|---|
+| 1 | Save immediately on reward grant | Most of P1's real-world impact | **Landed** |
+| 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | Not started |
+| 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, part of P5 | Not started |
+| 4 | Grant-based currency applied inside the save transform | P5 | Not started |
+| 5 | Parallel shutdown saves under a shared 25s deadline | P1 | Not started |
+
+Known interim exposure: until Step 2 lands, save-on-grant slightly *widens* the P3 window, since
+there is now a save in flight right after every run. A settings change made in that moment can
+still be lost. Step 2 closes it.
+
+Headless coverage note: the harness still runs `task.spawn` synchronously, so Step 1's tests
+prove the write happens, happens once, and carries the stats. They do not prove it happens off
+the Heartbeat thread in the engine. That needs the cooperative scheduler planned for Step 2.
+
+## Simulated run length
+
+From `./scripts/dryrun.sh`. **Lower-bound estimates, not measurements.** The bots know exactly
+where every enemy is, never hesitate, and cannot plan a bank shot — the game's central skill.
+
+| Bot | Room 1 | Room 2 | Room 3 | Room 4 | Modelled run floor |
+|---|---|---|---|---|---|
+| Direct fire, exact aim | 49.0s | 15.4s | 11.7s | 6.2s | ~93s |
+| Direct fire with aim error | 9.3s | 9.0s | 11.6s | 6.5s | ~47s |
+| Probing (throws shots off-angle when blocked) | 7.9s | 7.9s | 11.7s | 8.2s | ~46s |
+
+Medians. The run floor is the sum of per-room medians plus fixed pacing; full-run samples are too
+scarce to quote because the bots keep dying.
+
+Three hypotheses for playtest, **none acted on**:
+
+1. **Room 3 is a difficulty wall.** About 85% of simulated runs end there. A human may play it
+   better than a bot that only backs away, so this may be an artifact.
+2. **Runs may be far shorter than the 420s target.** Even allowing for human aiming and full
+   upgrade timers, the floor is well under target. Change nothing until real timings exist.
+3. **Ricochets are load-bearing, as intended.** The probing bot clears rooms 1 and 2 roughly six
+   times faster than the strictly-straight one.
+
+With strictly direct fire, 23 rooms were force-cleared by the 150s room time limit, so the
+soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.5.3-dev — persistence step 1, a settings bug, and a doc correction
+- Fixed: **accessibility settings were never saved.** `Save` writes back an explicit field list
+  and `Settings` was not on it, so options reset every session. Every inline fake DataStore had
+  stored and returned the same table, so the session's profile and "the store" were one object,
+  and the test claiming to verify settings persistence passed on that alias alone.
+- The harness now has one serialising `FakeDataStore` (copies in and out, rejects unstorable
+  values). All four aliasing fakes replaced; no other false passes were hiding behind them.
+- A round-trip guard fails naming any profile field `Save` drops.
+- Persistence plan Step 1: a run's payout and stats are written in one request as soon as the run
+  ends, off the Heartbeat thread, instead of waiting for autosave, leave or shutdown.
+- Doc correction: three blocks reported as added to this file in 0.5.0-dev never landed — the
+  simulated run-length section, the V0–V6 Studio checklist summary, and the bot-caveat
+  limitation rows. The editing script used unchecked replacements that silently matched
+  nothing. Restored here; doc edits now fail loudly on a non-match.
 
 ### 0.5.2-dev — late-join credit
 - Fixed: a late joiner was credited with every room the team had cleared before they arrived, so a

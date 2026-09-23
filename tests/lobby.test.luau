@@ -135,3 +135,32 @@ describe("LobbyReady", function()
 		expect(snapshot.Occupied[1]).toBe(false)
 	end)
 end)
+
+describe("Studio template cleanup", function()
+	it("removes the Baseplate template's floor and spawn so players only spawn in the lobby", function()
+		local world = Instance.new("Folder")
+		local baseplate = Instance.new("Part")
+		baseplate.Name = "Baseplate"
+		baseplate.Parent = world
+		local templateSpawn = Instance.new("SpawnLocation")
+		templateSpawn.Name = "SpawnLocation"
+		templateSpawn.Parent = world
+		local camera = Instance.new("Camera")
+		camera.Parent = world
+
+		local removed = LobbyBuilder.ClearTemplate(world)
+		LobbyBuilder.Build(world)
+
+		expect(removed).toBe(2)
+		expect(world:FindFirstChild("Baseplate")).toBe(nil)
+		local spawns = {}
+		for _, descendant in world:GetDescendants() do
+			if descendant:IsA("SpawnLocation") then
+				table.insert(spawns, descendant.Name)
+			end
+		end
+		expect(#spawns).toBe(1)
+		expect(spawns[1]).toBe("LobbySpawn")
+		expect(camera.Parent).toBe(world)
+	end)
+end)

@@ -144,7 +144,7 @@ describe("failure handling", function()
 		local ok, err = service:Save(subject, 1)
 		expect(ok).toBe(false)
 		expect(type(err)).toBe("string")
-		expect(service:GetSession(subject).dirty).toBe(true) -- still queued for the next attempt
+		expect(service:IsDirty(subject)).toBe(true) -- still queued for the next attempt
 
 		store.alwaysFail = false
 		expect((service:Save(subject, 2))).toBe(true)
@@ -405,7 +405,7 @@ describe("every profile field survives a save", function()
 				marked[field] = true
 			end
 		end
-		service:GetSession(subject).dirty = true
+		service:Update(subject, function() end) -- mark it changed through the real path
 		expect((service:Save(subject, 1))).toBe(true)
 
 		local stored = store:Peek("profile_70")

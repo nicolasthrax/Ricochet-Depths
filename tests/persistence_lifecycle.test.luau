@@ -158,7 +158,7 @@ describe("step 1: a run's payout is written as soon as it is granted", function(
 
 		-- The failure must not break the run, and the payout must stay queued so leave,
 		-- autosave or shutdown can still write it once the store recovers.
-		expect(persistence:GetSession(player).dirty).toBe(true)
+		expect(persistence:IsDirty(player)).toBe(true)
 		store.failing = false
 		expect((persistence:Save(player, 1000))).toBe(true)
 		expect(store.data["profile_5004"].Currency.Salvage).toBe(summary.Reward)
@@ -176,5 +176,214 @@ describe("step 1: a run's payout is written as soon as it is granted", function(
 		expect(summary.Reward).toBe(0)
 		expect(store.writes).toBe(0)
 		expect(store.data["profile_5005"]).toBeNil()
+	end)
+end)
+
+--// Step 2: one save in flight per session, change counter -------------------
+
+describe("step 2 (P3): a change made while a save is in flight is kept", function()
+	local function loadedWithSlowWrites(userId)
+		local store = countingStore()
+		store.writeLatency = 1 -- each save sits in flight for one second of virtual time
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "P" .. userId, UserId = userId }
+		persistence:Load(player)
+		Harness.setClock(0)
+		return store, persistence, player, "profile_" .. userId
+	end
+
+	it("does not lose a reward granted while the previous save is in flight", function()
+		local store, persistence, player, key = loadedWithSlowWrites(6001)
+		persistence:GrantReward(player, "run-1", 100)
+		task.spawn(function()
+			persistence:Save(player, 0) -- captures the profile, then waits on the store
+		end)
+		expect(store.inFlight[key]).toBe(1)
+
+		persistence:GrantReward(player, "run-2", 50) -- arrives mid-write
+		Harness.settle()
+
+		-- In memory: the completing save must not roll the profile back to what it captured.
+		local profile = persistence:GetSession(player).profile
+		expect(profile.Currency.Salvage).toBe(150)
+		expect(profile.GrantedRuns["run-2"]).toBe(50)
+		-- In the store: the late change is written by a follow-up, with no further request.
+		local stored = store:Peek(key)
+		expect(stored.Currency.Salvage).toBe(150)
+		expect(stored.GrantedRuns["run-2"]).toBe(50)
+	end)
+
+	it("does not lose a settings change made while a save is in flight", function()
+		local store, persistence, player, key = loadedWithSlowWrites(6002)
+		persistence:GrantReward(player, "run-1", 10)
+		task.spawn(function()
+			persistence:Save(player, 0)
+		end)
+		persistence:ApplySettings(player, { ReducedFlash = true })
+		Harness.settle()
+
+		expect(persistence:GetSession(player).profile.Settings.ReducedFlash).toBe(true)
+		expect(store:Peek(key).Settings.ReducedFlash).toBe(true)
+	end)
+
+	it("keeps a mid-flight change pending if its follow-up write fails", function()
+		local store, persistence, player, key = loadedWithSlowWrites(6003)
+		persistence:GrantReward(player, "run-1", 100)
+		task.spawn(function()
+			persistence:Save(player, 0)
+		end)
+		persistence:GrantReward(player, "run-2", 50)
+		store.failing = true -- the first write already got through; the follow-up will not
+		Harness.settle()
+
+		expect(store:Peek(key).Currency.Salvage).toBe(100)
+		expect(persistence:GetSession(player).profile.Currency.Salvage).toBe(150)
+
+		-- Still pending, so the next save once the store recovers carries it.
+		store.failing = false
+		expect((persistence:Save(player, 10))).toBe(true)
+		expect(store:Peek(key).Currency.Salvage).toBe(150)
+	end)
+end)
+
+describe("step 2 (P2): concurrent save requests coalesce", function()
+	local function loadedWithSlowWrites(userId)
+		local store = countingStore()
+		store.writeLatency = 1
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "P" .. userId, UserId = userId }
+		persistence:Load(player)
+		Harness.setClock(0)
+		return store, persistence, player, "profile_" .. userId
+	end
+
+	it("joins a leave onto the save already in flight instead of writing twice", function()
+		local store, persistence, player, key = loadedWithSlowWrites(6101)
+		local writesAfterLoad = store.writes
+		persistence:GrantReward(player, "run-1", 100)
+
+		persistence:SaveInBackground(player, 0) -- e.g. the post-run save
+		expect(store.inFlight[key]).toBe(1)
+		local ok = persistence:Release(player, 0) -- the player leaves while it is in flight
+
+		expect(ok).toBe(true)
+		expect(store.writes - writesAfterLoad).toBe(1)
+		expect(store.peakInFlight[key]).toBe(1)
+		expect(store:Peek(key).Currency.Salvage).toBe(100)
+		-- The session goes only after the write it was waiting on has landed.
+		expect(persistence:GetSession(player)).toBeNil()
+	end)
+
+	it("turns a burst of requests into at most one follow-up write", function()
+		local store, persistence, player, key = loadedWithSlowWrites(6102)
+		local writesAfterLoad = store.writes
+		persistence:GrantReward(player, "run-1", 100)
+
+		persistence:SaveInBackground(player, 0) -- in flight
+		for _ = 1, 4 do
+			persistence:SaveInBackground(player, 0) -- post-run, autosave, leave, shutdown...
+		end
+		persistence:GrantReward(player, "run-2", 50) -- one real change arrives mid-flight
+		persistence:SaveAll(0)
+		Harness.settle()
+
+		-- The first write, plus exactly one to carry the change. Never two at once.
+		expect(store.writes - writesAfterLoad).toBe(2)
+		expect(store.peakInFlight[key]).toBe(1)
+		expect(store:Peek(key).Currency.Salvage).toBe(150)
+	end)
+
+	it("never has two writes in flight for one player, even across players at shutdown", function()
+		local store = countingStore()
+		store.writeLatency = 1
+		local persistence = PlayerDataService.new(store)
+		local players = {}
+		for index = 1, 4 do
+			local player = { Name = "S" .. index, UserId = 6200 + index }
+			persistence:Load(player)
+			persistence:GrantReward(player, "run-1", 10 * index)
+			table.insert(players, player)
+		end
+		Harness.setClock(0)
+
+		-- The post-run saves are in flight when the server starts closing and players leave.
+		for _, player in players do
+			persistence:SaveInBackground(player, 0)
+		end
+		for _, player in players do
+			task.spawn(function()
+				persistence:Release(player, 0)
+			end)
+		end
+		persistence:SaveAll(0)
+		Harness.settle()
+
+		for index, player in players do
+			local key = "profile_" .. player.UserId
+			expect(store.peakInFlight[key]).toBe(1)
+			expect(store:Peek(key).Currency.Salvage).toBe(10 * index)
+		end
+	end)
+end)
+
+describe("step 2: autosave and the write chain", function()
+	it("never blocks the frame or doubles a write when autosave fires mid-save", function()
+		local PlayerDataConfig = __require("PlayerDataConfig")
+		local store = countingStore()
+		store.writeLatency = 1
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Auto", UserId = 6301 }
+		persistence:Load(player)
+		persistence:GrantReward(player, "run-1", 40)
+		local writesAfterLoad = store.writes
+
+		-- Autosave is called from Heartbeat every frame. Drive it frame by frame through the
+		-- whole time a slow write is in flight.
+		local now = PlayerDataConfig.AutosaveInterval + 1
+		Harness.setClock(now)
+		for _ = 1, 90 do
+			local before = Harness.now()
+			persistence:StepAutosave(now)
+			-- Returns within the same frame: it must never wait on the DataStore itself.
+			expect(Harness.now()).toBe(before)
+			Harness.advance(1 / 60)
+			now = Harness.now()
+		end
+		Harness.settle()
+
+		expect(store.writes - writesAfterLoad).toBe(1)
+		expect(store.peakInFlight["profile_6301"]).toBe(1)
+		expect(store:Peek("profile_6301").Currency.Salvage).toBe(40)
+	end)
+
+	it("stops chaining after the cap and leaves the rest pending", function()
+		local PlayerDataConfig = __require("PlayerDataConfig")
+		local store = countingStore()
+		store.writeLatency = 1
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Busy", UserId = 6302 }
+		persistence:Load(player)
+		local writesAfterLoad = store.writes
+
+		-- A new change lands during every single write, so the chain can never catch up.
+		local runIndex = 0
+		local function change()
+			runIndex += 1
+			persistence:GrantReward(player, "run-" .. runIndex, 1)
+		end
+		change()
+		task.spawn(function()
+			persistence:Save(player, 0)
+		end)
+		for _ = 1, PlayerDataConfig.MaxChainedWrites + 2 do
+			change()
+			Harness.advance(1)
+		end
+		Harness.settle()
+
+		expect(store.writes - writesAfterLoad).toBe(PlayerDataConfig.MaxChainedWrites)
+		expect(persistence:IsDirty(player)).toBe(true) -- not lost, just deferred
+		expect((persistence:Save(player, 99))).toBe(true)
+		expect(store:Peek("profile_6302").Currency.Salvage).toBe(runIndex)
 	end)
 end)

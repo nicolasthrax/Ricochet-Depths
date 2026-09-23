@@ -179,18 +179,18 @@ report after every step.
 | Step | Change | Fixes | Status |
 |---|---|---|---|
 | 1 | Save immediately on reward grant | Most of P1's real-world impact | **Landed** |
-| 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | Not started |
+| 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | **Landed** |
 | 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, part of P5 | Not started |
 | 4 | Grant-based currency applied inside the save transform | P5 | Not started |
 | 5 | Parallel shutdown saves under a shared 25s deadline | P1 | Not started |
 
-Known interim exposure: until Step 2 lands, save-on-grant slightly *widens* the P3 window, since
-there is now a save in flight right after every run. A settings change made in that moment can
-still be lost. Step 2 closes it.
+The interim P3 exposure Step 1 introduced is closed by Step 2.
 
-Headless coverage note: the harness still runs `task.spawn` synchronously, so Step 1's tests
-prove the write happens, happens once, and carries the stats. They do not prove it happens off
-the Heartbeat thread in the engine. That needs the cooperative scheduler planned for Step 2.
+The harness now has a cooperative scheduler: `task.spawn` returns at the thread's first yield,
+`task.wait` genuinely suspends, and the fake DataStore holds writes in flight and re-runs
+transforms on conflict as the engine does. Concurrency bugs are now reproducible headlessly.
+It is still a model: real DataStore latency, throttling and ordering must be confirmed in
+Studio (V6b).
 
 ## Simulated run length
 
@@ -219,6 +219,22 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.5.4-dev — persistence step 2
+- Harness: a deterministic cooperative scheduler (`task.spawn`/`wait`/`delay`/`defer`/`cancel`),
+  errors in spawned threads fail the test, and a fake DataStore with latency, optimistic
+  concurrency and per-key in-flight tracking. Committed separately; no production change.
+- Fixed P3: the completing save replaced the live profile with what it had written and cleared a
+  boolean dirty flag, so any reward or settings change made during its yield was rolled back and
+  never saved. Sessions now carry a revision counter; a save records the revision its transform
+  read, and merges back only store-owned ledger entries.
+- Fixed P2: concurrent save requests (post-run save, leave, autosave, shutdown) each wrote,
+  up to six writes for one change and two in flight for one key. Each session now allows one
+  write chain at a time; later requests wait for it, and the chain writes again for anything
+  changed meanwhile, capped at `MaxChainedWrites` (3).
+- Fixed: `StepAutosave` saved inline inside Heartbeat, blocking the frame for the whole write and
+  letting the next frame start a second save of the same session. It now saves in the background
+  and skips sessions already saving.
 
 ### 0.5.3-dev — persistence step 1, a settings bug, and a doc correction
 - Fixed: **accessibility settings were never saved.** `Save` writes back an explicit field list

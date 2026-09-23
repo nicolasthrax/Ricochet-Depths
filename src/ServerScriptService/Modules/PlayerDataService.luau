@@ -75,6 +75,19 @@ function PlayerDataService:GetSession(player)
 	return self._sessions[player]
 end
 
+-- Every mutation bumps a session's revision, and each save records the revision it wrote. A
+-- change landing while a write is in flight is therefore still ahead of it afterwards: pending,
+-- never silently cleared. This replaces a boolean dirty flag, which the completing save reset
+-- to false even when a newer change had arrived during its yield.
+local function markChanged(session)
+	session.revision += 1
+end
+
+function PlayerDataService:IsDirty(player)
+	local session = self._sessions[player]
+	return session ~= nil and session.revision > session.savedRevision
+end
+
 function PlayerDataService:IsLoaded(player)
 	local session = self._sessions[player]
 	return session ~= nil and session.loaded and not session.failed
@@ -86,7 +99,16 @@ function PlayerDataService:Load(player)
 		return existing.profile
 	end
 
-	local session = { loaded = false, failed = false, dirty = false, lastSave = 0, profile = nil }
+	local session = {
+		loaded = false,
+		failed = false,
+		profile = nil,
+		revision = 0, -- bumped by every change
+		savedRevision = 0, -- the highest revision known to be in the store
+		saving = false, -- true while this session's one permitted write chain is running
+		lastSave = 0,
+		lastAutosaveAt = 0,
+	}
 	self._sessions[player] = session
 
 	local ok, result = self:_retry("load", function()
@@ -118,33 +140,32 @@ function PlayerDataService:Update(player, mutator)
 		return nil, "profile not loaded"
 	end
 	mutator(session.profile)
-	session.dirty = true
+	markChanged(session)
 	return session.profile
 end
 
-function PlayerDataService:Save(player, now)
-	local session = self._sessions[player]
-	if not session or not session.loaded or session.failed then
-		return false, "profile not loaded"
-	end
-	if not session.dirty then
-		return true
-	end
+-- One UpdateAsync attempt sequence for the session's current state.
+function PlayerDataService:_writeOnce(player, session, now)
+	local profile = session.profile
+	local writtenRevision = session.revision
 
-	local snapshot = session.profile
 	local ok, result = self:_retry("save", function()
 		return self._store:UpdateAsync(keyFor(player), function(stored)
+			-- Record exactly the revision this transform read. UpdateAsync may run it more than
+			-- once, and only the run that commits is the one that counts.
+			writtenRevision = session.revision
+
 			local merged = PlayerDataService.Normalise(stored)
 			-- Last write wins per field, but the run ledger is unioned so a concurrent write
 			-- on another server can never resurrect an already-paid run.
-			for runKey, value in snapshot.GrantedRuns do
+			for runKey, value in profile.GrantedRuns do
 				merged.GrantedRuns[runKey] = value
 			end
-			merged.Currency = snapshot.Currency
-			merged.Unlocks = snapshot.Unlocks
-			merged.Flags = snapshot.Flags
-			merged.Settings = snapshot.Settings
-			merged.Stats = snapshot.Stats
+			merged.Currency = profile.Currency
+			merged.Unlocks = profile.Unlocks
+			merged.Flags = profile.Flags
+			merged.Settings = profile.Settings
+			merged.Stats = profile.Stats
 			merged.LastSaved = now or 0
 			return merged
 		end)
@@ -155,11 +176,65 @@ function PlayerDataService:Save(player, now)
 		return false, result
 	end
 
-	session.profile = result
-	session.dirty = false
+	-- Take back only what the store owns: run keys recorded by other servers. The live profile
+	-- is never replaced wholesale, because anything changed during the write is newer than what
+	-- the store now holds, and replacing it would roll that change back.
+	for runKey, value in result.GrantedRuns do
+		if profile.GrantedRuns[runKey] == nil then
+			profile.GrantedRuns[runKey] = value
+		end
+	end
+
+	session.savedRevision = math.max(session.savedRevision, writtenRevision)
 	session.lastSave = now or 0
 	self._stats.saves += 1
 	return true
+end
+
+-- Writes until the store has caught up with every change, including ones that arrived while
+-- an earlier write in the chain was in flight. Capped, so a session changing continuously
+-- cannot hold a write open forever; anything left over stays pending for the next save.
+function PlayerDataService:_saveChain(player, session, now)
+	session.saving = true
+	local completed, ok, err = pcall(function()
+		local chainOk, chainErr = true, nil
+		for _ = 1, PlayerDataConfig.MaxChainedWrites do
+			if session.revision <= session.savedRevision then
+				break
+			end
+			chainOk, chainErr = self:_writeOnce(player, session, now)
+			if not chainOk then
+				break
+			end
+		end
+		return chainOk, chainErr
+	end)
+	-- Always released, even on an unexpected error, or every later save of this player would
+	-- wait on it forever.
+	session.saving = false
+	if not completed then
+		return false, ok
+	end
+	return ok, err
+end
+
+-- At most one write per session is ever in flight. A request that arrives while one is running
+-- waits for it. That chain writes again for anything changed in the meantime, so for a later
+-- request waiting is usually all there is to do; it writes itself only if something is still
+-- pending, for instance because the chain it waited on failed.
+function PlayerDataService:Save(player, now)
+	local session = self._sessions[player]
+	if not session or not session.loaded or session.failed then
+		return false, "profile not loaded"
+	end
+
+	while session.saving do
+		task.wait()
+	end
+	if session.revision <= session.savedRevision then
+		return true
+	end
+	return self:_saveChain(player, session, now)
 end
 
 -- Idempotent payout. A run key is only ever credited once per profile, whatever replays,
@@ -179,7 +254,7 @@ function PlayerDataService:GrantReward(player, runKey, amount)
 	local profile = session.profile
 	profile.GrantedRuns[runKey] = math.floor(amount)
 	profile.Currency.Salvage += math.floor(amount)
-	session.dirty = true
+	markChanged(session)
 
 	self:_trimLedger(profile)
 	return math.floor(amount)
@@ -209,7 +284,7 @@ function PlayerDataService:ApplySettings(player, incoming)
 
 	local sanitised = PlayerDataConfig.SanitiseSettings(incoming, session.profile.Settings)
 	session.profile.Settings = sanitised
-	session.dirty = true
+	markChanged(session)
 	return sanitised
 end
 
@@ -270,7 +345,12 @@ end
 
 function PlayerDataService:SaveAll(now)
 	local failures = {}
+	-- A snapshot: saves yield, and a player leaving in the meantime removes their session.
+	local players = {}
 	for player in self._sessions do
+		table.insert(players, player)
+	end
+	for _, player in players do
 		local ok, err = self:Save(player, now)
 		if not ok and err ~= "profile not loaded" then
 			table.insert(failures, { player = player, error = err })
@@ -279,16 +359,25 @@ function PlayerDataService:SaveAll(now)
 	return failures
 end
 
+-- Called every frame from Heartbeat. Saves start in the background and are never waited on
+-- here: a save yields, and doing it inline would let the next frame begin a second save of the
+-- same session while the first is still in flight. A session already saving is skipped.
 function PlayerDataService:StepAutosave(now)
-	local saved = 0
+	local started = 0
 	for player, session in self._sessions do
-		if session.loaded and session.dirty and now - session.lastSave >= PlayerDataConfig.AutosaveInterval then
-			if self:Save(player, now) then
-				saved += 1
-			end
+		if
+			session.loaded
+			and not session.failed
+			and not session.saving
+			and session.revision > session.savedRevision
+			and now - session.lastAutosaveAt >= PlayerDataConfig.AutosaveInterval
+		then
+			session.lastAutosaveAt = now
+			self:SaveInBackground(player, now)
+			started += 1
 		end
 	end
-	return saved
+	return started
 end
 
 function PlayerDataService:GetStats()

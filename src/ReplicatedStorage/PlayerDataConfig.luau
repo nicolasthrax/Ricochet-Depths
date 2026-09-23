@@ -14,6 +14,8 @@ PlayerDataConfig.MaxRetries = 5
 PlayerDataConfig.RetryBaseDelay = 0.5
 PlayerDataConfig.RetryMaxDelay = 8
 PlayerDataConfig.AutosaveInterval = 120
+-- Writes one save chain may make for a single request, to catch changes that land mid-write.
+PlayerDataConfig.MaxChainedWrites = 3
 -- A run can only be paid once; this many recent run keys are remembered per profile.
 PlayerDataConfig.RunLedgerSize = 25
 

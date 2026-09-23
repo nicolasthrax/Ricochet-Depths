@@ -176,6 +176,11 @@ Vector2 = {
 
 --// Color3 / UDim / UDim2 / CFrame ------------------------------------------
 local Color3Mt = { __robloxType = "Color3" }
+Color3Mt.__index = {
+	Lerp = function(self, goal, alpha)
+		return Color3.new(self.R + (goal.R - self.R) * alpha, self.G + (goal.G - self.G) * alpha, self.B + (goal.B - self.B) * alpha)
+	end,
+}
 Color3 = {
 	new = function(r, g, b)
 		return setmetatable({ R = r or 0, G = g or 0, B = b or 0 }, Color3Mt)

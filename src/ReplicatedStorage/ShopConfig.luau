@@ -1,6 +1,6 @@
--- The salvage shop: permanent upgrades bought between runs with salvage earned in them.
--- Item ids are persisted in profiles (MetaUpgrades), so they never change. Prices are whole
--- salvage and rise with each level. There is no premium currency and nothing here costs money.
+-- The lobby shops: permanent upgrades in the Armory and trails in Cosmetics, all bought with
+-- coins earned in runs. Item ids are persisted in profiles (MetaUpgrades), so they never change.
+-- Prices are whole coins and rise with each level. Robux purchases live in MonetizationConfig.
 --
 -- Kind "Stat" adds Effect.PerLevel per level owned to one of UpgradeConfig.BaseStats before any
 -- run card is applied, so cards stack on top. Kind "Trail" is cosmetic: owning it lets it be
@@ -10,6 +10,7 @@ local ShopConfig = {}
 ShopConfig.Items = {
 	{
 		Id = "Vitality",
+		Category = "Armory",
 		Title = "Reinforced Frame",
 		Description = "+10 maximum health at the start of every run.",
 		Kind = "Stat",
@@ -18,6 +19,7 @@ ShopConfig.Items = {
 	},
 	{
 		Id = "Stride",
+		Category = "Armory",
 		Title = "Servo Stride",
 		Description = "+1 walk speed at the start of every run.",
 		Kind = "Stat",
@@ -26,6 +28,7 @@ ShopConfig.Items = {
 	},
 	{
 		Id = "Velocity",
+		Category = "Armory",
 		Title = "Rail Tuning",
 		Description = "+1% projectile speed.",
 		Kind = "Stat",
@@ -33,7 +36,35 @@ ShopConfig.Items = {
 		Costs = { 40, 55, 70, 90, 110, 135, 160, 190, 220, 250 },
 	},
 	{
+		Id = "Mending",
+		Category = "Armory",
+		Title = "Mending Core",
+		Description = "+0.5 health per second of regeneration between fights.",
+		Kind = "Stat",
+		Effect = { Stat = "RegenBonus", PerLevel = 0.5 },
+		Costs = { 120, 240, 400, 600 },
+	},
+	{
+		Id = "CoinMagnet",
+		Category = "Armory",
+		Title = "Coin Magnet",
+		Description = "+3 studs of reach when pulling in coins.",
+		Kind = "Stat",
+		Effect = { Stat = "MagnetBonus", PerLevel = 3 },
+		Costs = { 100, 220, 380 },
+	},
+	{
+		Id = "Fortune",
+		Category = "Armory",
+		Title = "Fortune",
+		Description = "+10% coins from every run.",
+		Kind = "Stat",
+		Effect = { Stat = "RewardMultiplier", PerLevel = 0.1 },
+		Costs = { 250, 500, 900 },
+	},
+	{
 		Id = "TrailEmber",
+		Category = "Cosmetics",
 		Title = "Ember Trail",
 		Description = "Your shots leave a trail of embers. Cosmetic.",
 		Kind = "Trail",
@@ -42,6 +73,7 @@ ShopConfig.Items = {
 	},
 	{
 		Id = "TrailAurora",
+		Category = "Cosmetics",
 		Title = "Aurora Trail",
 		Description = "Your shots leave a ribbon of green light. Cosmetic.",
 		Kind = "Trail",
@@ -50,11 +82,40 @@ ShopConfig.Items = {
 	},
 	{
 		Id = "TrailVoid",
+		Category = "Cosmetics",
 		Title = "Void Trail",
 		Description = "Your shots leave a deep violet wake. Cosmetic.",
 		Kind = "Trail",
 		Trail = { Color = Color3.fromRGB(170, 110, 255), Lifetime = 0.3 },
 		Costs = { 400 },
+	},
+	{
+		Id = "TrailFrost",
+		Category = "Cosmetics",
+		Title = "Frost Trail",
+		Description = "Your shots leave a trail of ice crystals. Cosmetic.",
+		Kind = "Trail",
+		Trail = { Color = Color3.fromRGB(170, 230, 255), Lifetime = 0.28 },
+		Costs = { 300 },
+	},
+	{
+		Id = "TrailToxic",
+		Category = "Cosmetics",
+		Title = "Toxic Trail",
+		Description = "Your shots drip a sickly green wake. Cosmetic.",
+		Kind = "Trail",
+		Trail = { Color = Color3.fromRGB(160, 255, 60), Lifetime = 0.25 },
+		Costs = { 350 },
+	},
+	{
+		Id = "TrailGold",
+		Category = "Cosmetics",
+		Title = "Gold Trail",
+		Description = "A blazing gold wake. VIP only. Cosmetic.",
+		Kind = "Trail",
+		RequiresPass = "VIP",
+		Trail = { Color = Color3.fromRGB(255, 210, 80), Lifetime = 0.35 },
+		Costs = { 1 },
 	},
 }
 

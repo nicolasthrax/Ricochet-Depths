@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "0.7.0-dev"
+RunConfig.Version = "1.0.0"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -17,6 +17,14 @@ RunConfig.States = {
 RunConfig.BaseHealth = 100
 -- Roblox's default Humanoid walk speed; the salvage shop's Stride adds to it for a run.
 RunConfig.BaseWalkSpeed = 16
+-- Out-of-combat healing during a run: once Delay seconds pass without taking damage, a live
+-- player heals PerSecond (plus the Armory's Mending) until full.
+RunConfig.Regen = {
+	Delay = 4,
+	PerSecond = 1.5,
+	-- How often a healing player's HUD is updated.
+	PushInterval = 0.5,
+}
 -- Brief grace after spawning or respawning so a player cannot be chain-hit.
 RunConfig.SpawnInvulnerability = 2.5
 RunConfig.StartCountdown = 3
@@ -30,8 +38,16 @@ RunConfig.RoomTimeLimit = 150
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
 RunConfig.HardRunTimeLimit = 1200
 
--- Lobby sits far from the arena so room geometry never overlaps it.
+-- Lobby sits far from the arenas so room geometry never overlaps it.
 RunConfig.LobbyPosition = Vector3.new(0, 0, 600)
+-- Where players land when a run ends: beside the lobby spawn.
+RunConfig.LobbyReturnPosition = RunConfig.LobbyPosition + Vector3.new(0, 3, 28)
+
+-- Concurrent runs: each group plays in its own arena slot, centred at X = index * Spacing.
+RunConfig.Arenas = {
+	MaxSlots = 6,
+	Spacing = 500,
+}
 -- Run state is pushed to clients on every transition, and at most this often in between.
 RunConfig.RunStateBroadcastInterval = 0.25
 
@@ -46,13 +62,16 @@ RunConfig.RemoteRules = {
 	EquipShopItem = { Cooldown = 0.3, Burst = 3 },
 }
 
--- Lobby ready-up: players stand on the pads, and once every player in the lobby is on one
--- (or every pad is taken) the descent starts after a short countdown.
+-- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
+-- a countdown runs (shorter when it fills) and its members descend together into their own
+-- arena. A solo portal starts a one-player run at once.
 RunConfig.Lobby = {
-	ReadyPadCount = 4,
-	ReadyCountdown = 3,
-	-- How often the ready state is pushed to clients while it is not changing.
-	ReadyBroadcastInterval = 0.5,
+	GateCapacity = 8,
+	GateMinPlayers = 2,
+	GateCountdown = 15,
+	FullCountdown = 5,
+	-- How often gate state is pushed to clients while it is not changing.
+	GateBroadcastInterval = 0.5,
 }
 
 -- The descent passes through three zones, each with its own look and its own pool of rooms.
@@ -228,6 +247,8 @@ RunConfig.Rooms = {
 		},
 		-- While the core lives, escorts return on this delay to keep pressure on.
 		EscortRespawn = { Archetype = "Chaser", Delay = 7, MaxAlive = 3 },
+		-- Everyone walks into the Throne at full health.
+		HealOnClear = 1,
 	},
 	{
 		Id = "Throne",

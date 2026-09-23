@@ -215,8 +215,22 @@ local function styleFor(kind, layout)
 	return RoomConfig.BumperColor, RoomConfig.Decor.HazardColor
 end
 
+-- Moves every part in `room` by `offset`, keeping its heading. Rooms are laid out around the
+-- world origin and then shifted into their arena slot.
+local function translate(room, offset)
+	for _, part in room:GetDescendants() do
+		if part:IsA("BasePart") then
+			local look = part.CFrame.LookVector
+			part.CFrame = CFrame.lookAlong(part.Position + offset, look)
+			part.Position = part.Position + offset
+		end
+	end
+end
+
 -- Returns the room folder plus the interior bounds the rest of the game clamps against.
-function RoomBuilder.Build(parent, layoutId)
+-- `origin` (default the world origin) is where the room's centre sits on the floor plane.
+function RoomBuilder.Build(parent, layoutId, origin)
+	origin = origin or Vector3.zero
 	local layout = RoomConfig.GetLayout(layoutId or RoomConfig.DefaultLayout)
 	if not layout then
 		return nil, "unknown layout: " .. tostring(layoutId)
@@ -268,8 +282,12 @@ function RoomBuilder.Build(parent, layoutId)
 	buildFloorMechanics(room, layout, floorY)
 	RoomDressing.Build(room, layoutId, layout)
 
+	if origin.Magnitude > 0 then
+		translate(room, origin)
+	end
+
 	local bounds = {
-		center = Vector3.new(0, floorY, 0),
+		center = origin + Vector3.new(0, floorY, 0),
 		-- Kept a little inside the walls so nothing can be pushed into geometry.
 		half = Vector2.new(interior.X / 2 - 4, interior.Y / 2 - 4),
 		-- And out of the sealed corners behind any bevels.

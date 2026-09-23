@@ -434,7 +434,7 @@ describe("ShopView", function()
 		expect(rowButton(view, "Vitality").Text).toBe("Buy  " .. ShopConfig.CostFor(ShopConfig.Get("Vitality"), 2))
 		expect(rowButton(view, "Stride").Text).toBe("Maxed")
 		expect(rowButton(view, "TrailEmber").Text).toBe("Equip")
-		expect(view.balanceLabel.Text).toBe("500 salvage")
+		expect(view.balanceLabel.Text).toBe("500 coins")
 	end)
 
 	it("asks the server to buy or equip, and never changes its own numbers", function()
@@ -449,6 +449,65 @@ describe("ShopView", function()
 		rowButton(view, "TrailEmber").Activated:Fire()
 		expect(bought[1]).toBe("Velocity")
 		expect(equipped[1]).toBe("") -- tapping the equipped trail takes it off
-		expect(view.balanceLabel.Text).toBe("1000 salvage")
+		expect(view.balanceLabel.Text).toBe("1000 coins")
+	end)
+end)
+
+describe("Armory and Cosmetics catalogue", function()
+	it("sorts every item into the Armory or Cosmetics", function()
+		for _, item in ShopConfig.Items do
+			local expected = item.Kind == "Trail" and "Cosmetics" or "Armory"
+			expect(item.Category).toBe(expected)
+		end
+	end)
+
+	it("sells Mending, Coin Magnet and Fortune in the Armory", function()
+		expect(ShopConfig.Get("Mending").Effect.Stat).toBe("RegenBonus")
+		expect(ShopConfig.Get("CoinMagnet").Effect.Stat).toBe("MagnetBonus")
+		expect(ShopConfig.Get("Fortune").Effect.Stat).toBe("RewardMultiplier")
+		local bonuses = ShopConfig.ComputeBonuses({ Mending = 2, CoinMagnet = 1, Fortune = 3 })
+		expect(bonuses.RegenBonus).toBeCloseTo(2 * ShopConfig.Get("Mending").Effect.PerLevel)
+		expect(bonuses.MagnetBonus).toBeCloseTo(ShopConfig.Get("CoinMagnet").Effect.PerLevel)
+		expect(bonuses.RewardMultiplier).toBeCloseTo(3 * ShopConfig.Get("Fortune").Effect.PerLevel)
+	end)
+
+	it("adds Frost, Toxic and a VIP-only Gold trail to the Cosmetics", function()
+		for _, id in { "TrailFrost", "TrailToxic", "TrailGold" } do
+			expect(ShopConfig.Get(id).Kind).toBe("Trail")
+		end
+		expect(ShopConfig.Get("TrailGold").RequiresPass).toBe("VIP")
+	end)
+
+	it("refuses the Gold trail without VIP, and sells it with VIP", function()
+		local store = __FakeDataStore.new()
+		local persistence = PlayerDataService.new(store)
+		local player = funded(persistence, subject(7701), 5000)
+		local vip = false
+		local shop = newShop(persistence, {
+			ownsPass = function(_, pass)
+				return pass == "VIP" and vip
+			end,
+		})
+		local ok, reason = shop:Purchase(player, "TrailGold", 0)
+		expect(ok).toBe(false)
+		expect(reason).toBe("requires VIP")
+		vip = true
+		ok = shop:Purchase(player, "TrailGold", 0)
+		expect(ok).toBe(true)
+	end)
+end)
+
+describe("ShopView tabs", function()
+	local ShopView = __require("ShopView")
+
+	it("shows only the open tab's items", function()
+		local view = ShopView.new(Instance.new("Folder"), function() end, function() end)
+		view:SetTab("Armory")
+		local items = view.panel:FindFirstChild("Items")
+		expect(items:FindFirstChild("Vitality").Visible).toBe(true)
+		expect(items:FindFirstChild("TrailEmber").Visible).toBe(false)
+		view:SetTab("Cosmetics")
+		expect(items:FindFirstChild("Vitality").Visible).toBe(false)
+		expect(items:FindFirstChild("TrailEmber").Visible).toBe(true)
 	end)
 end)

@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local FireValidator = require(script.Parent.FireValidator)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
+local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
 local Combat = { methods = {} }
 
@@ -110,6 +111,9 @@ function Combat.methods:HandleImpact(result, entry, now)
 			state.kills += 1
 			state.bestChain = math.max(state.bestChain, entry.contacts)
 		end
+		if self._coins then
+			self._coins:Drop(hit.enemy.position, hit.enemy.archetype.Coins or 0)
+		end
 		self:_fireAll("EnemyDefeated", hit.enemy.position, hit.enemy.archetypeId)
 		self:_log("EnemyDefeated", {
 			Archetype = hit.enemy.archetypeId,
@@ -157,6 +161,65 @@ function Combat.methods:_applyHazards(now)
 				self:HandlePlayerContact(player, damage, nil, now)
 			end
 		end
+	end
+end
+
+-- Slow healing between fights: a live participant untouched for Regen.Delay seconds heals
+-- PerSecond plus their Mending bonus. The HUD is updated at most every PushInterval.
+function Combat.methods:_applyRegen(deltaTime, now)
+	local regen = RunConfig.Regen
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state and state.alive and state.health < state.maxHealth and now - state.lastDamagedAt >= regen.Delay then
+			local healed = state:Heal((regen.PerSecond + (state.stats.RegenBonus or 0)) * deltaTime)
+			if healed > 0 and (now >= (self._regenPushAt[player] or 0) or state.health >= state.maxHealth) then
+				self._regenPushAt[player] = now + regen.PushInterval
+				self:_pushPlayerState(player)
+			end
+		end
+	end
+end
+
+-- The live participants as coin collectors: where they stand and how far their magnet reaches.
+function Combat.methods:_coinCollectors()
+	local collectors = {}
+	if not self._world or not self._world.GetPosition then
+		return collectors
+	end
+	for _, player in self._participants do
+		local state = self._states[player]
+		local position = state and state.alive and self._world.GetPosition(player)
+		if position then
+			table.insert(collectors, { player = player, position = position, magnet = state.stats.MagnetBonus or 0 })
+		end
+	end
+	return collectors
+end
+
+function Combat.methods:_creditCoins(events)
+	local touched = {}
+	for _, event in events do
+		local state = self._states[event.player]
+		if state then
+			state.coins += event.value
+			touched[event.player] = true
+		end
+	end
+	for player in touched do
+		self:_pushPlayerState(player)
+	end
+end
+
+function Combat.methods:_collectCoins(deltaTime, now)
+	if self._coins then
+		self:_creditCoins(self._coins:Step(deltaTime, now, self:_coinCollectors()))
+	end
+end
+
+-- Room cleared: every coin still on the floor goes to the nearest live player.
+function Combat.methods:_sweepCoins()
+	if self._coins then
+		self:_creditCoins(self._coins:Sweep(self:_coinCollectors()))
 	end
 end
 

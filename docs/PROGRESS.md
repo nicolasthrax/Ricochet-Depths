@@ -5,24 +5,22 @@ presentation from any existing game.
 
 ## Current milestone
 
-**Milestone 13 (0.7.0-dev): playtest fixes and the content pass. Built headlessly; awaiting
-Studio validation (V8).**
+**1.0.0: the launch build. Feature-complete and green headlessly (502 tests); awaiting Studio
+and published-server validation (V9, and the launch checklist).**
 
-A second Studio session reported a locked camera, a
-flickering spawn pad, a blue line at the cursor, box enemies and too little game and map
-design. All of these are addressed:
+This build answers the third playtest's notes and adds what a public launch needs:
 
-- **Camera:** right-drag or Q/E turns it, pitch tilts between 40° and 80°, and the wheel or a
-  pinch zooms.
-- **Cursor line:** the screen-space drag line is gone.
-- **Flicker:** floor layers are now 0.08 studs apart instead of 0.02, the aim cues float clear
-  of them, and a test fails on any z-fighting pair.
-- **Enemies:** every archetype has a multi-part client model.
-- **Content:** three zones, 13 layouts, randomised seven-room runs, four room mechanics, four
-  new enemies and a three-phase boss.
-- **Dressing:** a walled lobby hall, per-zone room dressing, and lighting per zone.
+- **Multiplayer.** Two gates of 2–8 players plus a Solo Portal. Each group plays in its own
+  arena on the same server (`ArenaDirector`), so several runs happen at once.
+- **Economy.** Coins drop from kills and are spent in the Armory (permanent upgrades) and
+  Cosmetics (trails). Robux passes (2x Coins, VIP) and coin packs are wired but ship inert until
+  real ids are set.
+- **Feel.** The shielded Bulwark's shield turns on its own. Health regenerates between fights.
+  A descent cinematic plays when a run starts and between rooms. A night sky tints to each zone.
+- **Lobby.** Readable signs, an invisible barrier and ceiling, and no upgrades panel in the lobby.
 
-448 headless tests, up from 385. Run `docs/STUDIO_VALIDATION_CHECKLIST.md` V8 next.
+`docs/RELEASE_CHECKLIST.md` lists what remains: Studio, multiplayer, datastore and purchase
+validation, plus the owner's Creator Hub steps (sounds, Robux ids, icon, max players).
 
 ### Where the stub is more forgiving than the engine
 
@@ -224,22 +222,18 @@ where every enemy is, never hesitate, and cannot plan a bank shot — the game's
 Since 0.7.0-dev, rooms are drawn at random per run, so columns are run-shape slots rather than
 fixed rooms (the dry run seeds its plans, so these repeat exactly).
 
-| Bot | Ruins 1 | Ruins 2 | Foundry 1 | Foundry 2 | Abyss 1 | Vault | Throne | Run floor | Extracted |
+| Bot | Ruins 1 | Ruins 2 | Foundry 1 | Foundry 2 | Abyss 1 | Vault | Throne | Extracted | Runs reaching the boss |
 |---|---|---|---|---|---|---|---|---|---|
-| Direct fire, exact aim | 25.3s | 12.8s | 7.3s | 74.0s | 152.5s | 8.6s | 6.6s (n=1) | ~5.1 min* | 2% |
-| Direct fire with aim error | 9.2s | 8.2s | 7.8s | 12.2s | 12.1s | 8.5s | 7.5s (n=1) | ~1.4 min | 2% |
-| Probing (throws shots off-angle when blocked) | 8.8s | 10.2s | 7.3s | 13.0s | 10.2s | 8.9s | 8.7s (n=2) | ~1.4 min | 5% |
+| Direct fire, exact aim | 25.3s | 9.3s | 7.4s | 152.6s* | 152.5s* | 5.3s | 6.4s | 10% | 60 of 60 |
+| Direct fire with aim error | 9.2s | 9.2s | 7.9s | 10.4s | 13.8s | 5.5s | 15.1s | 8% | 40 of 40 |
+| Probing (throws shots off-angle when blocked) | 8.8s | 9.1s | 7.3s | 9.7s | 8.0s | 5.4s | 8.7s | 5% | 40 of 40 |
 
-Medians, 0.7.0-dev. The run floor is the sum of per-slot medians plus fixed pacing.
+Medians, 1.0.0. Every simulated run now reaches the Warden Prime: the Bulwark's spinning shield,
+regen and the heal after the Vault moved the wall to the boss, where it belongs. The bots never
+dodge or kite, so the boss's win rate for people is the first number to measure after launch.
 
-\* The exact-aim bot never probes. It stalls against targets behind cover, such as Sentinels
-posted behind the Spire's stones, until the room's 150s limit clears the room. That is a bot
-limitation, not a room defect.
-
-Runs are now seven rooms (up from four), and the bots mostly die to Bulwark lunges in the second
-Ruins and second Foundry slots. Few runs reach the Throne, so its numbers are thin. The Warden
-Prime is at 80 health after a 36-health version fell in about 6 seconds; treat that as a first
-guess.
+\* The exact-aim bot never probes. It stalls against targets behind cover until the room's 150s
+limit clears the room. That is a bot limitation, not a room defect.
 
 ### Room 3 audit (0.6.0-dev)
 
@@ -272,6 +266,46 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.0.0 — launch build
+
+Built on `claude/launch-ready-1.0`, one commit per step, each green on `scripts/check.sh`.
+
+- **Bulwark.** The shield turns at 70°/s on its own (`EnemyService.ShieldFacing`). The arc is
+  62° (was 72°) and lunges deal 12 (was 16). The Warden core's shield turns too.
+- **Lobby.**
+  - Two gates on the west side (`PartyRooms`): 2–8 players, 15s countdown, 5s when full.
+    Overflow is moved back out.
+  - A Solo Portal at the north end, and Armory and Cosmetics kiosks on the east.
+  - An invisible 100-stud barrier and a ceiling.
+  - Signs are printed on SurfaceGui boards (`Signage`); the old shop and zone labels were buried
+    inside parts.
+- **Concurrent arenas.** `ArenaDirector` gives each group a slot, each with its own rooms,
+  enemies, projectiles and match, at X = index × 500 (up to 6 slots).
+  - Rooms, spawns, markers, orb cover and mechanics all honour the slot origin.
+  - Broadcasts and effects reach only that match's players.
+  - Payout keys are unique per slot.
+- **Coins.**
+  - Coins drop per archetype, are pulled in by a magnet and swept to players at room clear.
+  - Payout is coins plus a clear bonus (the bonus is halved on defeat), times Fortune and the
+    2x Coins pass.
+  - Leavers are paid for what they collected, once.
+  - Leaderstats show Coins and Best Depth. The profile field is still `Salvage`, so no
+    migration was needed.
+- **Regen.** Players heal 1.5 HP/s (plus Mending) after 4s without damage. Clearing the Warden
+  Vault heals everyone to full before the Throne.
+- **Shops and Robux.**
+  - The Armory adds Mending, Coin Magnet and Fortune. Cosmetics adds the Frost and Toxic trails,
+    plus a VIP-only Gold trail.
+  - `ShopView` has Armory, Cosmetics and Store tabs.
+  - `MonetizationService` handles passes and coin-pack receipts. Receipts are paid exactly once,
+    after a confirmed save.
+- **Cinematic, HUD and sky.**
+  - `DescentCinematic` and `DescentPlan` add the shaft plunge and the title cards.
+  - The upgrades panel shows only during a run; the STORE button only in the lobby.
+  - Night sky and per-zone lighting; `SkyConfig` takes optional custom skybox ids.
+- **Tuning (dry run).** Every bot run now reaches the Warden Prime, and 5–10% beat it. The boss
+  has 60 health, contact damage every 1.6s and 6-damage orbs.
 
 ### 0.7.0-dev — Milestone 13: playtest fixes and the content pass
 

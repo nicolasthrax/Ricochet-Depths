@@ -1,156 +1,129 @@
-# Closed Playtest Release Checklist
+# 1.0 Launch Checklist
 
-Gate for putting a build in front of invited testers. Nothing here is a formality: an unchecked
-box that is not explicitly waived blocks the playtest.
+Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
+explicitly waived blocks the launch.
 
-**Build:** `0.7.0-dev` · **Status:** not releasable. The core loop has run in Studio (Play Solo,
-twice). Everything added in 0.6.0-dev and 0.7.0-dev is headless-only. The ordered procedure for section 2 is
-`docs/STUDIO_VALIDATION_CHECKLIST.md`.
+**Build:** `1.0.0` · **Status:** feature-complete and green headlessly, **not yet verified in
+Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
+the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
+(V1–V9).
 
 ## 1. Build status
 
 | Check | State | Notes |
 |---|---|---|
-| `luau-compile` on all sources | PASS | 73 sources + 27 test files |
+| `luau-compile` on all sources | PASS | 84 sources + 32 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 448 tests, 0 failures |
+| Headless test suite | PASS | 502 tests, 0 failures |
+| Concurrent arenas | PASS | two groups run side by side, isolated; slots freed and reused; payout keys unique per slot |
+| Multiplayer gates | PASS | 2-player minimum, 8-player cap with overflow, 15s/5s countdowns, cancel on leave |
+| Coins | PASS | drops, magnet, collection, room-clear sweep, payout, defeat rules, leaver paid once |
+| Robux receipts | PASS | granted once, only after save; unloaded profile and failed save retried; id 0 never sold |
 | No z-fighting | PASS | no two overlapping visible top faces within 0.05 studs, in any layout |
-| Room mechanics and dressing | PASS | gates clear of spawn and markers; blocking mechanics count as cover; dressing inert and outside the play space |
-| Geometry integrity | PASS | every layout: bevels and reflectors at 45°, inside the walls, clear of the spawn pad and every enemy marker; room 3 flank and spawn sightlines |
-| Shop purchases | PASS | including cross-server double-charge and overspend |
-| No binary files in git | PASS | rooms, lobby, kiosk and pads are all built at runtime from config |
-| Property-based fuzz suite | PASS | randomised config and event sequences, all seeded |
-| Soak: 25 consecutive runs | PASS | instance count flat from run 3 onward |
-| Soak: ~3600 frames of continuous fire | PASS | pool constant at 150 throughout |
-| No secrets, keys, cookies or private IDs in the repo | PASS | `DebugConfig.AllowedUserIds` ships empty by design |
+| Geometry integrity | PASS | every layout: bevels and reflectors at 45°, spawn open in 8 directions, shielded posts flankable; rooms correct at any arena origin |
+| Lobby | PASS | invisible 100-stud barrier and ceiling; props clear of spawn, portal, gates and kiosks; every sign prints on a SurfaceGui |
+| Shop purchases | PASS | including cross-server double-charge and overspend; VIP-only item gated |
+| No binary files in git | PASS | lobby, arenas, enemy models and the descent shaft are all built at runtime |
+| Property-based fuzz suite, soak | PASS | seeded; instance counts flat |
+| No secrets, keys, cookies or private IDs in the repo | PASS | `DebugConfig.AllowedUserIds` and every Robux id ship empty/0 by design |
 | Version string surfaced in-game | PASS | Options panel, from `RunConfig.Version` |
 
-## 2. Studio validation — **IN PROGRESS**
+## 2. Studio validation (Play Solo and local servers)
 
-A first Play Solo session (reported by the owner) covered the boxes checked below. Everything
-else is still unverified.
+Earlier sessions confirmed bootstrap, aiming, firing, ricochets, pooling and the read-only
+fallback. Everything else is unverified.
 
-- [x] Rojo connects and syncs with no errors *(server bootstrap confirmed)*
-- [x] Player spawns in the lobby; the pedestal prompt appears and starts a run *(room 1 spawned with 6 targets)*
-- [x] Drag-to-aim fires; the shot travels flat and ricochets visibly *(after the aim-line fix in PR #1)*
-- [ ] Enemies take damage and die; room-clear fires
-- [ ] Card picker shows three cards; a pick applies and the HUD updates
-- [ ] Auto-pick resolves an ignored offer
-- [ ] All four rooms complete; results totals are correct
-- [ ] Return to lobby resets cleanly; a second run behaves identically
-- [ ] `Workspace/ProjectilePool` holds exactly 150 parts throughout
-- [ ] `Arena/EnemyPool` holds exactly 36 parts throughout
-- [ ] Bulwark blocks head-on shots and dies to a flank ricochet
-- [ ] Warden Vault escorts respawn while the core lives
+- [x] Rojo connects and syncs with no errors
+- [x] Drag-to-aim fires; the shot travels flat and ricochets visibly
+- [ ] Lobby: signs readable from across the hall; cannot jump out anywhere (V9.1–9.2)
+- [ ] Solo Portal starts a solo run with the descent cinematic (V9.3)
+- [ ] Coins drop, fly to you and count on the HUD; results show coins earned (V9.4, V9.8)
+- [ ] Health regenerates after a few seconds without damage (V9.5)
+- [ ] Bulwark shield turns on its own; its open side can be hit (V9.6)
+- [ ] Upgrades panel hidden in the lobby; Store button hidden in a run (V9.7)
+- [ ] Armory and Cosmetics tabs sell and equip; balance updates after a run (V9.9)
+- [ ] The whole V8 section (camera, flicker, models, zones, mechanics, boss)
 - [ ] No errors or warnings in the Output window across a full run
-- [ ] Shots turn 90° off a 45° reflector and never escape past a corner bevel (V7.2)
-- [ ] Room 3 fields four Chasers and one Bulwark; the Bulwark dies to a flank ricochet (V7.5)
-- [ ] Damage numbers and camera shake appear; Screen shake Off removes the shake (V7.3–7.4)
-- [ ] Ready pads light and start a run after the countdown (V7.7)
-- [ ] Shop: an unaffordable purchase is refused; a bought upgrade applies to the next run; a trail shows on shots (V7.8–7.10)
-- [ ] Camera turns, tilts and zooms; aiming still matches after turning (V8.1–8.2)
-- [ ] No cursor line; no flicker at the spawn pad or under the aim cues (V8.3–8.4)
-- [ ] Enemy models render and flash on telegraph (V8.5)
-- [ ] Runs vary and zone lighting changes (V8.6)
-- [ ] Gates, breakables, sweepers and amp pads behave as described (V8.7–8.10)
-- [ ] New enemies and the Warden Prime's three phases (V8.11–8.12)
 
-## 3. Multiplayer validation — **NOT STARTED**
+## 3. Multiplayer validation (Studio → Test → Local Server with 2–4 players)
 
-- [ ] 2 clients: full run to extraction
-- [ ] 3 clients: full run to extraction
-- [ ] 4 clients: full run to extraction
+- [ ] Two players in Gate I start together after 15s; one player alone never starts (V9.10)
+- [ ] A second group in Gate II starts while the first is still playing, in a separate arena (V9.11)
 - [ ] Each player receives and resolves their own upgrade offer
-- [ ] One player leaving mid-run does not disturb the others
-- [ ] The last player leaving ends the run and returns the server to lobby state
-- [ ] A late joiner is admitted at the next room boundary
+- [ ] One player leaving mid-run does not disturb the others, and keeps their coins
+- [ ] The last player leaving ends the run and frees the arena
 - [ ] One player going down does not end the run; all going down does
+- [ ] A 9th player stepping into a full gate is moved back out
 
-## 4. Datastore validation — **NOT STARTED**
+## 4. Datastore and purchases (published test experience)
 
-Requires a separate test experience with **Enable Studio Access to API Services** turned on.
+Requires a separate test experience with **Enable Studio Access to API Services** on.
 Development builds write to the `dev_v1` scope and can never touch live data.
 
-- [ ] Salvage persists across leave and rejoin
+- [ ] Coins persist across leave and rejoin; the leaderboard shows the balance
 - [ ] `BindToClose` flushes on server shutdown
-- [ ] A repeated completion for the same run key pays nothing
-- [x] With API services disabled, the session goes read-only *(confirmed in the first Play Solo)*;
-      still to check that the run completes and no reward is granted or duplicated
-- [ ] An older (v2, v3 or v4) profile migrates to v5 without losing currency or ledger entries
+- [ ] An older profile keeps its balance (salvage became coins without migration)
 - [ ] A shop purchase persists across leave and rejoin, and the balance matches
+- [ ] With real ids set: a coin pack credits once; 2x Coins doubles a run's payout; VIP unlocks the Gold trail
 
-## 5. Mobile validation — **NOT STARTED**
+## 5. Mobile validation
 
-- [ ] iPhone emulation: HUD readable, nothing clipped
+- [ ] iPhone emulation: HUD readable, nothing clipped; Store button and gate text fit
 - [ ] iPad emulation: three cards fit on one row
-- [ ] Touch drag aiming matches mouse behaviour
-- [ ] Left-side touches drive the thumbstick and never aim; right-side drags aim; a tap never fires
-- [ ] The shop panel fits and scrolls on the narrowest supported width
+- [ ] Touch aiming, twist to turn, pinch to zoom; a second finger never fires
+- [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
-- [ ] Options panel is usable on the narrowest supported width
 
-## 6. Known issues at this build
+## 6. Known issues at 1.0.0
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|
-| 1 | Studio validation is partial: one Play Solo session covered bootstrap, aiming, firing, ricochets, pooling and the read-only fallback. | **Blocker** | Sections 2–5 before any tester sees this. |
-| 2 | Audio hooks exist but every sound id is a placeholder and `FeatureFlags.Audio` is off: the game is silent. | Medium | Upload original sounds, fill `SoundConfig`, flip the flag. |
-| 3 | Enemies do not path around pillars. | Low | Revisit only if playtests flag it. |
-| 4 | Telemetry only prints to the Studio output; no transport. | Medium | Wire once an analytics destination is chosen. |
-| 5 | Impact bursts are placeholder parts; no particles. Damage numbers, camera shake and enemy models exist. | Low | Post-playtest polish. |
-| 6 | Balance numbers are first-pass guesses, never played. | High | Tune from playtest data. |
-| 7 | Run length target of 6–8 minutes is unverified against real play. The dry-run simulator puts the floor well below it, but that is a bot estimate. | High | Measure in the first playtest. |
-| 8 | Rooms are drawn at random, so difficulty spikes follow the room drawn, not a slot. Simulated runs mostly end in the second Ruins or second Foundry room, the slots that usually field a Bulwark, whose lunges still deal ~100% of bot damage there. The bots cannot bank, so they understate human play. | Medium | Measure in the first playtest. |
-| 9 | Persistence data-loss races (mid-save changes, cross-server payouts, ledger double-pay, shutdown overrun). | Medium | Fixed and regression-tested headlessly in 0.5.3–0.5.7-dev. Still to confirm against a real DataStore in section 4 before salvage matters in a playtest. |
-| 10 | Rotated geometry (bevels, reflectors) is validated only against the harness's rotated-box model. | Medium | Studio V7.2. |
-| 11 | Shop prices are first guesses against a typical payout of ~35 (early defeat) to ~420 (extraction) salvage. | Low | Tune from playtest data. |
-| 12 | Boss, new enemies and room mechanics are first-pass numbers. | High | Tune from playtest data. |
+| 1 | Nothing added since 0.6.0-dev has run in Studio or on a published server. | **Blocker** | Sections 2–4 before going public. |
+| 2 | Audio hooks exist but every sound id is a placeholder and `FeatureFlags.Audio` is off: the game is silent. | High | Upload original sounds, fill `SoundConfig`, flip the flag. |
+| 3 | Robux items are inert until real ids are pasted into `MonetizationConfig`. | Launch step | Section 8, step 10. |
+| 4 | Balance is tuned against bots, not people. Every bot run now reaches the Warden Prime, and 5–10% beat it; bots cannot dodge or kite, so humans should do better. | High | Watch boss deaths in the first public week; tune `EnemyConfig.WardenPrime`. |
+| 5 | Run length: the dry run's floor is ~1.5 min for competent bots against a 6–8 minute target. Real players are much slower (aiming, cards, walking, the cinematic), but it is unmeasured. | Medium | Measure in analytics. |
+| 6 | Enemies do not path around pillars. | Low | Revisit only if players notice. |
+| 7 | Telemetry only prints to the Studio output; no transport. | Low | Wire once an analytics destination is chosen. |
+| 8 | The sky is Roblox's built-in night sky, tinted per zone; no custom skybox art. | Low | Optional: paste six asset ids into `SkyConfig`. |
+| 9 | Players in the lobby cannot watch a run in progress; there is no spectate. | Low | Post-launch. |
 
 ## 7. Rollback
 
-Every milestone is a separate commit on `claude/vigilant-keller-xt8dly`, and each one leaves the
-suite green, so reverting to any earlier commit yields a working build.
+Every step is a separate commit, and each one leaves the suite green, so reverting to any
+earlier commit yields a working build.
 
-- **A feature misbehaves in a playtest:** turn its flag off in `FeatureFlags.luau` and republish.
-  Flags are checked at bootstrap, so a disabled feature registers no remote handler and writes no
-  data.
-- **The salvage shop misbehaves:** set `FeatureFlags.SalvageShop = false`. The kiosk prompt is
-  disabled, the shop remotes are never bound, and runs start with no shop bonuses. Owned levels
-  stay in profiles untouched, ready for when it is turned back on.
-- **Persistence misbehaves:** set `FeatureFlags.Persistence = false`. Every session becomes
-  read-only, runs still complete, and no profile is written — no partial or corrupt saves.
-- **A schema change goes wrong:** do not roll the schema version back. Add a forward migration
-  instead; `PlayerDataService.Normalise` only ever moves a profile forward, so a downgrade would
-  strand newer profiles.
-- **The build is bad:** revert to the previous milestone commit and republish. No datastore
-  migration is needed, because migrations are additive and older code ignores unknown fields.
+- **A feature misbehaves:** turn its flag off in `FeatureFlags.luau` and republish.
+- **The shops misbehave:** `FeatureFlags.SalvageShop = false` disables both kiosks and the shop
+  remotes; owned levels stay in profiles untouched.
+- **Robux purchases misbehave:** set the offending id back to 0 in `MonetizationConfig`, or
+  `FeatureFlags.Monetization = false`. Receipts already granted stay granted.
+- **Enemy models misbehave:** `FeatureFlags.EnemyModels = false` shows the plain hitboxes.
+- **Persistence misbehaves:** `FeatureFlags.Persistence = false` makes every session read-only.
+- **Never roll the schema version back.** Add a forward migration instead.
 
-## 8. Manual steps required in Roblox Studio / Creator Hub
+## 8. Manual steps in Roblox Studio / Creator Hub
 
 These cannot be done from this repository and need a human with account access.
 
-1. **Create the experience.** Creator Hub → Create → Experience. Build the place with
-   `rojo build -o RicochetDepths.rbxlx`, open it in Studio, and publish to that place.
-2. **Create a separate test experience.** Publish the same place a second time under a test
-   experience. Keep playtesting off the live place entirely.
-3. **Enable API services on the test experience.** Studio → Game Settings → Security → *Enable
-   Studio Access to API Services*. Without this, datastore calls fail and every session is
-   read-only, which is the correct fallback but blocks section 4.
-4. **Set experience permissions.** Creator Hub → Experience → Permissions → Private, then invite
-   testers individually. Do not make it public for a closed playtest.
-5. **Set the icon and thumbnails.** Creator Hub → Experience → Icon and Thumbnails. Placeholder
-   art is fine for a closed test; it must be original.
-6. **Set the maximum players to 4.** Game Settings → Players → Max Players. The run loop assumes
-   1–4 and has not been exercised beyond that.
-7. **Enable the platforms you intend to test.** Game Settings → Places → Devices. Mobile must be
-   on for the touch checks in section 5.
-8. **Populate `DebugConfig.AllowedUserIds`** in the test build only, with the user ids that
-   should see the F3 overlay. Never commit real ids; the file ships with an empty list.
-9. **Check analytics after the first session.** Creator Hub → Analytics. Confirm sessions and
-   playtime are recording before drawing conclusions from telemetry.
-10. **Choose a telemetry destination** if you want events off-server. Nothing is wired yet;
-    `TelemetryService` takes a sink function, so this is a one-line change once a destination
-    exists.
-11. **Do not configure monetization.** No game passes or developer products should be created.
-    `FeatureFlags.Monetization` is off and no monetization code exists.
+1. **Create the experience.** Build the place with `rojo build -o RicochetDepths.rbxlx`, open it
+   in Studio, and publish it.
+2. **Delete the Baseplate template's parts** (`Baseplate` and `SpawnLocation`) before publishing,
+   if the place started from the Baseplate template. The lobby has its own spawn.
+3. **Create a separate test experience** and publish the same place there for sections 2–4.
+4. **Enable API services** on the test experience (Game Settings → Security).
+5. **Set max players to 20** (Game Settings → Players). Two gates of 8 plus solo players, each
+   group in its own arena; up to 6 runs at once per server.
+6. **Enable the platforms** you intend to support (Game Settings → Places → Devices).
+7. **Set the icon and thumbnails** (Creator Hub → Experience). They must be original.
+8. **Upload sounds** you own, paste their ids into `SoundConfig`, and set `FeatureFlags.Audio = true`.
+9. **Optional custom sky:** upload six skybox images and paste their ids into `SkyConfig`.
+10. **Create the passes and products** (Creator Hub → Monetization): passes *2x Coins* and *VIP*,
+    developer products *500 / 1,500 / 5,000 Coins*. Paste each id into `MonetizationConfig`.
+    Test a purchase in the test experience first.
+11. **Populate `DebugConfig.AllowedUserIds`** in the test build only, for the F3 overlay. Never
+    commit real ids.
+12. **Complete the experience questionnaire** (maturity and content) in Creator Hub before making
+    the experience public.
+13. **Check analytics after the first sessions** (Creator Hub → Analytics).

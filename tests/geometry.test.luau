@@ -454,3 +454,52 @@ describe("floor layers never z-fight", function()
 		expect(rings).toBe(4)
 	end)
 end)
+
+describe("rooms built in an arena slot away from the origin", function()
+	local offset = Vector3.new(500, 0, 0)
+
+	local function partsByPath(root)
+		local out = {}
+		for _, part in root:GetDescendants() do
+			if part:IsA("BasePart") then
+				out[part.Parent.Name .. "/" .. part.Name] = part
+			end
+		end
+		return out
+	end
+
+	it("moves every part by the slot's origin and keeps its heading", function()
+		for _, layoutId in { "Crossing", "Hollow", "Forgeworks" } do
+			local home = partsByPath(RoomBuilder.Build(Instance.new("Folder"), layoutId))
+			local away, bounds = RoomBuilder.Build(Instance.new("Folder"), layoutId, offset)
+			for path, part in partsByPath(away) do
+				local original = home[path]
+				expect((part.Position - original.Position - offset).Magnitude).toBeCloseTo(0)
+				expect(part.CFrame.LookVector:Dot(original.CFrame.LookVector)).toBeCloseTo(1)
+			end
+			expect(bounds.center.X).toBe(offset.X)
+		end
+	end)
+
+	it("spawns players and enemies, and places hazards and cover, around the slot's origin", function()
+		local arena = Instance.new("Folder")
+		local enemies = EnemyService.new(arena, PLANE_Y, 5)
+		local rooms = RoomService.new(arena, enemies, PLANE_Y, Random.new(5), offset)
+		local current = rooms:Load(RunConfig.GetRoomById("Conveyor"), 0)
+		local point = rooms:GetSpawnPoint()
+		expect(math.abs(point.X - offset.X)).toBeLessThan(20)
+		for _, enemy in enemies:GetEnemies() do
+			expect(math.abs(enemy.position.X - offset.X)).toBeLessThan(80)
+		end
+		-- The first gate burns at its offset position while on, not at the world origin.
+		local gate = RoomConfig.GetLayout("Conveyor").Mechanics[1]
+		local onAt = (gate.Phase or 0) + gate.OffTime + 0.1
+		local middle = Vector3.new((gate.From.X + gate.To.X) / 2, PLANE_Y, gate.From.Y)
+		expect(current.mechanics:HazardAt(middle + offset, onAt)).toBeGreaterThan(0)
+		expect(current.mechanics:HazardAt(middle, onAt)).toBe(0)
+		-- Orbs meet the cover where it actually stands.
+		for _, solid in enemies:GetObstacles() do
+			expect(math.abs(solid.Center.X - offset.X)).toBeLessThan(80)
+		end
+	end)
+end)

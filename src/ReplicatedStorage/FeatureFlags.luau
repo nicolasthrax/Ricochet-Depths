@@ -13,8 +13,11 @@ FeatureFlags.SalvageShop = true
 -- Client-side multi-part enemy models over the server hitboxes. Off shows the plain boxes.
 FeatureFlags.EnemyModels = true
 
+-- Robux game passes and coin packs (MonetizationConfig). Nothing is offered until the owner
+-- fills in real ids, so this is safe on with the shipped config.
+FeatureFlags.Monetization = true
+
 -- Deferred until the vertical slice has been playtested.
-FeatureFlags.Monetization = false -- no game passes, products or premium currency exist in code
 FeatureFlags.CosmeticStore = false
 FeatureFlags.BaseBuilding = false
 FeatureFlags.Matchmaking = false

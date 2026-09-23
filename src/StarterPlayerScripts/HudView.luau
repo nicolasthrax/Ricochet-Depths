@@ -25,6 +25,14 @@ function HudView.new(playerGui)
 	track.Size = UDim2.new(1, 0, 0, 14)
 	self.healthFill = fill
 
+	-- Coins picked up this run, with a brief "+N" as they come in.
+	self.coinLabel = UiTheme.label("CoinLabel", health, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
+	self.coinLabel.AnchorPoint = Vector2.new(1, 0)
+	self.coinLabel.Position = UDim2.new(1, 0, 0, 0)
+	self.coinLabel.Size = UDim2.new(0.5, 0, 0, 20)
+	self.coinLabel.TextXAlignment = Enum.TextXAlignment.Right
+	self._coins = 0
+
 	local progress = UiTheme.panel("ProgressPanel", self.gui)
 	progress.Position = UDim2.new(0.5, 0, 0, 12)
 	progress.AnchorPoint = Vector2.new(0.5, 0)
@@ -53,6 +61,17 @@ function HudView.new(playerGui)
 	bossTrack.Position = UDim2.new(0, 0, 0, 22)
 	bossTrack.Size = UDim2.new(1, 0, 0, 12)
 	self.bossFill = bossFill
+
+	-- The Store button, shown in the lobby only.
+	local store = UiTheme.button("StoreButton", self.gui, "STORE")
+	store.Position = UDim2.new(0, 16, 0, 12)
+	store.Size = UDim2.fromOffset(110, UiConfig.MinTouchTarget)
+	store.Activated:Connect(function()
+		if self._onStore then
+			self._onStore()
+		end
+	end)
+	self.storeButton = store
 
 	local upgrades = UiTheme.panel("UpgradePanel", self.gui)
 	upgrades.Position = UDim2.new(1, -16, 0, 12)
@@ -96,6 +115,22 @@ function HudView:UpdatePlayer(snapshot)
 		self.healthLabel.Text = "DOWN"
 	end
 
+	local coins = type(snapshot.Coins) == "number" and snapshot.Coins or 0
+	local gained = coins - self._coins
+	self._coins = coins
+	if gained > 0 then
+		self.coinLabel.Text = string.format("+%d  Coins %d", gained, coins)
+		self._coinToken = (self._coinToken or 0) + 1
+		local token = self._coinToken
+		task.delay(1.2, function()
+			if self._coinToken == token then
+				self.coinLabel.Text = string.format("Coins %d", self._coins)
+			end
+		end)
+	else
+		self.coinLabel.Text = string.format("Coins %d", coins)
+	end
+
 	self:_renderUpgrades(snapshot.Upgrades or {})
 end
 
@@ -121,10 +156,9 @@ function HudView:_renderUpgrades(upgrades)
 	self.upgradePanel.Size = UDim2.fromOffset(210, 24 + (#upgrades + 1) * 18)
 end
 
+-- Starting and Transition have the descent cinematic's own caption instead.
 local BANNERS = {
-	[RunConfig.States.Starting] = "Descending...",
 	[RunConfig.States.UpgradeChoice] = "Choose an upgrade",
-	[RunConfig.States.Transition] = "Moving deeper...",
 }
 
 function HudView:UpdateRun(snapshot)
@@ -133,6 +167,13 @@ function HudView:UpdateRun(snapshot)
 	end
 
 	local inRun = snapshot.State ~= RunConfig.States.Lobby
+	-- Upgrades belong to a run: hidden in the lobby, and cleared when a run ends. The Store
+	-- button is the reverse.
+	self.upgradePanel.Visible = inRun
+	self.storeButton.Visible = not inRun
+	if not inRun and #self.upgradeEntries > 1 then
+		self:_renderUpgrades({})
+	end
 	local zone = RunConfig.Zones[snapshot.Zone or ""]
 	local where = zone and string.format("%s: %s", zone.DisplayName, snapshot.RoomName) or snapshot.RoomName
 	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s", snapshot.RoomIndex, snapshot.RoomCount, where)
@@ -163,30 +204,39 @@ function HudView:UpdateRun(snapshot)
 	end
 end
 
--- The lobby line: ready-pad progress when anyone is gathering, otherwise how to start.
+-- The lobby line: your gate's party and countdown when you are in one, otherwise how to start.
 function HudView:_renderLobbyObjective()
-	local ready = self._lobbyReady
-	if ready and ready.Countdown then
-		self.objectiveLabel.Text = string.format("Descending in %d...", ready.Countdown)
+	local status = self._lobbyStatus
+	if status and status.Notice then
+		self.objectiveLabel.Text = status.Notice
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Warning
+	elseif status and status.Gate and status.Countdown then
+		self.objectiveLabel.Text = string.format("%s  %d/%d  -  descending in %d...", status.Gate, status.Count,
+			status.Capacity, status.Countdown)
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Health
-	elseif ready and ready.Ready > 0 then
-		self.objectiveLabel.Text = string.format("Ready %d / %d  -  everyone onto a pad", ready.Ready, ready.Total)
+	elseif status and status.Gate then
+		self.objectiveLabel.Text = string.format("%s  %d/%d  -  waiting for %d more", status.Gate, status.Count,
+			status.Capacity, math.max(status.MinPlayers - status.Count, 1))
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	else
-		self.objectiveLabel.Text = "Stand on a ready pad, or use the pedestal to descend"
+		self.objectiveLabel.Text = "Step into a Gate with friends (2-8), or use the Solo Portal"
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	end
 end
 
--- snapshot is the LobbyReadyState payload.
+-- snapshot is the LobbyReadyState payload: this player's gate status.
 function HudView:SetLobbyReady(snapshot)
 	if type(snapshot) ~= "table" then
 		return
 	end
-	self._lobbyReady = snapshot.Active and snapshot or nil
+	self._lobbyStatus = snapshot
 	if snapshot.Active then
 		self:_renderLobbyObjective()
 	end
+end
+
+function HudView:SetStoreHandler(callback)
+	self._onStore = callback
 end
 
 function HudView:Flash(message, color)

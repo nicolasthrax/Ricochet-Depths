@@ -27,6 +27,7 @@ EnemyConfig.Archetypes = {
 	Drifter = {
 		Id = "Drifter",
 		DisplayName = "Drifter",
+		Coins = 1, -- dropped as pickups when it dies
 		Behaviour = "Sentry",
 		Health = 1,
 		Size = Vector3.new(3, EnemyConfig.BodyHeight, 3),
@@ -42,6 +43,7 @@ EnemyConfig.Archetypes = {
 	Chaser = {
 		Id = "Chaser",
 		DisplayName = "Chaser",
+		Coins = 2, -- dropped as pickups when it dies
 		Behaviour = "Chaser",
 		Health = 2,
 		Size = Vector3.new(2.6, EnemyConfig.BodyHeight, 2.6),
@@ -58,6 +60,7 @@ EnemyConfig.Archetypes = {
 	Bulwark = {
 		Id = "Bulwark",
 		DisplayName = "Bulwark",
+		Coins = 6, -- dropped as pickups when it dies
 		Behaviour = "Lunger",
 		Health = 4,
 		Size = Vector3.new(4.4, EnemyConfig.BodyHeight, 4.4),
@@ -65,14 +68,18 @@ EnemyConfig.Archetypes = {
 		Material = Enum.Material.SmoothPlastic,
 		MoveSpeed = 5,
 		StandoffDistance = 6,
-		ContactDamage = 16,
+		-- Playtest: too punishing. Was 16.
+		ContactDamage = 12,
 		ContactRange = 6.5,
 		ContactCooldown = 1.3,
-		-- Shielded across the front: direct shots bounce off, so the answer is a ricochet
-		-- that arrives from the flank or behind.
+		-- Shielded across one side: direct shots into it bounce off. Playtest: a shield that
+		-- always faced the player was too hard, so it now turns steadily on its own and its
+		-- back comes round every few seconds; banking round it still works any time.
 		Shield = {
-			-- Blocked when the incoming heading is within this half-angle of dead-on.
-			HalfAngleDegrees = 72,
+			-- Blocked when the incoming heading is within this half-angle of the shield's heading.
+			HalfAngleDegrees = 62,
+			-- Degrees per second the shield turns, independent of where the Bulwark walks.
+			SpinSpeed = 70,
 			DamageMultiplier = 0,
 			Color = Color3.fromRGB(226, 246, 252),
 			Thickness = 0.6,
@@ -91,6 +98,7 @@ EnemyConfig.Archetypes = {
 	WardenCore = {
 		Id = "WardenCore",
 		DisplayName = "Warden Core",
+		Coins = 30, -- dropped as pickups when it dies
 		Behaviour = "Lunger",
 		IsElite = true,
 		Health = 14,
@@ -99,18 +107,20 @@ EnemyConfig.Archetypes = {
 		Material = Enum.Material.Neon,
 		MoveSpeed = 6,
 		StandoffDistance = 9,
-		ContactDamage = 22,
+		-- Dry run: once the Bulwark eased off, this was where runs ended (~100 damage each).
+		ContactDamage = 16,
 		ContactRange = 9,
 		ContactCooldown = 1.2,
 		Shield = {
-			HalfAngleDegrees = 88,
+			HalfAngleDegrees = 80,
+			SpinSpeed = 50,
 			DamageMultiplier = 0,
 			Color = Color3.fromRGB(236, 220, 255),
 			Thickness = 0.8,
 			Offset = 4.2,
 		},
 		Lunge = {
-			Interval = 2.6,
+			Interval = 3.4,
 			TelegraphTime = 0.85,
 			TelegraphColor = Color3.fromRGB(255, 226, 140),
 			Duration = 0.7,
@@ -123,6 +133,7 @@ EnemyConfig.Archetypes = {
 EnemyConfig.Archetypes.Splitter = {
 	Id = "Splitter",
 	DisplayName = "Splitter",
+		Coins = 3, -- dropped as pickups when it dies
 	Behaviour = "Chaser",
 	Health = 2,
 	Size = Vector3.new(3.2, EnemyConfig.BodyHeight, 3.2),
@@ -139,6 +150,7 @@ EnemyConfig.Archetypes.Splitter = {
 EnemyConfig.Archetypes.Shard = {
 	Id = "Shard",
 	DisplayName = "Shard",
+		Coins = 1, -- dropped as pickups when it dies
 	Behaviour = "Chaser",
 	Health = 1,
 	Size = Vector3.new(1.8, EnemyConfig.BodyHeight, 1.8),
@@ -156,6 +168,7 @@ EnemyConfig.Archetypes.Shard = {
 EnemyConfig.Archetypes.Sentinel = {
 	Id = "Sentinel",
 	DisplayName = "Sentinel",
+		Coins = 4, -- dropped as pickups when it dies
 	Behaviour = "Turret",
 	Health = 3,
 	Size = Vector3.new(3.4, EnemyConfig.BodyHeight, 3.4),
@@ -178,6 +191,7 @@ EnemyConfig.Archetypes.Sentinel = {
 EnemyConfig.Archetypes.Phaser = {
 	Id = "Phaser",
 	DisplayName = "Phaser",
+		Coins = 4, -- dropped as pickups when it dies
 	Behaviour = "Phaser",
 	Health = 2,
 	Size = Vector3.new(2.6, EnemyConfig.BodyHeight, 2.6),
@@ -205,18 +219,20 @@ EnemyConfig.Archetypes.Phaser = {
 EnemyConfig.Archetypes.WardenPrime = {
 	Id = "WardenPrime",
 	DisplayName = "Warden Prime",
+		Coins = 80, -- dropped as pickups when it dies
 	Behaviour = "Boss",
 	IsBoss = true,
-	-- Dry run: 36 fell in ~6s even to the bots, so it was a speed bump, not a finale.
-	Health = 80,
+	-- Dry run history: 36 fell in ~6s; at 80 no bot out-lasted its contact hits. 60 is a first
+	-- guess for humans, who kite far better than the bots (it moves at 4, a player at 16).
+	Health = 60,
 	Size = Vector3.new(9, EnemyConfig.BodyHeight, 9),
 	Color = Color3.fromRGB(200, 120, 255),
 	Material = Enum.Material.Neon,
 	MoveSpeed = 4,
 	StandoffDistance = 9,
-	ContactDamage = 20,
+	ContactDamage = 16,
 	ContactRange = 10,
-	ContactCooldown = 1.2,
+	ContactCooldown = 1.6,
 	Shield = {
 		HalfAngleDegrees = 80,
 		DamageMultiplier = 0,
@@ -224,7 +240,8 @@ EnemyConfig.Archetypes.WardenPrime = {
 		Thickness = 1,
 		Offset = 5.6,
 	},
-	Orb = { Speed = 18, Damage = 8 },
+	-- Dry run: bots (which never dodge) took ~120 damage here. Humans dodge; still eased.
+	Orb = { Speed = 18, Damage = 6 },
 	Phases = {
 		{ Below = 1.01, Shield = "Spin", SpinSpeed = 90, MoveSpeedMultiplier = 1 },
 		{
@@ -238,7 +255,7 @@ EnemyConfig.Archetypes.WardenPrime = {
 			RingInterval = 4,
 			RingCount = 8,
 		},
-		{ Below = 0.25, Shield = "None", MoveSpeedMultiplier = 1.6, RingInterval = 2.5, RingCount = 12, RingTwist = 15 },
+		{ Below = 0.25, Shield = "None", MoveSpeedMultiplier = 1.6, RingInterval = 3.2, RingCount = 12, RingTwist = 15 },
 	},
 }
 

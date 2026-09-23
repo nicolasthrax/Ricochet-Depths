@@ -1,15 +1,16 @@
--- Run reward maths. Values are soft currency ("salvage") earned by finishing a descent.
+-- Run payout. Coins are collected from kills during the run and kept in full whatever the
+-- outcome; clearing rooms adds a bonus on top, which a failed run only partly earns.
 local RewardConfig = {}
 
+-- Stored under the profile's original field name, so balances from earlier builds carry over.
 RewardConfig.CurrencyId = "Salvage"
-RewardConfig.CurrencyName = "Salvage"
+RewardConfig.CurrencyName = "Coins"
 
-RewardConfig.PerRoomCleared = 25
-RewardConfig.PerKill = 3
-RewardConfig.EliteBonus = 120
-RewardConfig.ExtractionBonus = 150
--- A failed run still pays something, so a loss is not a total waste of six minutes.
-RewardConfig.DefeatMultiplier = 0.4
+RewardConfig.PerRoomCleared = 10
+RewardConfig.EliteBonus = 50
+RewardConfig.ExtractionBonus = 200
+-- A failed run keeps its coins but earns only this share of the clear bonus.
+RewardConfig.DefeatMultiplier = 0.5
 
 -- Ceiling on a single run's payout, as a guard against a bug minting currency.
 RewardConfig.MaxPerRun = 5000

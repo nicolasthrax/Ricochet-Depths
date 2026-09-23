@@ -9,10 +9,10 @@ local OnboardingView = {}
 OnboardingView.__index = OnboardingView
 
 local HINTS = {
-	Lobby = "Stand on a ready pad, or hold at the glowing pedestal, to begin a descent.",
+	Lobby = "Step into a Gate with friends (2-8), or use the Solo Portal. Spend coins at the Armory.",
 	Aim = "Drag away from your target, then release to fire.",
 	Ricochet = "Shots bounce. Bank them off walls to reach what you cannot see.",
-	Shield = "Shielded enemies block shots from the front. Come at them from the side.",
+	Shield = "Shields turn slowly. Shoot the open side, or bank a shot round the back.",
 	Upgrade = "Pick one upgrade. If you wait too long, one is chosen for you.",
 }
 

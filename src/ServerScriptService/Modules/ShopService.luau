@@ -1,4 +1,4 @@
--- Authoritative salvage shop. The client only ever names an item; price, level, affordability
+-- Authoritative lobby shop (Armory and Cosmetics). The client only ever names an item; price, level, affordability
 -- and whether the shop is open are all decided here, and the money moves through
 -- PlayerDataService's purchase path, which re-checks the stored balance when the save commits.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,9 +11,13 @@ ShopService.__index = ShopService
 
 -- options.canShop(player) -> bool: whether purchases are allowed right now (the lobby only).
 -- options.onChanged(player): called after anything the player's profile view shows changes.
+-- options.ownsPass(player, passKey) -> bool: game-pass ownership, for pass-only items.
 function ShopService.new(persistence, options)
 	options = options or {}
 	return setmetatable({
+		_ownsPass = options.ownsPass or function()
+			return false
+		end,
 		_persistence = persistence,
 		_canShop = options.canShop or function()
 			return false
@@ -45,6 +49,10 @@ function ShopService:Purchase(player, itemId, now)
 	end
 	if not self._canShop(player) then
 		return false, "shop closed"
+	end
+
+	if item.RequiresPass and not self._ownsPass(player, item.RequiresPass) then
+		return false, "requires " .. item.RequiresPass
 	end
 
 	local level = (persistence:GetMetaLevels(player)[item.Id] or 0) + 1

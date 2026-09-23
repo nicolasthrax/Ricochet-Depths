@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CardPickerView = require(script.Parent:WaitForChild("CardPickerView"))
+local DescentCinematic = require(script.Parent:WaitForChild("DescentCinematic"))
 local HudView = require(script.Parent:WaitForChild("HudView"))
 local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
@@ -39,12 +40,21 @@ local settingsView = SettingsView.new(playerGui, function(settings)
 end)
 settingsView:SetVersion("Build " .. RunConfig.Version)
 local onboarding = OnboardingView.new(playerGui)
+local MarketplaceService = game:GetService("MarketplaceService")
 local shopView = ShopView.new(playerGui, function(itemId)
 	purchaseShopItem:FireServer(itemId)
 end, function(itemId)
 	equipShopItem:FireServer(itemId)
+end, function(kind, id)
+	-- Robux purchases go straight to Roblox; the server grants them from the receipt.
+	if kind == "Pass" then
+		MarketplaceService:PromptGamePassPurchase(player, id)
+	else
+		MarketplaceService:PromptProductPurchase(player, id)
+	end
 end)
 local sounds = SoundPlayer.Shared()
+local descent = DescentCinematic.new(playerGui)
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 	sounds:Play("CardSelect")
 	chooseUpgrade:FireServer(offerId, cardId)
@@ -71,6 +81,7 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	if lastState == RunConfig.States.Combat and snapshot.State == RunConfig.States.UpgradeChoice then
 		sounds:Play("RoomClear")
 	end
+	descent:OnRunState(lastState, snapshot)
 	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
 	publishState(snapshot.State)
@@ -119,8 +130,11 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	publishSettings(settingsView:GetSettings())
 end)
 
-Remotes.Get("ShopOpen").OnClientEvent:Connect(function()
-	shopView:Open()
+Remotes.Get("ShopOpen").OnClientEvent:Connect(function(tab)
+	shopView:Open(tab)
+end)
+hud:SetStoreHandler(function()
+	shopView:Open("Store")
 end)
 
 Remotes.Get("ShopResult").OnClientEvent:Connect(function(payload)

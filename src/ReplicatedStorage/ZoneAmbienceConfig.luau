@@ -4,41 +4,40 @@ local ZoneAmbienceConfig = {}
 
 ZoneAmbienceConfig.TweenSeconds = 2
 
+-- A night sky over the depths: the lobby at violet dusk, the Ruins at twilight, the Foundry in
+-- an ember sunset, the Abyss at midnight. Ambient light stays high enough to read every wall.
 ZoneAmbienceConfig.Zones = {
 	Lobby = {
-		Ambient = Color3.new(0.13, 0.14, 0.18),
-		OutdoorAmbient = Color3.new(0.36, 0.38, 0.46),
-		Brightness = 2.4,
-		ClockTime = 14.2,
-		AtmosphereColor = Color3.new(0.62, 0.66, 0.78),
-		AtmosphereDensity = 0.28,
-		Tint = Color3.new(1, 1, 1),
+		Ambient = Color3.new(0.2, 0.19, 0.27),
+		OutdoorAmbient = Color3.new(0.34, 0.3, 0.46),
+		Brightness = 1.6,
+		ClockTime = 20.2,
+		AtmosphereColor = Color3.new(0.46, 0.38, 0.66),
+		AtmosphereDensity = 0.32,
+		Tint = Color3.new(0.98, 0.96, 1),
 	},
-	-- Cool daylight through a broken roof.
 	Ruins = {
-		Ambient = Color3.new(0.14, 0.15, 0.2),
-		OutdoorAmbient = Color3.new(0.38, 0.4, 0.5),
-		Brightness = 2.3,
-		ClockTime = 14.5,
-		AtmosphereColor = Color3.new(0.62, 0.68, 0.8),
+		Ambient = Color3.new(0.2, 0.21, 0.28),
+		OutdoorAmbient = Color3.new(0.4, 0.4, 0.52),
+		Brightness = 2,
+		ClockTime = 18.6,
+		AtmosphereColor = Color3.new(0.55, 0.56, 0.74),
 		AtmosphereDensity = 0.3,
 		Tint = Color3.new(0.96, 0.98, 1),
 	},
-	-- Low, warm furnace light and a smoky haze.
 	Foundry = {
-		Ambient = Color3.new(0.2, 0.13, 0.08),
-		OutdoorAmbient = Color3.new(0.46, 0.32, 0.22),
-		Brightness = 1.9,
-		ClockTime = 17.6,
-		AtmosphereColor = Color3.new(0.78, 0.52, 0.34),
+		Ambient = Color3.new(0.26, 0.17, 0.12),
+		OutdoorAmbient = Color3.new(0.5, 0.34, 0.24),
+		Brightness = 1.8,
+		ClockTime = 18.1,
+		AtmosphereColor = Color3.new(0.8, 0.5, 0.32),
 		AtmosphereDensity = 0.4,
 		Tint = Color3.new(1, 0.93, 0.84),
 	},
-	-- Night, violet and deep.
 	Abyss = {
-		Ambient = Color3.new(0.12, 0.08, 0.2),
-		OutdoorAmbient = Color3.new(0.28, 0.2, 0.42),
-		Brightness = 1.4,
+		Ambient = Color3.new(0.2, 0.15, 0.3),
+		OutdoorAmbient = Color3.new(0.32, 0.24, 0.48),
+		Brightness = 1.2,
 		ClockTime = 0.5,
 		AtmosphereColor = Color3.new(0.42, 0.3, 0.66),
 		AtmosphereDensity = 0.45,

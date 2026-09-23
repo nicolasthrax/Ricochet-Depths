@@ -126,6 +126,44 @@ describe("Bulwark shield arc", function()
 	end)
 end)
 
+describe("Bulwark spinning shield", function()
+	local shieldSpec = EnemyConfig.Archetypes.Bulwark.Shield
+
+	it("turns its shield on its own, even while the player stands still", function()
+		local service = newService()
+		local enemy = service:Spawn("Bulwark", Vector3.new(0, PLANE_Y, 30))
+		service:SetTargetProvider(targetsAt(Vector3.new(0, PLANE_Y, 0)))
+		expect(shieldSpec.SpinSpeed).toBeGreaterThan(0)
+		local dt, now = 1 / 30, 0.1
+		service:Step(dt, now)
+		local first = EnemyService.ShieldFacing(enemy).Unit
+		-- A quarter turn's worth of steps.
+		for _ = 1, math.floor(90 / shieldSpec.SpinSpeed / dt + 0.5) do
+			now += dt
+			service:Step(dt, now)
+		end
+		local later = EnemyService.ShieldFacing(enemy).Unit
+		expect(math.abs(first:Dot(later))).toBeLessThan(0.2)
+	end)
+
+	it("blocks by where the shield points, not where the Bulwark is walking", function()
+		local service = newService()
+		local enemy = service:Spawn("Bulwark", Vector3.new(0, PLANE_Y, 0))
+		enemy.facing = Vector3.new(0, 0, 1)
+		enemy.shieldFacing = Vector3.new(1, 0, 0)
+		-- Head-on to its walking direction, but into its unshielded side: lands.
+		expect(service:ApplyHit(enemy.part, 1, Vector3.new(0, 0, -1), nil).blocked).toBe(false)
+		enemy.health = enemy.maxHealth
+		-- Straight into the shield: blocked.
+		expect(service:ApplyHit(enemy.part, 1, Vector3.new(-1, 0, 0), nil).blocked).toBe(true)
+	end)
+
+	it("is gentler than before: a narrower arc and a softer lunge", function()
+		expect(shieldSpec.HalfAngleDegrees).toBeLessThanOrEqual(62)
+		expect(EnemyConfig.Archetypes.Bulwark.ContactDamage).toBeLessThanOrEqual(12)
+	end)
+end)
+
 describe("EnemyService stepping", function()
 	it("moves a chaser toward the player and stops at its standoff distance", function()
 		local service = newService()

@@ -72,6 +72,11 @@ function EnemyService:SetObstacles(footprints)
 	self._obstacles = footprints or {}
 end
 
+-- Where an enemy's shield points: its own spin for a spinning shield, else the way it faces.
+function EnemyService.ShieldFacing(enemy)
+	return enemy.shieldFacing or enemy.facing
+end
+
 function EnemyService:GetObstacles()
 	return self._obstacles
 end
@@ -260,10 +265,11 @@ function EnemyService:ApplyHit(part, damage, direction, shooter)
 
 	local multiplier = 1
 	local shield = not enemy.shieldOff and enemy.archetype.Shield
-	if shield and direction and direction.Magnitude > 1e-4 and enemy.facing.Magnitude > 1e-4 then
+	local shieldFacing = EnemyService.ShieldFacing(enemy)
+	if shield and direction and direction.Magnitude > 1e-4 and shieldFacing.Magnitude > 1e-4 then
 		-- Blocked when the shot arrives within the shield's half-angle of dead-on. A shot
 		-- travelling opposite the enemy's facing is a direct hit, so its dot is near -1.
-		local alignment = direction.Unit:Dot(enemy.facing.Unit)
+		local alignment = direction.Unit:Dot(shieldFacing.Unit)
 		if alignment < -math.cos(math.rad(shield.HalfAngleDegrees)) then
 			multiplier = shield.DamageMultiplier
 		end
@@ -360,14 +366,15 @@ function EnemyService:_applyVisuals(enemy)
 		enemy.part.Color = wanted
 	end
 
-	if archetype.Shield and enemy.facing.Magnitude > 1e-4 then
+	local shieldFacing = EnemyService.ShieldFacing(enemy)
+	if archetype.Shield and shieldFacing.Magnitude > 1e-4 then
 		local shield = enemy.part:FindFirstChild("Shield")
 		if shield and enemy.shieldOff then
 			if shield.Transparency < 1 then
 				shield.Transparency = 1
 			end
 		elseif shield then
-			shield.CFrame = CFrame.lookAlong(enemy.position + enemy.facing.Unit * archetype.Shield.Offset, enemy.facing.Unit)
+			shield.CFrame = CFrame.lookAlong(enemy.position + shieldFacing.Unit * archetype.Shield.Offset, shieldFacing.Unit)
 		end
 	end
 end
@@ -419,6 +426,16 @@ function EnemyService:Step(deltaTime, now)
 		local behaviour = EnemyBehaviour.Get(archetype.Behaviour)
 		if behaviour then
 			behaviour(enemy, archetype, deltaTime, target, now, randomSource)
+		end
+		local spin = archetype.Shield and archetype.Shield.SpinSpeed
+		if spin then
+			-- Starts wherever it first faced, then turns steadily.
+			if not enemy.shieldAngle then
+				local facing = enemy.facing
+				enemy.shieldAngle = math.atan2(facing.X, facing.Z)
+			end
+			enemy.shieldAngle += math.rad(spin) * deltaTime
+			enemy.shieldFacing = Vector3.new(math.sin(enemy.shieldAngle), 0, math.cos(enemy.shieldAngle))
 		end
 
 		local previousPosition = enemy.part.Position

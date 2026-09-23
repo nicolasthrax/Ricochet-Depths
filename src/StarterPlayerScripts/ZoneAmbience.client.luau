@@ -6,7 +6,23 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local SkyConfig = require(ReplicatedStorage:WaitForChild("SkyConfig"))
 local ZoneAmbienceConfig = require(ReplicatedStorage:WaitForChild("ZoneAmbienceConfig"))
+
+-- A custom skybox, if the owner has supplied all six faces.
+local faces = { "SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp" }
+local complete = true
+for _, face in faces do
+	if SkyConfig[face] == "" then
+		complete = false
+	end
+end
+local sky = Lighting:FindFirstChildOfClass("Sky")
+if complete and sky then
+	for _, face in faces do
+		sky[face] = SkyConfig[face]
+	end
+end
 
 local player = Players.LocalPlayer
 local info = TweenInfo.new(ZoneAmbienceConfig.TweenSeconds, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)

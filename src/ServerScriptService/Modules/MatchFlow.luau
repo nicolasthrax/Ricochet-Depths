@@ -86,6 +86,7 @@ function Flow.methods:HandleCharacterAdded(player)
 end
 
 function Flow.methods:_onRoomCleared(now)
+	self:_sweepCoins()
 	local definition = self._plan[self._roomIndex]
 	if definition and definition.Kind == "Elite" then
 		self._eliteCleared = true
@@ -97,6 +98,9 @@ function Flow.methods:_onRoomCleared(now)
 			state.roomsCleared += 1
 			if state.alive and state.stats.RoomClearHeal > 0 then
 				state:Heal(state.stats.RoomClearHeal)
+			end
+			if state.alive and definition and definition.HealOnClear then
+				state:Heal(state.maxHealth * definition.HealOnClear)
 			end
 			self:_pushPlayerState(player)
 		end
@@ -130,6 +134,9 @@ end
 
 function Flow.methods:_finish(outcome, now)
 	self._projectiles:Clear()
+	if self._coins then
+		self._coins:Clear() -- whatever is still on the floor of a lost room is gone
+	end
 	self._rooms:Unload()
 	self._upgrades:ClearAll()
 
@@ -186,7 +193,7 @@ function Flow.methods:_cleanup(now)
 		if state then
 			state:ResetRun()
 			if self._world then
-				self._world.Teleport(player, RunConfig.LobbyPosition)
+				self._world.Teleport(player, RunConfig.LobbyReturnPosition)
 				if self._world.SetWalkSpeed then
 					self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed)
 				end

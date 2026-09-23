@@ -30,40 +30,40 @@
         "Technology": "ShadowMap",
         "GlobalShadows": true,
         "ShadowSoftness": 0.15,
-        "Brightness": 2.4,
-        "ClockTime": 14.2,
+        "Brightness": 1.6,
+        "ClockTime": 20.2,
         "GeographicLatitude": 35,
         "Ambient": [
-          0.13,
-          0.14,
-          0.18
+          0.2,
+          0.19,
+          0.27
         ],
         "OutdoorAmbient": [
-          0.36,
-          0.38,
+          0.34,
+          0.3,
           0.46
         ],
         "EnvironmentDiffuseScale": 0.6,
         "EnvironmentSpecularScale": 0.4,
-        "ExposureCompensation": 0.1
+        "ExposureCompensation": 0.25
       },
       "Atmosphere": {
         "$className": "Atmosphere",
         "$properties": {
-          "Density": 0.28,
+          "Density": 0.32,
           "Offset": 0.1,
           "Color": [
-            0.62,
-            0.66,
-            0.78
+            0.46,
+            0.38,
+            0.66
           ],
           "Decay": [
-            0.28,
-            0.3,
-            0.4
+            0.22,
+            0.16,
+            0.36
           ],
-          "Glare": 0,
-          "Haze": 1.2
+          "Glare": 0.2,
+          "Haze": 1.6
         }
       },
       "Bloom": {
@@ -80,6 +80,15 @@
           "Contrast": 0.12,
           "Saturation": 0.08,
           "Brightness": 0
+        }
+      },
+      "Sky": {
+        "$className": "Sky",
+        "$properties": {
+          "StarCount": 3000,
+          "CelestialBodiesShown": true,
+          "MoonAngularSize": 18,
+          "SunAngularSize": 8
         }
       }
     }

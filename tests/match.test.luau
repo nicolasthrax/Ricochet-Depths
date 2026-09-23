@@ -157,7 +157,7 @@ describe("run loop", function()
 		expect(ctx.match:GetState()).toBe(States.Lobby)
 		expect(ctx.enemies:GetActiveCount()).toBe(0)
 		expect(ctx.projectiles:GetActiveCount()).toBe(0)
-		expect(ctx.positions[player]).toEqual(RunConfig.LobbyPosition)
+		expect(ctx.positions[player]).toEqual(RunConfig.LobbyReturnPosition)
 		expect(ctx.match:GetPlayerState(player).roomsCleared).toBe(0)
 	end)
 
@@ -311,7 +311,7 @@ describe("reward integrity", function()
 		expect(ctx.rewards:WasGranted(2, player)).toBe(false)
 	end)
 
-	it("scales payout with the salvage multiplier and clamps to the cap", function()
+	it("scales payout with the coin multiplier and clamps to the cap", function()
 		reset()
 		local RewardConfig = __require("RewardConfig")
 		local UpgradeConfig = __require("UpgradeConfig")
@@ -319,14 +319,14 @@ describe("reward integrity", function()
 
 		local state = PlayerState.new({ Name = "Rich", UserId = 16 })
 		state.roomsCleared = 4
-		state.kills = 30
+		state.coins = 30
 		local plain = RewardService.Compute(state, "Extracted", true)
 
 		state:AddUpgrade(UpgradeConfig.Get("Scavenger"))
 		local boosted = RewardService.Compute(state, "Extracted", true)
 		expect(boosted).toBeGreaterThan(plain)
 
-		state.kills = 10 ^ 9
+		state.coins = 10 ^ 9
 		expect(RewardService.Compute(state, "Extracted", true)).toBe(RewardConfig.MaxPerRun)
 	end)
 
@@ -335,7 +335,7 @@ describe("reward integrity", function()
 		local PlayerState = __require("PlayerState")
 		local state = PlayerState.new({ Name = "Loser", UserId = 17 })
 		state.roomsCleared = 2
-		state.kills = 10
+		state.coins = 10
 		expect(RewardService.Compute(state, "Defeated", false))
 			.toBeLessThan(RewardService.Compute(state, "Extracted", false))
 	end)
@@ -553,5 +553,72 @@ describe("boss room", function()
 		wipeRoom(ctx, player)
 		step(ctx, DT)
 		expect(ctx.match:GetRunSnapshot().Boss).toBeNil()
+	end)
+end)
+
+describe("health regeneration", function()
+	local function running()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local ctx = build(12, function()
+			return RunPlanner.Fixed({ "Atrium", "Cistern" })
+		end)
+		local player = { Name = "Mender", UserId = 93 }
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		-- Park the player far from every enemy so nothing interrupts the regen.
+		ctx.positions[player] = Vector3.new(0, PLANE_Y, -500)
+		return ctx, ctx.match:GetPlayerState(player)
+	end
+
+	it("waits after a hit, then heals steadily, never past the maximum", function()
+		local ctx, state = running()
+		state.invulnerableUntil = 0
+		state:ApplyDamage(40, clock)
+		local hurt = state.health
+		step(ctx, RunConfig.Regen.Delay - 0.5)
+		expect(state.health).toBe(hurt)
+		step(ctx, 2)
+		expect(state.health).toBeGreaterThan(hurt)
+		expect(state.health).toBeLessThanOrEqual(hurt + RunConfig.Regen.PerSecond * 2 + 0.01)
+		step(ctx, 60)
+		expect(state.health).toBe(state.maxHealth)
+	end)
+
+	it("heals faster with Mending, and never heals a downed player", function()
+		local ctx, state = running()
+		state.invulnerableUntil = 0
+		state.stats.RegenBonus = 2
+		state:ApplyDamage(50, clock)
+		local hurt = state.health
+		step(ctx, RunConfig.Regen.Delay + 1)
+		expect(state.health - hurt).toBeGreaterThan(RunConfig.Regen.PerSecond + 1)
+
+		state.alive = false
+		state.health = 0
+		step(ctx, 5)
+		expect(state.health).toBe(0)
+	end)
+end)
+
+describe("heal before the boss", function()
+	it("restores every live player to full when the Warden Vault is cleared", function()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local ctx = build(21, function()
+			return RunPlanner.Fixed({ "WardenVault", "Throne" })
+		end)
+		local player = { Name = "Weary", UserId = 94 }
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		local state = ctx.match:GetPlayerState(player)
+		state.invulnerableUntil = 0
+		state:ApplyDamage(70, clock)
+		wipeRoom(ctx, player)
+		step(ctx, DT)
+		expect(ctx.match:GetState()).toBe(States.UpgradeChoice)
+		expect(state.health).toBe(state.maxHealth)
 	end)
 end)

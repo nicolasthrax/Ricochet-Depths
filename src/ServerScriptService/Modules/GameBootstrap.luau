@@ -45,7 +45,6 @@ function GameBootstrap.Start()
 	arena.Name = "Arena"
 	arena.Parent = workspace
 
-	LobbyBuilder.ClearTemplate(workspace)
 	local _, startPrompt, lobbyParts = LobbyBuilder.Build(workspace)
 
 	local planeY = RoomConfig.FloorY + ProjectileConfig.PlaneHeight

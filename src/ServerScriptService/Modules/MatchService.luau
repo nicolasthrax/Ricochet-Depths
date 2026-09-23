@@ -66,6 +66,14 @@ function MatchService.new(deps)
 	self._enemies.OnPlayerContact = function(player, damage, enemy, now)
 		self:HandlePlayerContact(player, damage, enemy, now or self._now)
 	end
+	-- Room mechanics see every shot's travel (amp pads).
+	self._projectiles.SegmentHook = function(entry, from, to)
+		local mechanics = self._rooms:GetMechanics()
+		if mechanics then
+			mechanics:ApplySegment(entry, from, to)
+		end
+	end
+	self._hazardNextAt = {}
 	-- Lets a projectile that an enemy moved over still register, rather than passing through.
 	self._projectiles.OverlapQuery = function(position, margin)
 		return self._enemies:FindEnclosingMover(position, margin)
@@ -190,6 +198,7 @@ function MatchService:Step(deltaTime, now)
 		end
 	elseif state == States.Combat then
 		self._rooms:Step(deltaTime, now)
+		self:_applyHazards(now)
 		if self:_allDown() then
 			self:_finish("Defeated", now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then

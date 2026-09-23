@@ -22,6 +22,9 @@ function ProjectileService.new(poolParent, collisionRoot, planeY)
 	-- Set by the game loop: (raycastResult, entry) -> true to consume the projectile.
 	-- The entry carries direction, damage, contacts and shooter, so no extra table is allocated.
 	self.OnImpact = nil
+	-- Optional (entry, from, to), called with each frame's travel before collision: how room
+	-- mechanics such as amp pads see a shot pass over them.
+	self.SegmentHook = nil
 
 	-- Optional: (position, margin) -> instance, normal. Consulted only for a projectile that
 	-- made no contact this frame, to catch a body that moved over it. See ResolveEnemyOverlap.
@@ -88,6 +91,9 @@ function ProjectileService:_stepEntry(entry, dt, now)
 	local from = entry.position
 	local to = Vector3.new(part.Position.X, planeY, part.Position.Z)
 	local resolved = 0
+	if self.SegmentHook then
+		self.SegmentHook(entry, from, to)
+	end
 
 	while resolved < ProjectileConfig.MaxBouncesPerStep do
 		local segment = to - from
@@ -207,6 +213,7 @@ function ProjectileService:Clear()
 end
 
 function ProjectileService:Destroy()
+	self.SegmentHook = nil
 	self:Clear()
 	self._pool:Destroy()
 	self.OnImpact = nil

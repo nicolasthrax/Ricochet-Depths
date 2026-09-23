@@ -115,7 +115,9 @@ local function outlineSolid(decor, solid, floorY, height, color)
 	local inset = config.TrimInset
 	-- Bank-shot trims stand a step taller than wall trims: where a bevel meets a wall their
 	-- trims overlap, and at equal heights the two colours would z-fight.
-	local lift = if solid.Kind == "Bevel" or solid.Kind == "Reflector" then config.HazardTrimLift else 0
+	local lift = if solid.Kind == "Bevel" or solid.Kind == "Reflector" or solid.Kind == "Sweeper"
+		then config.HazardTrimLift
+		else 0
 	local capHeight = config.TopTrimHeight + lift
 	local cap = makeDecor(
 		solid.Name .. "Cap",
@@ -163,6 +165,41 @@ local function buildSpawnPad(room, decor, floorY, color, ringColor)
 	return pad
 end
 
+-- Mechanics that are not solids: laser gate beams (burn players, never block shots) and amp
+-- pads on the floor. Both opt out of raycasts; RoomMechanics drives them.
+local function buildFloorMechanics(room, layout, floorY)
+	local config = RoomConfig.Mechanics
+	local gates, pads = 0, 0
+	for _, mechanic in layout.Mechanics or {} do
+		if mechanic.Kind == "LaserGate" then
+			gates += 1
+			local from, to = mechanic.From, mechanic.To
+			local length = (to - from).Magnitude
+			local position = Vector3.new((from.X + to.X) / 2, floorY + config.GateHeight / 2, (from.Y + to.Y) / 2)
+			local beam = makeDecor(
+				"Gate" .. gates,
+				Vector3.new(config.GateWidth, config.GateHeight, length),
+				position,
+				config.GateOffColor,
+				Enum.Material.Neon,
+				room
+			)
+			beam.CFrame = CFrame.lookAt(position, Vector3.new(to.X, position.Y, to.Y))
+			beam.Transparency = config.GateOffTransparency
+		elseif mechanic.Kind == "AmpPad" then
+			pads += 1
+			makeDecor(
+				"AmpPad" .. pads,
+				Vector3.new(mechanic.Size.X, config.AmpPadThickness, mechanic.Size.Y),
+				Vector3.new(mechanic.Offset.X, floorY + config.AmpPadY, mechanic.Offset.Y),
+				config.AmpColor,
+				Enum.Material.Neon,
+				room
+			)
+		end
+	end
+end
+
 -- Colour and trim for each kind of solid. Bank-shot pieces wear hazard trim so they read as
 -- surfaces to play off rather than as cover.
 local function styleFor(kind, layout)
@@ -171,6 +208,8 @@ local function styleFor(kind, layout)
 		return layout.AccentColor or RoomConfig.WallColor, trim
 	elseif kind == "Obstacle" then
 		return RoomConfig.ObstacleColor, trim
+	elseif kind == "Breakable" then
+		return RoomConfig.Mechanics.BreakableColor, trim
 	end
 	return RoomConfig.BumperColor, RoomConfig.Decor.HazardColor
 end
@@ -217,11 +256,15 @@ function RoomBuilder.Build(parent, layoutId)
 		local part = makePart(solid.Name, Vector3.new(solid.Size.X, height, solid.Size.Y), Vector3.zero, color, room)
 		local isCover = solid.Kind == "Wall" or solid.Kind == "Obstacle"
 		part.Material = if isCover then style.WallMaterial else RoomConfig.BumperMaterial
+		if solid.Kind == "Breakable" then
+			part.Material = RoomConfig.Mechanics.BreakableMaterial
+		end
 		orient(part, Vector3.new(solid.Center.X, wallY, solid.Center.Y), solid.Yaw)
 		outlineSolid(decor, solid, floorY, height, trim)
 	end
 
 	buildSpawnPad(room, decor, floorY, layout.AccentColor or RoomConfig.WallColor, trimColor)
+	buildFloorMechanics(room, layout, floorY)
 
 	local bounds = {
 		center = Vector3.new(0, floorY, 0),

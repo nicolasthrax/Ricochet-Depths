@@ -500,3 +500,30 @@ describe("MatchService run plans", function()
 		Harness.removePlayer(player)
 	end)
 end)
+
+describe("room hazards in a run", function()
+	it("burns a player standing in a laser gate, at most once per tick", function()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local RoomConfig = __require("RoomConfig")
+		local ctx = build(5, function()
+			return RunPlanner.Fixed({ "Conveyor" })
+		end)
+		local player = { Name = "Gated", UserId = 91 }
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		expect(ctx.match:GetState()).toBe(States.Combat)
+
+		local gate = RoomConfig.GetLayout("Conveyor").Mechanics[1]
+		ctx.positions[player] = Vector3.new((gate.From.X + gate.To.X) / 2, PLANE_Y, gate.From.Y)
+		local state = ctx.match:GetPlayerState(player)
+		local before = state.health
+		-- Past spawn protection and through at least one full on period.
+		step(ctx, RunConfig.SpawnInvulnerability + gate.OnTime + gate.OffTime + 0.5)
+		local lost = before - state.health
+		expect(lost).toBeGreaterThan(0)
+		local maxBurns = math.ceil(gate.OnTime / RoomConfig.Mechanics.GateTick) + 1
+		expect(lost).toBeLessThanOrEqual(maxBurns * RoomConfig.Mechanics.GateDamage)
+	end)
+end)

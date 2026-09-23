@@ -98,14 +98,37 @@ function RoomGeometry.Solids(layout, roomConfig)
 		})
 	end
 
+	-- Mechanics that block shots are solids too: breakable cover, and sweeping reflectors in
+	-- their resting pose. Gates and amp pads are not; they never stop a shot.
+	local counts = {}
+	for _, mechanic in layout.Mechanics or {} do
+		if mechanic.Kind == "Breakable" or mechanic.Kind == "Sweeper" then
+			counts[mechanic.Kind] = (counts[mechanic.Kind] or 0) + 1
+			local sweeper = mechanic.Kind == "Sweeper"
+			table.insert(solids, {
+				Name = mechanic.Kind .. counts[mechanic.Kind],
+				Kind = mechanic.Kind,
+				Center = mechanic.Offset,
+				Size = if sweeper
+					then Vector2.new(mechanic.Length, roomConfig.ReflectorThickness)
+					else mechanic.Size,
+				Yaw = mechanic.Yaw or 0,
+			})
+		end
+	end
+
 	return solids
 end
 
--- Everything standing inside the room: the solids that are not walls.
+-- Everything standing inside the room: the solids that are not walls. A sweeper counts as the
+-- square its swing can reach, so nothing is placed where it will pass.
 function RoomGeometry.Footprints(layout, roomConfig)
 	local out = {}
 	for _, solid in RoomGeometry.Solids(layout, roomConfig) do
-		if solid.Kind ~= "Wall" then
+		if solid.Kind == "Sweeper" then
+			local reach = solid.Size.X
+			table.insert(out, { Name = solid.Name, Kind = solid.Kind, Center = solid.Center, Size = Vector2.new(reach, reach), Yaw = 0 })
+		elseif solid.Kind ~= "Wall" then
 			table.insert(out, solid)
 		end
 	end

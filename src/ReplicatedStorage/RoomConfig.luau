@@ -166,6 +166,11 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(-30, -30), Length = 14, Yaw = 45 },
 			{ Offset = Vector2.new(30, 30), Length = 14, Yaw = 45 },
 		},
+		-- Amp pads mirroring the bumpers: bank through one to crack the core faster.
+		Mechanics = {
+			{ Kind = "AmpPad", Offset = Vector2.new(-30, 30), Size = Vector2.new(6, 6) },
+			{ Kind = "AmpPad", Offset = Vector2.new(30, -30), Size = Vector2.new(6, 6) },
+		},
 		EnemySpawns = {
 			Vector2.new(0, 40), Vector2.new(-40, 0), Vector2.new(40, 0),
 			Vector2.new(0, -40), Vector2.new(-28, 28), Vector2.new(28, -28),
@@ -217,6 +222,13 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(-44, -28), Length = 12, Yaw = -45 },
 			{ Offset = Vector2.new(44, -28), Length = 12, Yaw = 45 },
 		},
+		-- Crates either side of the south approach, and gates that pulse across the side lanes.
+		Mechanics = {
+			{ Kind = "Breakable", Offset = Vector2.new(-16, -20), Size = Vector2.new(6, 6) },
+			{ Kind = "Breakable", Offset = Vector2.new(16, -20), Size = Vector2.new(6, 6) },
+			{ Kind = "LaserGate", From = Vector2.new(-62, -12), To = Vector2.new(-41, -12), OnTime = 1.8, OffTime = 2.8 },
+			{ Kind = "LaserGate", From = Vector2.new(41, -12), To = Vector2.new(62, -12), OnTime = 1.8, OffTime = 2.8, Phase = 2.3 },
+		},
 		EnemySpawns = {
 			Vector2.new(-44, 38), Vector2.new(44, 38), Vector2.new(0, 40), Vector2.new(-52, 0),
 			Vector2.new(52, 0), Vector2.new(-22, -46), Vector2.new(22, -46), Vector2.new(0, 18),
@@ -240,6 +252,11 @@ RoomConfig.Layouts = {
 		Reflectors = {
 			{ Offset = Vector2.new(-20, 36), Length = 12, Yaw = 45 },
 			{ Offset = Vector2.new(20, 36), Length = 12, Yaw = -45 },
+		},
+		-- Gates that run on from the ends of the northern bars, opening and closing the lanes.
+		Mechanics = {
+			{ Kind = "LaserGate", From = Vector2.new(-28, 16), To = Vector2.new(-12, 16), OnTime = 2, OffTime = 2.5 },
+			{ Kind = "LaserGate", From = Vector2.new(12, 16), To = Vector2.new(28, 16), OnTime = 2, OffTime = 2.5, Phase = 2.25 },
 		},
 		EnemySpawns = {
 			Vector2.new(-54, 34), Vector2.new(54, 34), Vector2.new(-54, -30), Vector2.new(54, -30),
@@ -265,6 +282,13 @@ RoomConfig.Layouts = {
 		Reflectors = {
 			{ Offset = Vector2.new(0, 44), Length = 14, Yaw = 45 },
 			{ Offset = Vector2.new(0, -44), Length = 14, Yaw = -45 },
+		},
+		-- Slag plugs that half-close the north and south gaps until they are shot away.
+		Mechanics = {
+			{ Kind = "Breakable", Offset = Vector2.new(-14, 28), Size = Vector2.new(6, 4) },
+			{ Kind = "Breakable", Offset = Vector2.new(14, 28), Size = Vector2.new(6, 4) },
+			{ Kind = "Breakable", Offset = Vector2.new(-14, -28), Size = Vector2.new(6, 4) },
+			{ Kind = "Breakable", Offset = Vector2.new(14, -28), Size = Vector2.new(6, 4) },
 		},
 		EnemySpawns = {
 			Vector2.new(-42, 42), Vector2.new(42, 42), Vector2.new(-42, -42), Vector2.new(42, -42),
@@ -293,6 +317,13 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(-50, -30), Length = 14, Yaw = 45 },
 			{ Offset = Vector2.new(50, 30), Length = 14, Yaw = 45 },
 		},
+		-- Gates sealing the lanes behind the tall benches, and crates to shoot through.
+		Mechanics = {
+			{ Kind = "LaserGate", From = Vector2.new(-70, 24), To = Vector2.new(-40, 24), OnTime = 2.2, OffTime = 2.6 },
+			{ Kind = "LaserGate", From = Vector2.new(40, -24), To = Vector2.new(70, -24), OnTime = 2.2, OffTime = 2.6, Phase = 2.4 },
+			{ Kind = "Breakable", Offset = Vector2.new(20, 10), Size = Vector2.new(6, 6), Health = 4 },
+			{ Kind = "Breakable", Offset = Vector2.new(-20, -10), Size = Vector2.new(6, 6), Health = 4 },
+		},
 		EnemySpawns = {
 			Vector2.new(-54, 42), Vector2.new(54, -42), Vector2.new(28, 44), Vector2.new(-28, -44),
 			Vector2.new(-56, 0), Vector2.new(56, 0), Vector2.new(0, 22), Vector2.new(0, -22),
@@ -318,6 +349,11 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(0, 30), Length = 12, Yaw = 45 },
 			{ Offset = Vector2.new(0, -30), Length = 12, Yaw = -45 },
 		},
+		-- Amp strips across both side lanes: a shot sent through one hits harder.
+		Mechanics = {
+			{ Kind = "AmpPad", Offset = Vector2.new(-36, 0), Size = Vector2.new(3, 14) },
+			{ Kind = "AmpPad", Offset = Vector2.new(36, 0), Size = Vector2.new(3, 14) },
+		},
 		EnemySpawns = {
 			Vector2.new(48, 48), Vector2.new(-48, 48), Vector2.new(-48, -48), Vector2.new(48, -48),
 			Vector2.new(0, 50), Vector2.new(0, -50), Vector2.new(-24, 0), Vector2.new(24, 0),
@@ -342,6 +378,11 @@ RoomConfig.Layouts = {
 		Reflectors = {
 			{ Offset = Vector2.new(-36, -46), Length = 12, Yaw = 45 },
 			{ Offset = Vector2.new(36, 46), Length = 12, Yaw = 45 },
+		},
+		-- A sweeping bumper at the north end, and an amp strip across the south of the shaft.
+		Mechanics = {
+			{ Kind = "Sweeper", Offset = Vector2.new(36, 46), Length = 12, Yaw = 45, Swing = 35, Period = 5 },
+			{ Kind = "AmpPad", Offset = Vector2.new(0, -44), Size = Vector2.new(14, 3) },
 		},
 		EnemySpawns = {
 			Vector2.new(-36, 48), Vector2.new(36, -48), Vector2.new(0, 52), Vector2.new(0, -52),
@@ -370,6 +411,11 @@ RoomConfig.Layouts = {
 			{ Offset = Vector2.new(-46, 0), Length = 14, Yaw = 45 },
 			{ Offset = Vector2.new(46, 0), Length = 14, Yaw = -45 },
 		},
+		-- Two sweeping bumpers on the diagonal: the bank angles change as they swing.
+		Mechanics = {
+			{ Kind = "Sweeper", Offset = Vector2.new(-28, -44), Length = 12, Yaw = 45, Swing = 30, Period = 6 },
+			{ Kind = "Sweeper", Offset = Vector2.new(28, 44), Length = 12, Yaw = 45, Swing = 30, Period = 6 },
+		},
 		EnemySpawns = {
 			Vector2.new(-44, 44), Vector2.new(44, 44), Vector2.new(-44, -44), Vector2.new(44, -44),
 			Vector2.new(0, 50), Vector2.new(0, -50), Vector2.new(-18, 0), Vector2.new(18, 0),
@@ -378,6 +424,31 @@ RoomConfig.Layouts = {
 }
 
 RoomConfig.DefaultLayout = "Atrium"
+
+-- Room mechanics (see RoomMechanics): tuning shared by every layout that uses them.
+RoomConfig.Mechanics = {
+	-- Laser gates: a beam that burns players standing in it while on. Shots pass through.
+	GateDamage = 12,
+	GateTick = 0.5, -- seconds between burns for a player standing in an active beam
+	GateWarnTime = 0.8, -- the tail of each off period, shown in the warning colour
+	GateHitHalfWidth = 2.2, -- beam half-width plus a character's radius
+	GateHeight = 6,
+	GateWidth = 0.5,
+	GateOffColor = Color3.fromRGB(110, 60, 60),
+	GateWarnColor = Color3.fromRGB(255, 176, 64),
+	GateOnColor = Color3.fromRGB(255, 70, 70),
+	GateOffTransparency = 0.85,
+	-- Breakable cover: ordinary cover until shot enough, then gone.
+	BreakableHealth = 3,
+	BreakableColor = Color3.fromRGB(150, 118, 92),
+	CrackedColor = Color3.fromRGB(96, 70, 56),
+	BreakableMaterial = Enum.Material.Slate,
+	-- Amp pads: a shot crossing one does AmpBonus more damage for the rest of its flight.
+	AmpBonus = 1,
+	AmpColor = Color3.fromRGB(255, 214, 90),
+	AmpPadThickness = 0.05,
+	AmpPadY = 0.27, -- centre height, between the floor border and the foot trims
+}
 
 -- Each zone's look. RoomBuilder reads the floor and wall materials and colours from here; a
 -- layout's own AccentColor and TrimColor still tint its walls and trims.

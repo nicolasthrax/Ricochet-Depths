@@ -5,8 +5,9 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.0.1: the launch build plus a pre-Studio audit. Feature-complete and green headlessly (506
-tests); awaiting Studio and published-server validation (V9, and the launch checklist).**
+**1.0.2: the launch build, with the Studio fall-through fixed. Feature-complete and green
+headlessly (510 tests); awaiting Studio and published-server validation (V9, and the launch
+checklist).**
 
 This build answers the third playtest's notes and adds what a public launch needs:
 
@@ -224,13 +225,15 @@ fixed rooms (the dry run seeds its plans, so these repeat exactly).
 
 | Bot | Ruins 1 | Ruins 2 | Foundry 1 | Foundry 2 | Abyss 1 | Vault | Throne | Extracted | Runs reaching the boss |
 |---|---|---|---|---|---|---|---|---|---|
-| Direct fire, exact aim | 25.3s | 9.3s | 7.4s | 152.6s* | 152.5s* | 5.3s | 6.4s | 10% | 60 of 60 |
-| Direct fire with aim error | 9.2s | 9.2s | 7.9s | 10.4s | 13.8s | 5.5s | 15.1s | 8% | 40 of 40 |
-| Probing (throws shots off-angle when blocked) | 8.8s | 9.1s | 7.3s | 9.7s | 8.0s | 5.4s | 8.7s | 5% | 40 of 40 |
+| Direct fire, exact aim | 7.0s | 7.8s | 6.5s | 9.5s | 6.3s | 5.3s | 56.6s | 93% | 60 of 60 |
+| Direct fire with aim error | 8.0s | 8.6s | 7.7s | 9.2s | 7.9s | 5.7s | 44.9s | 100% | 40 of 40 |
+| Probing (throws shots off-angle when blocked) | 6.6s | 8.0s | 6.9s | 9.6s | 6.4s | 5.3s | 45.5s | 98% | 40 of 40 |
 
-Medians, 1.0.0. Every simulated run now reaches the Warden Prime: the Bulwark's spinning shield,
-regen and the heal after the Vault moved the wall to the boss, where it belongs. The bots never
-dodge or kite, so the boss's win rate for people is the first number to measure after launch.
+Medians, 1.0.2, with bots that move (earlier tables measured bots that never left the spawn
+pad; see the 1.0.2 changelog). The bots see every enemy and kite perfectly, so they now take
+almost no damage before the boss and usually beat it; the runs they lose run out of time in the
+Throne. People will not play this well, so the boss's win rate for real players is still the
+first number to measure after launch.
 
 \* The exact-aim bot never probes. It stalls against targets behind cover until the room's 150s
 limit clears the room. That is a bot limitation, not a room defect.
@@ -266,6 +269,31 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.0.2 — the first room loads under you
+
+Studio playtest: every run dropped the player into the void at the first room (Upper Ruins),
+over and over.
+
+- **Cause.** `RoomBuilder.translate` moved each room part into its arena slot twice: once by
+  setting `CFrame`, then again by setting `Position`. In the engine those are one property, so
+  slot 1's room was built at X=1000 while players were sent to X=500, over empty space. Rooms
+  now move with a single `part.CFrame + offset`, which also keeps each part's full rotation.
+- **Why the tests missed it.** In the test stub, a part's `CFrame` and `Position` were separate
+  fields, so the first move never happened there. The stub now stores them as one value, like
+  the engine. With that change the old code fails three tests by exactly 500 studs, and the fix
+  passes them. New tests check that every room, in every arena slot, has its floor under the
+  spawn point, its cover and its enemies.
+- **Fall rescue.** A player more than 30 studs below the room's floor during a run is put back
+  on the spawn pad instead of dying (`RunConfig.FallRescueDepth`). Teleports also stop the
+  character's fall speed.
+- **The boss could be outlasted.** The 150s soft-lock timer cleared the boss room like any
+  other, so hiding from the Warden Prime won the run with the full extraction bonus. The boss
+  room now has 300s, and running out of time ends the run as Out of Time.
+- **Dry-run bots never moved.** They moved by setting `CFrame`, which the old stub ignored, so
+  every earlier dry run measured bots standing on the spawn pad. The table below is re-measured
+  with bots that walk and kite. Balance tuned in 1.0.0 was measured against the stationary
+  bots.
 
 ### 1.0.1 — pre-Studio audit
 

@@ -98,6 +98,15 @@ describe("ArenaDirector", function()
 		for _, enemy in slotA.enemies:GetEnemies() do
 			expect(math.abs(enemy.position.X - slotA.origin.X)).toBeLessThan(80)
 		end
+
+		-- Everyone lands on their own room's floor, not beside it in empty space.
+		for _, player in { a[1], a[2], b[1], b[2], b[3] } do
+			local floor = ctx.director:SlotFor(player).arena:FindFirstChild("Room"):FindFirstChild("Floor")
+			local at = ctx.positions[player]
+			expect(math.abs(at.X - floor.Position.X)).toBeLessThan(floor.Size.X / 2)
+			expect(math.abs(at.Z - floor.Position.Z)).toBeLessThan(floor.Size.Z / 2)
+			expect(at.Y).toBeGreaterThan(floor.Position.Y)
+		end
 	end)
 
 	it("tells each group only about its own run", function()

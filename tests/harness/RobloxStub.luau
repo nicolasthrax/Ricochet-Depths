@@ -248,6 +248,16 @@ local function makeCFrame(position, look, right, up)
 		_up = up or v3(0, 1, 0),
 	}, CFrameMt)
 end
+-- The same rotation somewhere else.
+local function moveCFrame(cframe, position)
+	return makeCFrame(position, rawget(cframe, "_look"), rawget(cframe, "_right"), rawget(cframe, "_up"))
+end
+CFrameMt.__add = function(cframe, offset)
+	return moveCFrame(cframe, rawget(cframe, "_position") + offset)
+end
+CFrameMt.__sub = function(cframe, offset)
+	return moveCFrame(cframe, rawget(cframe, "_position") - offset)
+end
 CFrame = {
 	new = function(x, y, z)
 		if typeof and type(x) == "table" then
@@ -428,6 +438,15 @@ end
 local instanceMt = {
 	__robloxType = "Instance",
 	__index = function(self, key)
+		-- A part's Position and CFrame are one property in the engine, stored once here.
+		local cframe = rawget(self, "_cframe")
+		if cframe then
+			if key == "CFrame" then
+				return cframe
+			elseif key == "Position" then
+				return rawget(cframe, "_position")
+			end
+		end
 		local method = InstanceMethods[key]
 		if method then
 			return method
@@ -439,9 +458,17 @@ local instanceMt = {
 		return nil
 	end,
 	__newindex = function(self, key, value)
-		if key == "CFrame" then
-			-- In the engine these are the same property; game code sets CFrame to move a part
-			-- and other code reads Position back. Keeping them in step matters for teleports.
+		-- In the engine Position and CFrame are one property: setting CFrame moves the part,
+		-- and setting Position moves it while keeping its rotation. Code that sets both in a row
+		-- therefore moves a part twice, exactly as it would in Studio.
+		local cframe = rawget(self, "_cframe")
+		if cframe and key == "CFrame" then
+			rawset(self, "_cframe", value)
+			return
+		elseif cframe and key == "Position" then
+			rawset(self, "_cframe", moveCFrame(cframe, value))
+			return
+		elseif key == "CFrame" then
 			rawset(self, "CFrame", value)
 			local position = type(value) == "table" and rawget(value, "_position") or nil
 			if position then
@@ -487,9 +514,8 @@ function Instance.new(className, parent)
 	rawset(instance, "Destroying", Signal.new("Destroying"))
 
 	if className == "Part" or className == "SpawnLocation" or className == "MeshPart" then
-		rawset(instance, "Position", Vector3.zero)
+		rawset(instance, "_cframe", CFrame.new(0, 0, 0))
 		rawset(instance, "Size", Vector3.one)
-		rawset(instance, "CFrame", CFrame.new(0, 0, 0))
 		rawset(instance, "AssemblyLinearVelocity", Vector3.zero)
 		rawset(instance, "Anchored", false)
 		rawset(instance, "CanCollide", true)

@@ -215,14 +215,13 @@ local function styleFor(kind, layout)
 	return RoomConfig.BumperColor, RoomConfig.Decor.HazardColor
 end
 
--- Moves every part in `room` by `offset`, keeping its heading. Rooms are laid out around the
--- world origin and then shifted into their arena slot.
+-- Moves every part in `room` by `offset`, keeping its rotation. Rooms are laid out around the
+-- world origin and then shifted into their arena slot. One assignment only: CFrame and
+-- Position are the same property, so setting both would move each part twice.
 local function translate(room, offset)
 	for _, part in room:GetDescendants() do
 		if part:IsA("BasePart") then
-			local look = part.CFrame.LookVector
-			part.CFrame = CFrame.lookAlong(part.Position + offset, look)
-			part.Position = part.Position + offset
+			part.CFrame = part.CFrame + offset
 		end
 	end
 end

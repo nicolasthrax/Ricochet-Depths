@@ -481,6 +481,44 @@ describe("rooms built in an arena slot away from the origin", function()
 		end
 	end)
 
+	-- The Studio failure this guards: a room moved to its slot twice stood 500 studs from where
+	-- players were sent, and they fell through empty space into the void.
+	it("puts every room's floor under its spawn point, in every arena slot", function()
+		for slot = 1, RunConfig.Arenas.MaxSlots do
+			local origin = Vector3.new(slot * RunConfig.Arenas.Spacing, 0, 0)
+			for _, definition in RunConfig.Rooms do
+				local arena = Instance.new("Folder")
+				local enemies = EnemyService.new(arena, PLANE_Y, slot)
+				local rooms = RoomService.new(arena, enemies, PLANE_Y, Random.new(slot), origin)
+				rooms:Load(definition, 0)
+				local room = arena:FindFirstChild("Room")
+				local floor = room:FindFirstChild("Floor")
+				local half = floor.Size / 2
+				local function onFloor(position)
+					return math.abs(position.X - floor.Position.X) <= half.X and math.abs(position.Z - floor.Position.Z) <= half.Z
+				end
+				expect((floor.Position - Vector3.new(origin.X, floor.Position.Y, origin.Z)).Magnitude).toBeCloseTo(0)
+				for _ = 1, 4 do
+					local point = rooms:GetSpawnPoint()
+					if not onFloor(point) or point.Y <= floor.Position.Y + half.Y then
+						error(string.format("%s in slot %d: spawn point %s is not over the floor", definition.Id, slot, tostring(point)))
+					end
+				end
+				for _, part in room:GetChildren() do
+					if part:IsA("BasePart") and part.CanCollide and not onFloor(part.Position) then
+						error(string.format("%s in slot %d: %s stands off the floor", definition.Id, slot, part.Name))
+					end
+				end
+				for _, enemy in enemies:GetEnemies() do
+					if not onFloor(enemy.position) then
+						error(string.format("%s in slot %d: an enemy spawned off the floor", definition.Id, slot))
+					end
+				end
+				rooms:Unload()
+			end
+		end
+	end)
+
 	it("spawns players and enemies, and places hazards and cover, around the slot's origin", function()
 		local arena = Instance.new("Folder")
 		local enemies = EnemyService.new(arena, PLANE_Y, 5)

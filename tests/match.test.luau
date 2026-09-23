@@ -554,6 +554,32 @@ describe("boss room", function()
 		step(ctx, DT)
 		expect(ctx.match:GetRunSnapshot().Boss).toBeNil()
 	end)
+
+	it("ends out of time, not extracted, when the boss is outlasted rather than beaten", function()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local ctx = build(9, function()
+			return RunPlanner.Fixed({ "Throne" })
+		end)
+		local player = { Name = "Hider", UserId = 96 }
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		local state = ctx.match:GetPlayerState(player)
+		-- Past the ordinary room limit the fight goes on.
+		state.invulnerableUntil = math.huge
+		step(ctx, RunConfig.RoomTimeLimit + 1)
+		expect(ctx.match:GetState()).toBe(RunConfig.States.Combat)
+		expect(ctx.match:GetRunSnapshot().Boss).toBeTruthy()
+
+		step(ctx, RunConfig.BossRoomTimeLimit - RunConfig.RoomTimeLimit)
+		expect(ctx.match:GetState()).toBe(RunConfig.States.Results)
+		local results = {}
+		for _, call in ctx.net.RunResults.calls do
+			table.insert(results, call.payload)
+		end
+		expect(results[#results].Outcome).toBe("TimedOut")
+	end)
 end)
 
 describe("health regeneration", function()
@@ -599,6 +625,46 @@ describe("health regeneration", function()
 		state.health = 0
 		step(ctx, 5)
 		expect(state.health).toBe(0)
+	end)
+end)
+
+describe("falling out of the world", function()
+	it("puts a player who drops far below the floor back on the spawn pad", function()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local ctx = build(14, function()
+			return RunPlanner.Fixed({ "Atrium", "Cistern" })
+		end)
+		local player = { Name = "Faller", UserId = 95 }
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+		local landed = ctx.positions[player]
+
+		-- A short hop below the floor is left alone; a real fall is caught.
+		ctx.positions[player] = Vector3.new(landed.X, -5, landed.Z)
+		step(ctx, DT)
+		expect(ctx.positions[player].Y).toBe(-5)
+		ctx.positions[player] = Vector3.new(landed.X + 40, -RunConfig.FallRescueDepth - 10, landed.Z)
+		step(ctx, DT)
+		local rescued = ctx.positions[player]
+		expect(rescued.Y).toBeGreaterThan(0)
+		expect((Vector3.new(rescued.X, 0, rescued.Z) - Vector3.new(landed.X, 0, landed.Z)).Magnitude).toBeLessThan(20)
+		expect(ctx.match:GetPlayerState(player).alive).toBe(true)
+	end)
+end)
+
+describe("WorldAdapter against a real character", function()
+	it("teleports by CFrame, reads the same spot back as Position, and stops the fall", function()
+		local WorldAdapter = __require("WorldAdapter")
+		local player = Harness.addPlayer("Teleported")
+		Harness.giveCharacter(player, Vector3.new(0, 3, 0))
+		local root = player.Character:FindFirstChild("HumanoidRootPart")
+		root.AssemblyLinearVelocity = Vector3.new(0, -80, 0)
+		expect(WorldAdapter.Teleport(player, Vector3.new(500, 5, 0))).toBe(true)
+		expect((WorldAdapter.GetPosition(player) - Vector3.new(500, 8, 0)).Magnitude).toBeCloseTo(0)
+		expect(root.AssemblyLinearVelocity).toBe(Vector3.zero)
+		Harness.removePlayer(player)
 	end)
 end)
 

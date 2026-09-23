@@ -195,6 +195,10 @@ function MatchService:Step(deltaTime, now)
 	self._now = now
 	local state = self._state
 
+	if state == States.Combat or state == States.UpgradeChoice or state == States.Transition then
+		self:_rescueFallers(now)
+	end
+
 	if state == States.Starting then
 		if now - self._stateEnteredAt >= RunConfig.StartCountdown then
 			self:_beginRoom(1, now)
@@ -209,7 +213,13 @@ function MatchService:Step(deltaTime, now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then
 			self:_finish("TimedOut", now)
 		elseif self._rooms:IsCleared(now) then
-			self:_onRoomCleared(now)
+			local current = self._rooms:GetCurrent()
+			if current and current.timedOut and current.boss then
+				-- Surviving the clock is not a win: the boss room ends the run out of time.
+				self:_finish("TimedOut", now)
+			else
+				self:_onRoomCleared(now)
+			end
 		end
 	elseif state == States.UpgradeChoice then
 		self:_applyRegen(deltaTime, now)

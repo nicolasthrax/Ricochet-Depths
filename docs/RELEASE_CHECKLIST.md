@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.0.1` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `1.0.2` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -15,7 +15,8 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 | `luau-compile` on all sources | PASS | 84 sources + 32 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 506 tests, 0 failures |
+| Headless test suite | PASS | 510 tests, 0 failures |
+| Rooms load under the player | PASS | every room in every arena slot: floor under the spawn, cover and enemies on it; the stub now treats Position and CFrame as one property |
 | Concurrent arenas | PASS | two groups run side by side, isolated; slots freed and reused; payout keys unique per slot |
 | Multiplayer gates | PASS | 2-player minimum, 8-player cap with overflow, 15s/5s countdowns, cancel on leave |
 | Coins | PASS | drops, magnet, collection, room-clear sweep, payout, defeat rules, leaver paid once |
@@ -37,7 +38,8 @@ fallback. Everything else is unverified.
 - [x] Rojo connects and syncs with no errors
 - [x] Drag-to-aim fires; the shot travels flat and ricochets visibly
 - [ ] Lobby: signs readable from across the hall; cannot jump out anywhere (V9.1–9.2)
-- [ ] Solo Portal starts a solo run with the descent cinematic (V9.3)
+- [ ] Solo Portal starts a solo run with the descent cinematic (V9.3), and you land on the
+      Upper Ruins spawn pad, not in empty space
 - [ ] Coins drop, fly to you and count on the HUD; results show coins earned (V9.4, V9.8)
 - [ ] Health regenerates after a few seconds without damage (V9.5)
 - [ ] Bulwark shield turns on its own; its open side can be hit (V9.6)
@@ -76,14 +78,14 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
 
-## 6. Known issues at 1.0.1
+## 6. Known issues at 1.0.2
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|
 | 1 | Nothing added since 0.6.0-dev has run in Studio or on a published server. | **Blocker** | Sections 2–4 before going public. |
 | 2 | Audio hooks exist but every sound id is a placeholder and `FeatureFlags.Audio` is off: the game is silent. | High | Upload original sounds, fill `SoundConfig`, flip the flag. |
 | 3 | Robux items are inert until real ids are pasted into `MonetizationConfig`. | Launch step | Section 8, step 10. |
-| 4 | Balance is tuned against bots, not people. Every bot run now reaches the Warden Prime, and 5–10% beat it; bots cannot dodge or kite, so humans should do better. | High | Watch boss deaths in the first public week; tune `EnemyConfig.WardenPrime`. |
+| 4 | Balance is tuned against bots, not people. The 1.0.0 tuning was measured against bots that (by a stub bug) never moved. Bots that walk and kite now beat the Warden Prime 93–100% of the time, but they see everything and dodge perfectly. How hard it is for people is unknown. | High | Playtest the boss before launch; tune `EnemyConfig.WardenPrime` from real deaths. |
 | 5 | Run length: the dry run's floor is ~1.5 min for competent bots against a 6–8 minute target. Real players are much slower (aiming, cards, walking, the cinematic), but it is unmeasured. | Medium | Measure in analytics. |
 | 6 | Enemies do not path around pillars. | Low | Revisit only if players notice. |
 | 7 | Telemetry only prints to the Studio output; no transport. | Low | Wire once an analytics destination is chosen. |

@@ -435,8 +435,10 @@ for _, scenario in SCENARIOS do
 		local samples = perRoom[index]
 		if samples and #samples > 0 then
 			modelled += summarise(samples).median
+			-- The last room is the boss's, which has its own, longer limit.
+			local limit = index == RunConfig.RoomCount() and RunConfig.BossRoomTimeLimit or RunConfig.RoomTimeLimit
 			for _, seconds in samples do
-				if seconds >= RunConfig.RoomTimeLimit then
+				if seconds >= limit then
 					forceCleared += 1
 				end
 			end

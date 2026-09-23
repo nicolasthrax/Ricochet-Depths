@@ -73,6 +73,8 @@ end
 function EnemyPool:Release(part)
 	part.Transparency = 1
 	part.CanQuery = false
+	part:SetAttribute("Phasing", nil)
+	part:SetAttribute("Facing", nil)
 	part.Position = EnemyConfig.StoragePosition
 	local shield = part:FindFirstChild("Shield")
 	if shield then

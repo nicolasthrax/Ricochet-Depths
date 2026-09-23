@@ -126,8 +126,9 @@ RunConfig.Rooms = {
 		Tier = 1,
 		Kind = "Normal",
 		Spawns = {
-			{ Archetype = "Drifter", Count = 3 },
-			{ Archetype = "Chaser", Count = 3 },
+			{ Archetype = "Drifter", Count = 2 },
+			{ Archetype = "Chaser", Count = 3, Markers = { 1, 2, 4 } },
+			{ Archetype = "Sentinel", Count = 1, Markers = { 3 } },
 		},
 	},
 	{
@@ -138,8 +139,9 @@ RunConfig.Rooms = {
 		Tier = 1,
 		Kind = "Normal",
 		Spawns = {
-			{ Archetype = "Drifter", Count = 2 },
-			{ Archetype = "Chaser", Count = 4 },
+			{ Archetype = "Splitter", Count = 2, Markers = { 1, 2 } },
+			{ Archetype = "Chaser", Count = 2, Markers = { 3, 4 } },
+			{ Archetype = "Drifter", Count = 2, Markers = { 6, 7 } },
 		},
 	},
 	{
@@ -151,7 +153,8 @@ RunConfig.Rooms = {
 		Kind = "Normal",
 		Spawns = {
 			{ Archetype = "Bulwark", Count = 1, Markers = { 9 } },
-			{ Archetype = "Chaser", Count = 3, Markers = { 1, 2, 8 } },
+			{ Archetype = "Chaser", Count = 2, Markers = { 1, 2 } },
+			{ Archetype = "Splitter", Count = 1, Markers = { 8 } },
 			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
 		},
 	},
@@ -164,7 +167,9 @@ RunConfig.Rooms = {
 		Kind = "Normal",
 		Spawns = {
 			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
-			{ Archetype = "Chaser", Count = 4, Markers = { 3, 4, 5, 6 } },
+			{ Archetype = "Sentinel", Count = 1, Markers = { 2 } },
+			{ Archetype = "Chaser", Count = 2, Markers = { 3, 4 } },
+			{ Archetype = "Splitter", Count = 1, Markers = { 6 } },
 		},
 	},
 
@@ -178,7 +183,8 @@ RunConfig.Rooms = {
 		Kind = "Normal",
 		Spawns = {
 			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
-			{ Archetype = "Chaser", Count = 4, Markers = { 5, 6, 7, 8 } },
+			{ Archetype = "Phaser", Count = 2, Markers = { 5, 6 } },
+			{ Archetype = "Chaser", Count = 2, Markers = { 7, 8 } },
 			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
 		},
 	},
@@ -190,8 +196,9 @@ RunConfig.Rooms = {
 		Tier = 1,
 		Kind = "Normal",
 		Spawns = {
-			{ Archetype = "Chaser", Count = 5 },
-			{ Archetype = "Drifter", Count = 2 },
+			{ Archetype = "Sentinel", Count = 1, Markers = { 3 } },
+			{ Archetype = "Phaser", Count = 2, Markers = { 1, 2 } },
+			{ Archetype = "Chaser", Count = 3, Markers = { 5, 6, 7 } },
 		},
 	},
 	{
@@ -203,8 +210,9 @@ RunConfig.Rooms = {
 		Kind = "Normal",
 		Spawns = {
 			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
-			{ Archetype = "Chaser", Count = 3, Markers = { 5, 6, 7 } },
-			{ Archetype = "Drifter", Count = 3, Markers = { 2, 3, 4 } },
+			{ Archetype = "Sentinel", Count = 1, Markers = { 6 } },
+			{ Archetype = "Phaser", Count = 2, Markers = { 2, 3 } },
+			{ Archetype = "Chaser", Count = 2, Markers = { 7, 8 } },
 		},
 	},
 	{
@@ -221,6 +229,16 @@ RunConfig.Rooms = {
 		-- While the core lives, escorts return on this delay to keep pressure on.
 		EscortRespawn = { Archetype = "Chaser", Delay = 7, MaxAlive = 3 },
 	},
+	{
+		Id = "Throne",
+		DisplayName = "The Throne",
+		Layout = "Throne",
+		Zone = "Abyss",
+		Tier = 3,
+		Kind = "Boss",
+		-- The Warden Prime alone; it summons its own Shards from its second phase.
+		Spawns = { { Archetype = "WardenPrime", Count = 1, Markers = { 1 } } },
+	},
 }
 
 -- The shape of every run: one room per slot, drawn at random from the rooms matching the
@@ -232,6 +250,7 @@ RunConfig.RunShape = {
 	{ Zone = "Foundry", Tier = 2 },
 	{ Zone = "Abyss", Tier = 1 },
 	{ Room = "WardenVault" },
+	{ Room = "Throne" },
 }
 
 -- Rooms in a run: one per slot of the run shape.

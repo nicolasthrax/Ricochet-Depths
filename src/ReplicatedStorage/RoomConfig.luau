@@ -421,6 +421,33 @@ RoomConfig.Layouts = {
 			Vector2.new(0, 50), Vector2.new(0, -50), Vector2.new(-18, 0), Vector2.new(18, 0),
 		},
 	},
+
+	-- Abyss finale: the Warden Prime's throne room. The widest floor in the game, four pillars
+	-- to break its orb rings on, and a bumper on each side to bank shots round its shield.
+	Throne = {
+		Zone = "Abyss",
+		DisplayName = "The Throne",
+		TrimColor = Color3.fromRGB(236, 190, 255),
+		InteriorSize = Vector2.new(150, 150),
+		AccentColor = Color3.fromRGB(110, 70, 150),
+		Obstacles = {
+			{ Offset = Vector2.new(-40, 40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(40, 40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(-40, -40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(40, -40), Size = Vector2.new(10, 10) },
+		},
+		CornerBevel = 18,
+		Reflectors = {
+			{ Offset = Vector2.new(-58, 0), Length = 16, Yaw = 45 },
+			{ Offset = Vector2.new(58, 0), Length = 16, Yaw = -45 },
+		},
+		Mechanics = {
+			{ Kind = "AmpPad", Offset = Vector2.new(0, -30), Size = Vector2.new(20, 3) },
+		},
+		EnemySpawns = {
+			Vector2.new(0, 46), Vector2.new(-30, 20), Vector2.new(30, 20), Vector2.new(0, -52),
+		},
+	},
 }
 
 RoomConfig.DefaultLayout = "Atrium"

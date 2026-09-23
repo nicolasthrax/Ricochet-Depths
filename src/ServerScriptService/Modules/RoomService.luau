@@ -82,15 +82,19 @@ function RoomService:Load(roomDefinition, now)
 
 	self._room = room
 	self._enemies:SetBounds(bounds.center, bounds.half, bounds.diagonal)
+	self._enemies:SetObstacles(RoomGeometry.Footprints(layout, RoomConfig))
 
 	local spawned, failed = 0, 0
-	local elite = nil
+	local elite, boss = nil, nil
 	for _, assignment in RoomService.AssignSpawns(roomDefinition, layout) do
 		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker))
 		if enemy then
 			spawned += 1
 			if enemy.archetype.IsElite then
 				elite = enemy
+			end
+			if enemy.archetype.IsBoss then
+				boss = enemy
 			end
 		else
 			failed += 1
@@ -105,6 +109,7 @@ function RoomService:Load(roomDefinition, now)
 		spawned = spawned,
 		failed = failed,
 		elite = elite,
+		boss = boss,
 		startedAt = now,
 		escortNextAt = now + ((roomDefinition.EscortRespawn and roomDefinition.EscortRespawn.Delay) or math.huge),
 		forcedClear = false,

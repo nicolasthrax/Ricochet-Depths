@@ -83,6 +83,114 @@ function EnemyBehaviour.Lunger(enemy, archetype, dt, target, now, _random)
 	return enemy.position
 end
 
+-- Stands still, turns to the target, telegraphs, then asks the service to fire an orb at it.
+function EnemyBehaviour.Turret(enemy, archetype, _dt, target, now, _random)
+	local fire = archetype.Fire
+	enemy.fireAt = enemy.fireAt or (now + fire.Interval)
+	if target then
+		enemy.facing = flatten(target.position - enemy.position)
+	end
+	if now >= enemy.fireAt then
+		enemy.fireAt = now + fire.Interval
+		enemy.phase = "Approach"
+		if target and enemy.facing.Magnitude > 1e-4 then
+			enemy.fireRequests = { { direction = enemy.facing.Unit, speed = fire.Speed, damage = fire.Damage } }
+		end
+	elseif now >= enemy.fireAt - fire.TelegraphTime then
+		enemy.phase = "Telegraph"
+	end
+	return enemy.position
+end
+
+-- Chases; every Interval it telegraphs, blinks out (untouchable), and reappears near a player.
+function EnemyBehaviour.Phaser(enemy, archetype, dt, target, now, random)
+	local blink = archetype.Blink
+	enemy.blinkAt = enemy.blinkAt or (now + blink.Interval)
+	if enemy.phase == "Blinking" then
+		if now >= enemy.phaseUntil then
+			enemy.phase = "Approach"
+			enemy.blinkAt = now + blink.Interval
+			local centre = target and target.position or enemy.anchor
+			local angle = random() * math.pi * 2
+			local radius = blink.MinRadius + random() * (blink.MaxRadius - blink.MinRadius)
+			enemy.position = Vector3.new(centre.X + math.cos(angle) * radius, enemy.position.Y, centre.Z + math.sin(angle) * radius)
+		end
+		return enemy.position
+	elseif enemy.phase == "Telegraph" then
+		if now >= enemy.phaseUntil then
+			enemy.phase = "Blinking"
+			enemy.phaseUntil = now + blink.Duration
+		end
+		return enemy.position
+	elseif now >= enemy.blinkAt then
+		enemy.phase = "Telegraph"
+		enemy.phaseUntil = now + blink.TelegraphTime
+		return enemy.position
+	end
+	return EnemyBehaviour.Chaser(enemy, archetype, dt, target, now, random)
+end
+
+-- The boss: phase from remaining health (see EnemyConfig.WardenPrime). Movement is a slow
+-- chase; shield, orb rings and summons change by phase. Orbs and summons are requested from the
+-- service, which owns pools and the active cap.
+-- Which of the boss's phases its remaining health puts it in: the last whose Below it is under.
+function EnemyBehaviour.BossPhase(enemy)
+	local phases = enemy.archetype.Phases
+	local fraction = enemy.health / enemy.maxHealth
+	for candidate = #phases, 1, -1 do
+		if fraction < phases[candidate].Below then
+			return candidate
+		end
+	end
+	return 1
+end
+
+function EnemyBehaviour.Boss(enemy, archetype, dt, target, now, _random)
+	local index = EnemyBehaviour.BossPhase(enemy)
+	local phase = archetype.Phases[index]
+	if enemy.bossPhase ~= index then
+		enemy.bossPhase = index
+		enemy.ringAt = phase.RingInterval and now + phase.RingInterval or nil
+		enemy.summonAt = phase.SummonInterval and now + phase.SummonInterval or nil
+		enemy.shieldOff = phase.Shield == "None"
+	end
+
+	if phase.Shield == "Spin" then
+		enemy.spin = (enemy.spin or 0) + math.rad(phase.SpinSpeed) * dt
+		enemy.facing = Vector3.new(math.sin(enemy.spin), 0, math.cos(enemy.spin))
+	elseif target then
+		enemy.facing = flatten(target.position - enemy.position)
+	end
+
+	if enemy.ringAt and now >= enemy.ringAt then
+		enemy.ringAt = now + phase.RingInterval
+		enemy.ringTwist = (enemy.ringTwist or 0) + math.rad(phase.RingTwist or 0)
+		local requests = {}
+		for step = 1, phase.RingCount do
+			local angle = enemy.ringTwist + (step - 1) * 2 * math.pi / phase.RingCount
+			table.insert(requests, {
+				direction = Vector3.new(math.cos(angle), 0, math.sin(angle)),
+				speed = archetype.Orb.Speed,
+				damage = archetype.Orb.Damage,
+			})
+		end
+		enemy.fireRequests = requests
+	end
+	if enemy.summonAt and now >= enemy.summonAt then
+		enemy.summonAt = now + phase.SummonInterval
+		enemy.summonRequest = { archetype = phase.Summon, count = phase.SummonCount, max = phase.SummonMax }
+	end
+
+	if target then
+		local _, distance = towards(enemy.position, target.position, 0)
+		if distance > archetype.StandoffDistance then
+			local speed = archetype.MoveSpeed * (phase.MoveSpeedMultiplier or 1)
+			enemy.position = towards(enemy.position, target.position, speed * dt)
+		end
+	end
+	return enemy.position
+end
+
 function EnemyBehaviour.Get(name)
 	return EnemyBehaviour[name]
 end

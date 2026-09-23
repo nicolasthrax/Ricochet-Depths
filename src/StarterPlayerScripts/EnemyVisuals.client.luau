@@ -22,14 +22,19 @@ folder.Parent = workspace
 
 local entries = {} -- hitbox part -> { archetype, model, parts, visible, facing, lastPosition, color }
 
-local function setVisible(entry, visible)
-	if entry.visible == visible then
+-- 0 shown, 1 hidden; a blinking Phaser sits in between.
+local function setVisibility(entry, transparency)
+	if entry.transparency == transparency then
 		return
 	end
-	entry.visible = visible
+	entry.transparency = transparency
 	for _, part in entry.parts do
-		part.Transparency = visible and 0 or 1
+		part.Transparency = transparency
 	end
+end
+
+local function setVisible(entry, visible)
+	setVisibility(entry, visible and 0 or 1)
 end
 
 local function applyColor(entry, color)
@@ -59,7 +64,7 @@ local function entryFor(body)
 		archetype = body.Name,
 		model = model,
 		parts = EnemyModels.OrderedParts(model),
-		visible = true,
+		transparency = 0,
 		facing = Vector3.new(0, 0, -1),
 		lastPosition = body.Position,
 		seed = #folder:GetChildren(),
@@ -70,6 +75,11 @@ local function entryFor(body)
 end
 
 local function facingFor(body, entry, dt)
+	-- Turrets publish their heading, since they never move.
+	local published = body:GetAttribute("Facing")
+	if typeof(published) == "Vector3" and published.Magnitude > 1e-3 then
+		return published
+	end
 	local shield = body:FindFirstChild("Shield")
 	if shield and shield.Transparency < 1 then
 		local toShield = shield.Position - body.Position
@@ -101,7 +111,8 @@ local function update(dt)
 		if body:IsA("BasePart") then
 			local entry = entryFor(body)
 			if entry then
-				if EnemyModels.IsParked(body.Position) or body.Transparency >= 1 then
+				local phasing = body:GetAttribute("Phasing") == true
+				if EnemyModels.IsParked(body.Position) or (body.Transparency >= 1 and not phasing) then
 					setVisible(entry, false)
 				else
 					body.LocalTransparencyModifier = 1
@@ -112,7 +123,7 @@ local function update(dt)
 						table.insert(moveParts, entry.parts[index])
 						table.insert(moveFrames, CFrame.lookAlong(pose.position, pose.look))
 					end
-					setVisible(entry, true)
+					setVisibility(entry, phasing and 0.75 or 0)
 				end
 				entry.lastPosition = body.Position
 			end

@@ -38,6 +38,22 @@ function HudView.new(playerGui)
 	self.objectiveLabel.Size = UDim2.new(1, 0, 0, 20)
 	self.objectiveLabel.TextXAlignment = Enum.TextXAlignment.Center
 
+	-- The boss bar, under the room label while a boss is alive.
+	local boss = UiTheme.panel("BossPanel", self.gui)
+	boss.Position = UDim2.new(0.5, 0, 0, 80)
+	boss.AnchorPoint = Vector2.new(0.5, 0)
+	boss.Size = UDim2.fromOffset(380, 52)
+	boss.Visible = false
+	UiTheme.padding(boss, 8)
+	self.bossPanel = boss
+	self.bossLabel = UiTheme.label("BossLabel", boss, "", UiConfig.Text.Hud, UiConfig.Colors.Danger)
+	self.bossLabel.Size = UDim2.new(1, 0, 0, 18)
+	self.bossLabel.TextXAlignment = Enum.TextXAlignment.Center
+	local bossTrack, bossFill = UiTheme.bar("BossBar", boss, UiConfig.Colors.Danger)
+	bossTrack.Position = UDim2.new(0, 0, 0, 22)
+	bossTrack.Size = UDim2.new(1, 0, 0, 12)
+	self.bossFill = bossFill
+
 	local upgrades = UiTheme.panel("UpgradePanel", self.gui)
 	upgrades.Position = UDim2.new(1, -16, 0, 12)
 	upgrades.AnchorPoint = Vector2.new(1, 0)
@@ -130,6 +146,14 @@ function HudView:UpdateRun(snapshot)
 		self:_renderLobbyObjective()
 	else
 		self.objectiveLabel.Text = ""
+	end
+
+	local boss = snapshot.Boss
+	self.bossPanel.Visible = type(boss) == "table"
+	if type(boss) == "table" then
+		local phase = boss.Phase and boss.Phase > 1 and string.format("  -  phase %d", boss.Phase) or ""
+		self.bossLabel.Text = boss.Name .. phase
+		self.bossFill.Size = UDim2.fromScale(math.clamp(boss.Health / math.max(boss.MaxHealth, 1), 0, 1), 1)
 	end
 
 	local banner = BANNERS[snapshot.State]

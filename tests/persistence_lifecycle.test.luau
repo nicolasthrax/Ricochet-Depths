@@ -387,3 +387,210 @@ describe("step 2: autosave and the write chain", function()
 		expect(store:Peek("profile_6302").Currency.Salvage).toBe(runIndex)
 	end)
 end)
+
+--// Step 3: stale loads are discarded; one session per UserId -----------------
+
+describe("step 3 (P4): a load that finishes after its player left is discarded", function()
+	it("returns stale, marks nothing loaded and leaves no session when the player leaves mid-load", function()
+		local store = countingStore()
+		store.readLatency = 1 -- the load sits in the network layer for a second
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Leaver", UserId = 7001 }
+		Harness.setClock(0)
+
+		local result = {}
+		task.spawn(function()
+			result.profile, result.err = persistence:Load(player)
+		end)
+		local pending = persistence:GetSession(player) -- the half-built session, mid-load
+		expect(pending).toBeTruthy()
+
+		persistence:Release(player, 0) -- the player disconnects before the load resolves
+		Harness.settle()
+
+		expect(result.profile).toBeNil()
+		expect(result.err).toBe("stale load")
+		expect(persistence:GetSession(player)).toBeNil()
+		expect(persistence:IsLoaded(player)).toBe(false)
+		-- The orphaned session must not be brought back to life by the late result.
+		expect(pending.loaded).toBe(false)
+		expect(persistence:GetStats().loads).toBe(0)
+	end)
+
+	it("stops retrying a failing load once its player has gone", function()
+		local PlayerDataConfig = __require("PlayerDataConfig")
+		local store = countingStore()
+		store.failing = true
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Gone", UserId = 7002 }
+		Harness.setClock(0)
+
+		local result = {}
+		task.spawn(function()
+			result.profile, result.err = persistence:Load(player)
+		end)
+		persistence:Release(player, 0)
+		Harness.settle()
+
+		expect(result.profile).toBeNil()
+		expect(result.err).toBe("stale load")
+		-- No read-only session is left behind, and the retries stop rather than burning budget.
+		expect(persistence:GetSession(player)).toBeNil()
+		expect(store.calls).toBeLessThan(PlayerDataConfig.MaxRetries)
+	end)
+end)
+
+describe("step 3: a rapid rejoin keeps the newest load authoritative", function()
+	local function rejoinSetup(firstLatency, secondLatency)
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		-- Same account, two Player objects: Roblox gives a rejoining player a new one.
+		local first = { Name = "Hopper", UserId = 7101 }
+		local second = { Name = "Hopper", UserId = 7101 }
+		Harness.setClock(0)
+
+		local results = { first = {}, second = {} }
+		store.readLatency = firstLatency
+		task.spawn(function()
+			results.first.profile, results.first.err = persistence:Load(first)
+		end)
+		persistence:Release(first, 0) -- leaves while load #1 is still in flight
+		store.readLatency = secondLatency
+		task.spawn(function()
+			results.second.profile, results.second.err = persistence:Load(second)
+		end)
+		return store, persistence, first, second, results
+	end
+
+	it("discards load #1 when it resolves after load #2 has finished", function()
+		local _store, persistence, first, second, results = rejoinSetup(3, 1)
+
+		Harness.advance(1.5) -- load #2 done; load #1 still in flight
+		expect(persistence:IsLoaded(second)).toBe(true)
+		persistence:GrantReward(second, "run-1", 50) -- the rejoined player plays on
+
+		Harness.settle() -- now load #1 resolves, late
+		expect(results.first.profile).toBeNil()
+		expect(results.first.err).toBe("stale load")
+		expect(results.second.profile).toBeTruthy()
+		-- Load #2's session is untouched, including the change made after it loaded.
+		expect(persistence:GetSession(second).profile.Currency.Salvage).toBe(50)
+		expect(persistence:IsLoaded(first)).toBe(false)
+	end)
+
+	it("discards load #1 when it resolves after load #2 began but before it finished", function()
+		local _store, persistence, first, second, results = rejoinSetup(2, 3)
+
+		Harness.advance(2.5) -- load #1 resolves here, with load #2 still in flight
+		expect(results.first.err).toBe("stale load")
+		expect(persistence:IsLoaded(second)).toBe(false)
+
+		Harness.settle()
+		expect(results.second.profile).toBeTruthy()
+		expect(persistence:IsLoaded(second)).toBe(true)
+		expect(persistence:IsLoaded(first)).toBe(false)
+	end)
+end)
+
+describe("step 3: rejoining while the old session is still saving (same-server P5)", function()
+	it("keeps a payout that was still being written when the player rejoined", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local first = { Name = "Quick", UserId = 7201 }
+		local second = { Name = "Quick", UserId = 7201 }
+		persistence:Load(first)
+		persistence:GrantReward(first, "run-1", 120)
+		Harness.setClock(0)
+
+		store.writeLatency = 2 -- the leave-save is slow to land
+		task.spawn(function()
+			persistence:Release(first, 0)
+		end)
+		store.writeLatency = 0
+
+		-- Rejoins before that save lands. Reading the store now would return the profile from
+		-- before the payout, and the next save would overwrite it.
+		local rejoined = persistence:Load(second)
+		expect(rejoined.Currency.Salvage).toBe(120)
+
+		persistence:ApplySettings(second, { ReducedFlash = true })
+		Harness.settle()
+		expect((persistence:Save(second, 10))).toBe(true)
+
+		local stored = store:Peek("profile_7201")
+		expect(stored.Currency.Salvage).toBe(120)
+		expect(stored.Settings.ReducedFlash).toBe(true)
+		-- The old leave must not tear down the session the rejoined player is now using.
+		expect(persistence:IsLoaded(second)).toBe(true)
+	end)
+
+	it("makes the old Player handle inert once the session belongs to the rejoin", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local first = { Name = "Twice", UserId = 7202 }
+		local second = { Name = "Twice", UserId = 7202 }
+		persistence:Load(first)
+		Harness.setClock(0)
+		store.writeLatency = 2
+		persistence:GrantReward(first, "run-1", 10)
+		task.spawn(function()
+			persistence:Release(first, 0)
+		end)
+		store.writeLatency = 0
+		persistence:Load(second)
+
+		-- A late call through the departed player's handle must not touch the live session.
+		local granted, reason = persistence:GrantReward(first, "run-2", 999)
+		expect(granted).toBe(0)
+		expect(reason).toBe("profile not loaded")
+		Harness.settle()
+		expect(persistence:GetSession(second).profile.Currency.Salvage).toBe(10)
+	end)
+end)
+
+describe("step 3: session lifecycle guards", function()
+	it("still releases a taken-over session when the rejoined player leaves", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local first = { Name = "Loop", UserId = 7301 }
+		local second = { Name = "Loop", UserId = 7301 }
+		persistence:Load(first)
+		persistence:GrantReward(first, "run-1", 30)
+		Harness.setClock(0)
+		store.writeLatency = 1
+		task.spawn(function()
+			persistence:Release(first, 0)
+		end)
+		store.writeLatency = 0
+		persistence:Load(second) -- takes the session over mid-save
+		Harness.settle()
+		expect(persistence:IsLoaded(second)).toBe(true)
+
+		expect((persistence:Release(second, 5))).toBe(true)
+		expect(persistence:GetSession(second)).toBeNil()
+		expect(store:Peek("profile_7301").Currency.Salvage).toBe(30)
+	end)
+
+	it("keeps only the newest of two loads from the same player", function()
+		local store = countingStore()
+		store.readLatency = 2
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Double", UserId = 7302 }
+		Harness.setClock(0)
+
+		local results = { {}, {} }
+		task.spawn(function()
+			results[1].profile, results[1].err = persistence:Load(player)
+		end)
+		Harness.advance(0.5)
+		task.spawn(function()
+			results[2].profile, results[2].err = persistence:Load(player)
+		end)
+		Harness.settle()
+
+		expect(results[1].err).toBe("stale load")
+		expect(results[2].profile).toBeTruthy()
+		expect(persistence:IsLoaded(player)).toBe(true)
+		expect(persistence:GetStats().staleLoads).toBe(1)
+	end)
+end)

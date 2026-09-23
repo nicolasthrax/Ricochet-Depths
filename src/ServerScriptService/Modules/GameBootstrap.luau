@@ -112,7 +112,12 @@ function GameBootstrap.Start()
 		match:RegisterPlayer(player)
 		-- Loading yields, so it runs off the join thread.
 		task.spawn(function()
-			local _, err = persistence:Load(player)
+			local profile, err = persistence:Load(player)
+			if not profile then
+				-- Superseded: the player left, or rejoined and a newer load took over, while this
+				-- one was in flight. That newer load pushes its own profile.
+				return
+			end
 			if err then
 				warn(("[data] profile load failed for %s, session is read-only: %s"):format(player.Name, err))
 				telemetry:LogError("ProfileLoadFailed", err, os.clock())

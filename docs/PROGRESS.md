@@ -180,7 +180,7 @@ report after every step.
 |---|---|---|---|
 | 1 | Save immediately on reward grant | Most of P1's real-world impact | **Landed** |
 | 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | **Landed** |
-| 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, part of P5 | Not started |
+| 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, same-server P5 | **Landed** |
 | 4 | Grant-based currency applied inside the save transform | P5 | Not started |
 | 5 | Parallel shutdown saves under a shared 25s deadline | P1 | Not started |
 
@@ -219,6 +219,20 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.5.5-dev — persistence step 3
+- Sessions are keyed by `UserId` with an owning `Player` and a load token, instead of by `Player`
+  object. Every public method resolves a session through an ownership check.
+- Fixed P4: a load that resolved after its player left marked its orphaned session loaded and
+  reported success. It now returns `"stale load"`, touches no session, and stops retrying as soon
+  as nobody wants the result.
+- Rapid rejoin: of two overlapping loads for one account, only the newest can attach, whichever
+  resolves first.
+- Fixed the same-server form of P5: a player who rejoined while their leave-save was still in
+  flight read the store before that save landed, got the pre-payout profile, and the next save
+  overwrote the payout. The rejoin now takes over the live session, and the old leave no longer
+  tears it down. A late call through the departed player's handle changes nothing.
+- The cross-server form of P5 remains; that is Step 4.
 
 ### 0.5.4-dev — persistence step 2
 - Harness: a deterministic cooperative scheduler (`task.spawn`/`wait`/`delay`/`defer`/`cancel`),

@@ -14,9 +14,13 @@ function PlayerDataService.new(store, options)
 		_store = store,
 		_sessions = {},
 		_options = options or {},
-		_stats = { loads = 0, loadFailures = 0, saves = 0, saveFailures = 0, retries = 0 },
+		_stats = { loads = 0, loadFailures = 0, staleLoads = 0, saves = 0, saveFailures = 0, retries = 0 },
+		_loadGeneration = 0,
 	}, PlayerDataService)
 end
+
+-- Returned by Load when its result arrived after the player left or a newer load took over.
+PlayerDataService.STALE_LOAD = "stale load"
 
 local function keyFor(player)
 	return PlayerDataConfig.KeyPrefix .. tostring(player.UserId)
@@ -50,11 +54,16 @@ function PlayerDataService.Normalise(stored)
 	return profile
 end
 
-function PlayerDataService:_retry(label, operation)
+-- stillWanted, if given, is checked before every attempt: a load whose player has gone should
+-- stop spending request budget rather than retry for a session that no longer exists.
+function PlayerDataService:_retry(label, operation, stillWanted)
 	local delay = PlayerDataConfig.RetryBaseDelay
 	local lastError
 
 	for attempt = 1, PlayerDataConfig.MaxRetries do
+		if stillWanted and not stillWanted() then
+			return false, PlayerDataService.STALE_LOAD
+		end
 		local ok, result = pcall(operation)
 		if ok then
 			return true, result
@@ -71,8 +80,28 @@ function PlayerDataService:_retry(label, operation)
 	return false, string.format("%s failed after %d attempts: %s", label, PlayerDataConfig.MaxRetries, tostring(lastError))
 end
 
+-- Sessions are keyed by account, not by Player object. Roblox hands a rejoining player a new
+-- Player object; keying by that object allowed two sessions for one DataStore key, which is how a
+-- rejoin could read a profile from before the old session's save had landed.
+local function accountOf(player)
+	return player.UserId
+end
+
+-- The session this Player object currently owns, or nil. When a rejoin takes a session over, the
+-- departed player's handle stops resolving to it, so a late call through it changes nothing.
+function PlayerDataService:_sessionFor(player)
+	if player == nil then
+		return nil
+	end
+	local session = self._sessions[accountOf(player)]
+	if session and session.player == player then
+		return session
+	end
+	return nil
+end
+
 function PlayerDataService:GetSession(player)
-	return self._sessions[player]
+	return self:_sessionFor(player)
 end
 
 -- Every mutation bumps a session's revision, and each save records the revision it wrote. A
@@ -84,22 +113,38 @@ local function markChanged(session)
 end
 
 function PlayerDataService:IsDirty(player)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	return session ~= nil and session.revision > session.savedRevision
 end
 
 function PlayerDataService:IsLoaded(player)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	return session ~= nil and session.loaded and not session.failed
 end
 
 function PlayerDataService:Load(player)
-	local existing = self._sessions[player]
+	local account = accountOf(player)
+	local existing = self._sessions[account]
+
 	if existing and existing.loaded then
+		if existing.player ~= player then
+			-- A rejoin while the old session is still live, usually because its leave-save is
+			-- still in flight. That session is newer than anything in the store, so the rejoin
+			-- takes it over instead of reading a profile that may predate the save.
+			existing.player = player
+		end
 		return existing.profile
 	end
 
+	-- Every load starts a new generation. Anything still in flight for this account is
+	-- superseded, and will find its token no longer current when it returns.
+	self._loadGeneration += 1
+	local token = self._loadGeneration
 	local session = {
+		player = player,
+		account = account,
+		storeKey = keyFor(player),
+		token = token,
 		loaded = false,
 		failed = false,
 		profile = nil,
@@ -109,13 +154,26 @@ function PlayerDataService:Load(player)
 		lastSave = 0,
 		lastAutosaveAt = 0,
 	}
-	self._sessions[player] = session
+	self._sessions[account] = session
+
+	local function stillCurrent()
+		local current = self._sessions[account]
+		return current ~= nil and current.token == token and current.player == player
+	end
 
 	local ok, result = self:_retry("load", function()
-		return self._store:UpdateAsync(keyFor(player), function(stored)
+		return self._store:UpdateAsync(session.storeKey, function(stored)
 			return PlayerDataService.Normalise(stored)
 		end)
-	end)
+	end, stillCurrent)
+
+	if not stillCurrent() then
+		-- The player left, or rejoined and a newer load took over, while this one was in the
+		-- network layer. The result belongs to nobody: drop it rather than revive an orphaned
+		-- session or overwrite the one that replaced it.
+		self._stats.staleLoads += 1
+		return nil, PlayerDataService.STALE_LOAD
+	end
 
 	if not ok then
 		-- Read-only session: the player can still play, but nothing is written and no reward is
@@ -135,7 +193,7 @@ end
 
 -- mutator receives the profile and may change it in place; the change is then persisted.
 function PlayerDataService:Update(player, mutator)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
 		return nil, "profile not loaded"
 	end
@@ -145,12 +203,12 @@ function PlayerDataService:Update(player, mutator)
 end
 
 -- One UpdateAsync attempt sequence for the session's current state.
-function PlayerDataService:_writeOnce(player, session, now)
+function PlayerDataService:_writeOnce(session, now)
 	local profile = session.profile
 	local writtenRevision = session.revision
 
 	local ok, result = self:_retry("save", function()
-		return self._store:UpdateAsync(keyFor(player), function(stored)
+		return self._store:UpdateAsync(session.storeKey, function(stored)
 			-- Record exactly the revision this transform read. UpdateAsync may run it more than
 			-- once, and only the run that commits is the one that counts.
 			writtenRevision = session.revision
@@ -194,7 +252,7 @@ end
 -- Writes until the store has caught up with every change, including ones that arrived while
 -- an earlier write in the chain was in flight. Capped, so a session changing continuously
 -- cannot hold a write open forever; anything left over stays pending for the next save.
-function PlayerDataService:_saveChain(player, session, now)
+function PlayerDataService:_saveChain(session, now)
 	session.saving = true
 	local completed, ok, err = pcall(function()
 		local chainOk, chainErr = true, nil
@@ -202,7 +260,7 @@ function PlayerDataService:_saveChain(player, session, now)
 			if session.revision <= session.savedRevision then
 				break
 			end
-			chainOk, chainErr = self:_writeOnce(player, session, now)
+			chainOk, chainErr = self:_writeOnce(session, now)
 			if not chainOk then
 				break
 			end
@@ -223,18 +281,21 @@ end
 -- request waiting is usually all there is to do; it writes itself only if something is still
 -- pending, for instance because the chain it waited on failed.
 function PlayerDataService:Save(player, now)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
 		return false, "profile not loaded"
 	end
+	return self:_saveSession(session, now)
+end
 
+function PlayerDataService:_saveSession(session, now)
 	while session.saving do
 		task.wait()
 	end
 	if session.revision <= session.savedRevision then
 		return true
 	end
-	return self:_saveChain(player, session, now)
+	return self:_saveChain(session, now)
 end
 
 -- Idempotent payout. A run key is only ever credited once per profile, whatever replays,
@@ -243,7 +304,7 @@ function PlayerDataService:GrantReward(player, runKey, amount)
 	if type(amount) ~= "number" or amount ~= amount or amount <= 0 then
 		return 0, "invalid amount"
 	end
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
 		return 0, "profile not loaded"
 	end
@@ -277,7 +338,7 @@ end
 
 -- Settings arrive from the client, so they are sanitised against the spec before storage.
 function PlayerDataService:ApplySettings(player, incoming)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
 		return nil, "profile not loaded"
 	end
@@ -289,7 +350,7 @@ function PlayerDataService:ApplySettings(player, incoming)
 end
 
 function PlayerDataService:GetPublicProfile(player)
-	local session = self._sessions[player]
+	local session = self:_sessionFor(player)
 	if not session or not session.profile then
 		return nil
 	end
@@ -338,22 +399,40 @@ function PlayerDataService:SaveInBackground(player, now)
 end
 
 function PlayerDataService:Release(player, now)
-	local ok, err = self:Save(player, now)
-	self._sessions[player] = nil
+	local session = self:_sessionFor(player)
+	if not session then
+		-- Nothing live belongs to this handle: never loaded, already released, or taken over by
+		-- a rejoin. Leaving must not touch a session someone else now owns.
+		return false, "profile not loaded"
+	end
+
+	if not session.loaded then
+		-- Still loading, or read-only. Removing it is what tells an in-flight load it is stale.
+		self._sessions[session.account] = nil
+		return false, "profile not loaded"
+	end
+
+	local ok, err = self:_saveSession(session, now)
+	-- A rejoin may have taken the session over while that save was in flight. If so, it stays.
+	if self._sessions[session.account] == session and session.player == player then
+		self._sessions[session.account] = nil
+	end
 	return ok, err
 end
 
 function PlayerDataService:SaveAll(now)
 	local failures = {}
 	-- A snapshot: saves yield, and a player leaving in the meantime removes their session.
-	local players = {}
-	for player in self._sessions do
-		table.insert(players, player)
+	local sessions = {}
+	for _, session in self._sessions do
+		table.insert(sessions, session)
 	end
-	for _, player in players do
-		local ok, err = self:Save(player, now)
-		if not ok and err ~= "profile not loaded" then
-			table.insert(failures, { player = player, error = err })
+	for _, session in sessions do
+		if session.loaded and not session.failed then
+			local ok, err = self:_saveSession(session, now)
+			if not ok then
+				table.insert(failures, { player = session.player, error = err })
+			end
 		end
 	end
 	return failures
@@ -364,7 +443,7 @@ end
 -- same session while the first is still in flight. A session already saving is skipped.
 function PlayerDataService:StepAutosave(now)
 	local started = 0
-	for player, session in self._sessions do
+	for _, session in self._sessions do
 		if
 			session.loaded
 			and not session.failed
@@ -373,7 +452,7 @@ function PlayerDataService:StepAutosave(now)
 			and now - session.lastAutosaveAt >= PlayerDataConfig.AutosaveInterval
 		then
 			session.lastAutosaveAt = now
-			self:SaveInBackground(player, now)
+			self:SaveInBackground(session.player, now)
 			started += 1
 		end
 	end

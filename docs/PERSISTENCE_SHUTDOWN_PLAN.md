@@ -1,8 +1,8 @@
 # Persistence: Shutdown and Session Lifecycle — Design Proposal
 
-**Status: proposal only. Nothing in this document is implemented.** Persistence logic changes
-are a standing STOP condition; this is for review before any code in `PlayerDataService` or its
-wiring in `GameBootstrap` is touched.
+**Status: approved and being implemented one step at a time.** Live progress is tracked under
+*Persistence plan progress* in `docs/PROGRESS.md`. Sections 1–2 describe the code as it was before
+implementation began; sections 3–5 describe the design as approved.
 
 Platform limits relied on here: `BindToClose` handlers get up to **30 seconds**. There is **no
 per-key write cooldown** — the old six-second same-key limit was removed in June 2023 — so writes

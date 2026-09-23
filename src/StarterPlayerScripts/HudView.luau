@@ -28,7 +28,7 @@ function HudView.new(playerGui)
 	local progress = UiTheme.panel("ProgressPanel", self.gui)
 	progress.Position = UDim2.new(0.5, 0, 0, 12)
 	progress.AnchorPoint = Vector2.new(0.5, 0)
-	progress.Size = UDim2.fromOffset(300, 62)
+	progress.Size = UDim2.fromOffset(380, 62)
 	UiTheme.padding(progress, 10)
 	self.roomLabel = UiTheme.label("RoomLabel", progress, "", UiConfig.Text.Hud)
 	self.roomLabel.Size = UDim2.new(1, 0, 0, 22)
@@ -117,7 +117,9 @@ function HudView:UpdateRun(snapshot)
 	end
 
 	local inRun = snapshot.State ~= RunConfig.States.Lobby
-	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s", snapshot.RoomIndex, snapshot.RoomCount, snapshot.RoomName)
+	local zone = RunConfig.Zones[snapshot.Zone or ""]
+	local where = zone and string.format("%s: %s", zone.DisplayName, snapshot.RoomName) or snapshot.RoomName
+	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s", snapshot.RoomIndex, snapshot.RoomCount, where)
 		or "Ricochet Depths"
 
 	if snapshot.State == RunConfig.States.Combat then

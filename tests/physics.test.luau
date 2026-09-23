@@ -107,14 +107,14 @@ end)
 describe("box geometry", function()
 	it("bounces off an interior pillar, not just the outer walls", function()
 		local ctx = newArena("Gallery") -- has a long central spine
-		local contacts = recordContacts(ctx, Vector3.new(-30, PLANE_Y, 20), Vector3.new(1, 0, 0), 120)
+		local contacts = recordContacts(ctx, Vector3.new(-30, PLANE_Y, 34), Vector3.new(1, 0, 0), 120)
 
 		local hitNames = {}
 		for _, contact in contacts do
 			hitNames[#hitNames + 1] = contact.position
 		end
 		expect(#contacts).toBeGreaterThan(0)
-		-- The spine sits at x=0 spanning z=20; a shot from x=-30 must stop there, well short
+		-- The spine sits at x=0 spanning z=34; a shot from x=-30 must stop there, well short
 		-- of the far wall.
 		expect(contacts[1].position.X).toBeLessThan(0)
 		expect(contacts[1].normal.X).toBeCloseTo(-1, 1e-6)

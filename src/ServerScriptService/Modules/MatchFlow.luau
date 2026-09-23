@@ -10,7 +10,7 @@ local States = RunConfig.States
 local Flow = { methods = {} }
 
 function Flow.methods:_beginRoom(index, now)
-	local definition = RunConfig.GetRoom(index)
+	local definition = self._plan[index]
 	if not definition then
 		return self:_finish("Extracted", now)
 	end
@@ -86,7 +86,7 @@ function Flow.methods:HandleCharacterAdded(player)
 end
 
 function Flow.methods:_onRoomCleared(now)
-	local definition = RunConfig.GetRoom(self._roomIndex)
+	local definition = self._plan[self._roomIndex]
 	if definition and definition.Kind == "Elite" then
 		self._eliteCleared = true
 	end
@@ -103,7 +103,7 @@ function Flow.methods:_onRoomCleared(now)
 	end
 	self:_log("RoomClear", { RunId = self._runId, Room = self._roomIndex }, now)
 
-	if self._roomIndex >= RunConfig.RoomCount() then
+	if self._roomIndex >= #self._plan then
 		return self:_finish("Extracted", now)
 	end
 
@@ -137,7 +137,7 @@ function Flow.methods:_finish(outcome, now)
 		runId = self._runId,
 		outcome = outcome,
 		duration = now - self._runStartedAt,
-		roomCount = RunConfig.RoomCount(),
+		roomCount = #self._plan,
 		eliteCleared = self._eliteCleared,
 	}
 

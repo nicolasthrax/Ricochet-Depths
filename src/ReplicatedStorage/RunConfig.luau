@@ -28,7 +28,7 @@ RunConfig.TargetRunSeconds = 420
 -- A room that somehow cannot be cleared is force-cleared rather than soft-locking the run.
 RunConfig.RoomTimeLimit = 150
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
-RunConfig.HardRunTimeLimit = 900
+RunConfig.HardRunTimeLimit = 1200
 
 -- Lobby sits far from the arena so room geometry never overlaps it.
 RunConfig.LobbyPosition = Vector3.new(0, 0, 600)
@@ -55,18 +55,45 @@ RunConfig.Lobby = {
 	ReadyBroadcastInterval = 0.5,
 }
 
+-- The descent passes through three zones, each with its own look and its own pool of rooms.
+-- Order sets the sequence; difficulty climbs zone by zone.
+RunConfig.Zones = {
+	Ruins = { Id = "Ruins", DisplayName = "Upper Ruins", Order = 1 },
+	Foundry = { Id = "Foundry", DisplayName = "The Foundry", Order = 2 },
+	Abyss = { Id = "Abyss", DisplayName = "The Abyss", Order = 3 },
+}
+
+-- Every room a run can draw. Zone and Tier place a room in the run shape below; Markers pin a
+-- spawn group to the layout's EnemySpawns, otherwise groups take markers in order.
 RunConfig.Rooms = {
+	-- Upper Ruins: teaching rooms. Drifters to learn the ricochet on, then the first Chasers.
 	{
 		Id = "Atrium",
 		DisplayName = "Collapsed Atrium",
 		Layout = "Atrium",
+		Zone = "Ruins",
+		Tier = 1,
 		Kind = "Normal",
 		Spawns = { { Archetype = "Drifter", Count = 6 } },
+	},
+	{
+		Id = "Cistern",
+		DisplayName = "Drowned Cistern",
+		Layout = "Cistern",
+		Zone = "Ruins",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Drifter", Count = 5 },
+			{ Archetype = "Chaser", Count = 1, Markers = { 5 } },
+		},
 	},
 	{
 		Id = "Gallery",
 		DisplayName = "Shattered Gallery",
 		Layout = "Gallery",
+		Zone = "Ruins",
+		Tier = 2,
 		Kind = "Normal",
 		Spawns = {
 			{ Archetype = "Drifter", Count = 4 },
@@ -77,21 +104,115 @@ RunConfig.Rooms = {
 		Id = "Crossing",
 		DisplayName = "Fractured Crossing",
 		Layout = "Crossing",
+		Zone = "Ruins",
+		Tier = 2,
 		Kind = "Normal",
 		-- Difficulty pass. About 85% of simulated runs ended here, and the dry run's damage
-		-- breakdown put ~100% of room-3 damage on Bulwark lunges (Chasers ~1%). Two Bulwarks
+		-- breakdown put ~100% of the damage on Bulwark lunges (Chasers ~1%). Two Bulwarks
 		-- lunging together was the wall, so the room keeps its four Chasers and fields one
 		-- Bulwark, posted away from the spawn with open ground around it to flank through.
-		-- Markers index the layout's EnemySpawns; without them groups take markers in order.
 		Spawns = {
 			{ Archetype = "Chaser", Count = 4, Markers = { 1, 2, 3, 4 } },
 			{ Archetype = "Bulwark", Count = 1, Markers = { 9 } },
+		},
+	},
+
+	-- The Foundry: tighter lanes and more Chasers; Bulwarks start guarding the back rooms.
+	{
+		Id = "Smelter",
+		DisplayName = "Cold Smelter",
+		Layout = "Smelter",
+		Zone = "Foundry",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Drifter", Count = 3 },
+			{ Archetype = "Chaser", Count = 3 },
+		},
+	},
+	{
+		Id = "Conveyor",
+		DisplayName = "Stalled Conveyor",
+		Layout = "Conveyor",
+		Zone = "Foundry",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Drifter", Count = 2 },
+			{ Archetype = "Chaser", Count = 4 },
+		},
+	},
+	{
+		Id = "Crucible",
+		DisplayName = "The Crucible",
+		Layout = "Crucible",
+		Zone = "Foundry",
+		Tier = 2,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Bulwark", Count = 1, Markers = { 9 } },
+			{ Archetype = "Chaser", Count = 3, Markers = { 1, 2, 8 } },
+			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
+		},
+	},
+	{
+		Id = "Forgeworks",
+		DisplayName = "Forgeworks",
+		Layout = "Forgeworks",
+		Zone = "Foundry",
+		Tier = 2,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
+			{ Archetype = "Chaser", Count = 4, Markers = { 3, 4, 5, 6 } },
+		},
+	},
+
+	-- The Abyss: the hardest mixes, then the Warden itself.
+	{
+		Id = "Rift",
+		DisplayName = "The Rift",
+		Layout = "Rift",
+		Zone = "Abyss",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
+			{ Archetype = "Chaser", Count = 4, Markers = { 5, 6, 7, 8 } },
+			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
+		},
+	},
+	{
+		Id = "Spire",
+		DisplayName = "Hanging Spire",
+		Layout = "Spire",
+		Zone = "Abyss",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Chaser", Count = 5 },
+			{ Archetype = "Drifter", Count = 2 },
+		},
+	},
+	{
+		Id = "Hollow",
+		DisplayName = "Starless Hollow",
+		Layout = "Hollow",
+		Zone = "Abyss",
+		Tier = 1,
+		Kind = "Normal",
+		Spawns = {
+			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
+			{ Archetype = "Chaser", Count = 3, Markers = { 5, 6, 7 } },
+			{ Archetype = "Drifter", Count = 3, Markers = { 2, 3, 4 } },
 		},
 	},
 	{
 		Id = "WardenVault",
 		DisplayName = "Warden Vault",
 		Layout = "WardenVault",
+		Zone = "Abyss",
+		Tier = 2,
 		Kind = "Elite",
 		Spawns = {
 			{ Archetype = "WardenCore", Count = 1 },
@@ -102,17 +223,34 @@ RunConfig.Rooms = {
 	},
 }
 
+-- The shape of every run: one room per slot, drawn at random from the rooms matching the
+-- slot's Zone and Tier (never the same room twice), or the fixed Room named.
+RunConfig.RunShape = {
+	{ Zone = "Ruins", Tier = 1 },
+	{ Zone = "Ruins", Tier = 2 },
+	{ Zone = "Foundry", Tier = 1 },
+	{ Zone = "Foundry", Tier = 2 },
+	{ Zone = "Abyss", Tier = 1 },
+	{ Room = "WardenVault" },
+}
+
+-- Rooms in a run: one per slot of the run shape.
+function RunConfig.RoomCount()
+	return #RunConfig.RunShape
+end
+
 -- An upgrade choice is offered after every room except the last.
 RunConfig.OfferUpgradeAfterRoom = function(roomIndex)
-	return roomIndex < #RunConfig.Rooms
+	return roomIndex < RunConfig.RoomCount()
 end
 
-function RunConfig.GetRoom(index)
-	return RunConfig.Rooms[index]
-end
-
-function RunConfig.RoomCount()
-	return #RunConfig.Rooms
+function RunConfig.GetRoomById(roomId)
+	for _, room in RunConfig.Rooms do
+		if room.Id == roomId then
+			return room
+		end
+	end
+	return nil
 end
 
 return RunConfig

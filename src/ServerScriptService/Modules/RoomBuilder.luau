@@ -49,7 +49,7 @@ local function layerY(floorY, level)
 end
 
 -- Two-tone checker across the interior; edge tiles are trimmed to fit.
-local function buildFloorTiles(decor, interior, floorY)
+local function buildFloorTiles(decor, interior, floorY, style)
 	local config = RoomConfig.Decor
 	local size = config.TileSize
 	local halfX, halfZ = interior.X / 2, interior.Y / 2
@@ -60,7 +60,7 @@ local function buildFloorTiles(decor, interior, floorY)
 		for row = 0, math.ceil(interior.Y / size) - 1 do
 			local z0 = -halfZ + row * size
 			local z1 = math.min(z0 + size, halfZ)
-			local color = config.TileColors[(column + row) % 2 + 1]
+			local color = style.TileColors[(column + row) % 2 + 1]
 			makeDecor(
 				("Tile_%d_%d"):format(column, row),
 				Vector3.new(x1 - x0, LAYER, z1 - z0),
@@ -73,7 +73,7 @@ local function buildFloorTiles(decor, interior, floorY)
 	end
 end
 
-local function buildFloorGrid(decor, interior, floorY)
+local function buildFloorGrid(decor, interior, floorY, style)
 	local config = RoomConfig.Decor
 	local width = config.GridLineWidth
 	local y = layerY(floorY, 2)
@@ -82,12 +82,12 @@ local function buildFloorGrid(decor, interior, floorY)
 	for index = -columns, columns do
 		local x = index * config.GridSpacing
 		local size = Vector3.new(width, LAYER, interior.Y)
-		makeDecor("GridX" .. index, size, Vector3.new(x, y, 0), config.GridColor, Enum.Material.SmoothPlastic, decor)
+		makeDecor("GridX" .. index, size, Vector3.new(x, y, 0), style.GridColor, Enum.Material.SmoothPlastic, decor)
 	end
 	for index = -rows, rows do
 		local z = index * config.GridSpacing
 		local size = Vector3.new(interior.X, LAYER, width)
-		makeDecor("GridZ" .. index, size, Vector3.new(0, y, z), config.GridColor, Enum.Material.SmoothPlastic, decor)
+		makeDecor("GridZ" .. index, size, Vector3.new(0, y, z), style.GridColor, Enum.Material.SmoothPlastic, decor)
 	end
 end
 
@@ -186,27 +186,29 @@ function RoomBuilder.Build(parent, layoutId)
 	local thickness = RoomConfig.WallThickness
 	local height = RoomConfig.WallHeight
 	local floorY = RoomConfig.FloorY
+	local style = RoomConfig.ZoneStyle(layout)
 
 	local room = Instance.new("Folder")
 	room.Name = "Room"
 	room:SetAttribute("LayoutId", layoutId)
+	room:SetAttribute("Zone", layout.Zone or "Ruins")
 	room.Parent = parent
 
 	local floor = makePart(
 		"Floor",
 		Vector3.new(interior.X + thickness * 2, RoomConfig.FloorThickness, interior.Y + thickness * 2),
 		Vector3.new(0, floorY - RoomConfig.FloorThickness / 2, 0),
-		RoomConfig.FloorColor,
+		style.FloorColor,
 		room
 	)
-	floor.Material = RoomConfig.FloorMaterial
+	floor.Material = style.FloorMaterial
 
 	local decor = Instance.new("Folder")
 	decor.Name = "Decor"
 	decor.Parent = room
 	local trimColor = layout.TrimColor or RoomConfig.Decor.TrimColor
-	buildFloorTiles(decor, interior, floorY)
-	buildFloorGrid(decor, interior, floorY)
+	buildFloorTiles(decor, interior, floorY, style)
+	buildFloorGrid(decor, interior, floorY, style)
 	buildBorder(decor, interior, floorY, trimColor)
 
 	local wallY = floorY + height / 2
@@ -214,7 +216,7 @@ function RoomBuilder.Build(parent, layoutId)
 		local color, trim = styleFor(solid.Kind, layout)
 		local part = makePart(solid.Name, Vector3.new(solid.Size.X, height, solid.Size.Y), Vector3.zero, color, room)
 		local isCover = solid.Kind == "Wall" or solid.Kind == "Obstacle"
-		part.Material = if isCover then RoomConfig.WallMaterial else RoomConfig.BumperMaterial
+		part.Material = if isCover then style.WallMaterial else RoomConfig.BumperMaterial
 		orient(part, Vector3.new(solid.Center.X, wallY, solid.Center.Y), solid.Yaw)
 		outlineSolid(decor, solid, floorY, height, trim)
 	end

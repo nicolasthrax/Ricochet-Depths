@@ -17,6 +17,7 @@ local RewardService = __require("RewardService")
 local RoomConfig = __require("RoomConfig")
 local RoomService = __require("RoomService")
 local RunConfig = __require("RunConfig")
+local RunPlanner = __require("RunPlanner")
 local UpgradeService = __require("UpgradeService")
 local WorldAdapter = __require("WorldAdapter")
 
@@ -133,6 +134,10 @@ local function simulateRun(seed, scenario)
 		rewards = RewardService.new(),
 		net = net,
 		world = WorldAdapter, -- the real adapter, driving the real character
+		-- Seeded, so a given seed always plays the same rooms.
+		planRun = function()
+			return RunPlanner.Plan(Random.new(seed * 7919))
+		end,
 	})
 
 	projectiles.OnImpact = function(result, entry)
@@ -416,9 +421,10 @@ for _, scenario in SCENARIOS do
 	print(string.format("  %s", scenario.note))
 	print("")
 	print(formatStats("full run, extracted", summarise(durations)))
-	for index = 1, RunConfig.RoomCount() do
-		local room = RunConfig.GetRoom(index)
-		print(formatStats(string.format("room %d %s", index, room.DisplayName), summarise(perRoom[index] or {})))
+	-- Rooms vary between runs, so timings are grouped by slot of the run shape.
+	for index, slot in RunConfig.RunShape do
+		local label = slot.Room or string.format("%s tier %d", slot.Zone, slot.Tier)
+		print(formatStats(string.format("room %d %s", index, label), summarise(perRoom[index] or {})))
 	end
 
 	-- Full-run samples are scarce whenever the bots keep dying, so model the floor instead:

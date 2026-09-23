@@ -32,8 +32,9 @@ describe("run and room configuration agree", function()
 		end
 		expect(normal).toBeGreaterThanOrEqual(3)
 		expect(elite).toBe(1)
-		-- The elite encounter is last, so the run builds to it.
-		expect(RunConfig.Rooms[#RunConfig.Rooms].Kind).toBe("Elite")
+		-- The elite encounter closes every run, so the run builds to it.
+		local finale = RunConfig.RunShape[#RunConfig.RunShape]
+		expect(RunConfig.GetRoomById(finale.Room).Kind).toBe("Elite")
 	end)
 
 	it("gives every room unique ids and a display name", function()

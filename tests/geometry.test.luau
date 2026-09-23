@@ -234,8 +234,55 @@ describe("angled geometry in the collision model", function()
 	end)
 end)
 
+describe("every shielded enemy can be flanked", function()
+	-- Rooms fielding shielded enemies (a Shield in EnemyConfig): their posts must leave most
+	-- approach angles open and sit well away from the spawn, so a flanking ricochet exists.
+	local function shieldedPosts(definition, layout)
+		local markers = {}
+		for _, assignment in RoomService.AssignSpawns(definition, layout) do
+			local archetype = EnemyConfig.Get(assignment.archetype)
+			if archetype and archetype.Shield and not archetype.IsElite then
+				table.insert(markers, layout.EnemySpawns[assignment.marker])
+			end
+		end
+		return markers
+	end
+
+	it("leaves at least half the approach angles open around every post", function()
+		for _, definition in RunConfig.Rooms do
+			local layout = RoomConfig.GetLayout(definition.Layout)
+			local footprints = RoomGeometry.Footprints(layout, RoomConfig)
+			local halfX, halfZ = layout.InteriorSize.X / 2 - 4, layout.InteriorSize.Y / 2 - 4
+			for _, marker in shieldedPosts(definition, layout) do
+				local open = 0
+				for step = 0, 15 do
+					local angle = step * 2 * math.pi / 16
+					local point = Vector2.new(marker.X + math.cos(angle) * 16, marker.Y + math.sin(angle) * 16)
+					local inside = math.abs(point.X) <= halfX and math.abs(point.Y) <= halfZ
+					if inside and not RoomGeometry.SegmentBlocked(footprints, point, marker) then
+						open += 1
+					end
+				end
+				if open < 8 then
+					error(("%s: shielded post (%d, %d) has only %d/16 open approaches"):format(
+						definition.Id, marker.X, marker.Y, open))
+				end
+			end
+		end
+	end)
+
+	it("posts shielded enemies at least 36 studs from the spawn", function()
+		for _, definition in RunConfig.Rooms do
+			local layout = RoomConfig.GetLayout(definition.Layout)
+			for _, marker in shieldedPosts(definition, layout) do
+				expect(marker.Magnitude).toBeGreaterThan(36)
+			end
+		end
+	end)
+end)
+
 describe("room 3 flanking sightlines", function()
-	local crossing = RunConfig.Rooms[3]
+	local crossing = RunConfig.GetRoomById("Crossing")
 	local layout = RoomConfig.GetLayout(crossing.Layout)
 
 	-- The markers the room's Bulwarks actually take, from the same assignment RoomService uses.

@@ -29,7 +29,7 @@ local function fakeRemote()
 	return remote
 end
 
-local function build(seed)
+local function build(seed, planRun)
 	local arena = Instance.new("Folder")
 	arena.Name = "Arena"
 
@@ -64,6 +64,7 @@ local function build(seed)
 		telemetry = telemetry,
 		net = net,
 		world = world,
+		planRun = planRun,
 	})
 
 	return {
@@ -461,5 +462,41 @@ describe("persisted rewards", function()
 		local summary = ctx.net.RunResults:Last().payload
 		expect(summary.Outcome).toBe("Defeated")
 		expect(summary.Reward).toBe(0)
+	end)
+end)
+
+describe("MatchService run plans", function()
+	it("plays the rooms its plan names, in order, and tells clients the zone", function()
+		reset()
+		local RunPlanner = __require("RunPlanner")
+		local plans = 0
+		local ctx = build(3, function()
+			plans += 1
+			return RunPlanner.Fixed({ "Cistern", "Smelter", "Rift" })
+		end)
+		local player = Harness.addPlayer("Planner")
+		ctx.match:RegisterPlayer(player)
+		ctx.match:RequestStart(player, clock)
+		step(ctx, RunConfig.StartCountdown + DT)
+
+		local expected = { { "Drowned Cistern", "Ruins" }, { "Cold Smelter", "Foundry" }, { "The Rift", "Abyss" } }
+		for index, room in expected do
+			local snapshot = ctx.match:GetRunSnapshot()
+			expect(snapshot.RoomIndex).toBe(index)
+			expect(snapshot.RoomCount).toBe(3)
+			expect(snapshot.RoomName).toBe(room[1])
+			expect(snapshot.Zone).toBe(room[2])
+			wipeRoom(ctx, player)
+			step(ctx, DT)
+			if index < 3 then
+				chooseFirstOffer(ctx, player)
+				step(ctx, DT)
+				step(ctx, RunConfig.TransitionDuration + DT)
+			end
+		end
+		expect(ctx.match:GetState()).toBe(States.Results)
+		expect(ctx.net.RunResults:Last().payload.Outcome).toBe("Extracted")
+		expect(plans).toBe(1)
+		Harness.removePlayer(player)
 	end)
 end)

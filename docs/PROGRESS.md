@@ -8,11 +8,10 @@ presentation from any existing game.
 **Milestone 13 (0.7.0-dev): playtest fixes and the content pass. Built headlessly; awaiting
 Studio validation (V8).**
 
-A second Studio session reported a spawn on the template baseplate, a locked camera, a
+A second Studio session reported a locked camera, a
 flickering spawn pad, a blue line at the cursor, box enemies and too little game and map
 design. All of these are addressed:
 
-- **Spawn:** the Baseplate template's floor and SpawnLocation are removed at bootstrap.
 - **Camera:** right-drag or Q/E turns it, pitch tilts between 40° and 80°, and the wheel or a
   pinch zooms.
 - **Cursor line:** the screen-space drag line is gone.
@@ -23,7 +22,7 @@ design. All of these are addressed:
   new enemies and a three-phase boss.
 - **Dressing:** a walled lobby hall, per-zone room dressing, and lighting per zone.
 
-449 headless tests, up from 387. Run `docs/STUDIO_VALIDATION_CHECKLIST.md` V8 next.
+448 headless tests, up from 385. Run `docs/STUDIO_VALIDATION_CHECKLIST.md` V8 next.
 
 ### Where the stub is more forgiving than the engine
 
@@ -279,7 +278,6 @@ soft-lock guard is doing real work.
 Studio feedback, then content. One commit per phase, each green on `scripts/check.sh`.
 
 - **Playtest fixes.**
-  - The Studio Baseplate template's spawn and floor are removed at bootstrap.
   - The tactical camera turns (right-drag, Q/E, two-finger twist), tilts within 40–80° and
     zooms (wheel, pinch). Aiming reads the live camera, and a touch camera gesture drops any
     aim in progress.

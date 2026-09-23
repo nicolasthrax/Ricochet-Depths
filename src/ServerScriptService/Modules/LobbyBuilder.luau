@@ -22,21 +22,6 @@ local PAD_READY_COLOR = Color3.fromRGB(140, 236, 168)
 local KIOSK_OFFSET = Vector3.new(24, 0, 0)
 local KIOSK_SIZE = Vector3.new(6, 7, 4)
 
--- Studio's Baseplate template ships a floor and a SpawnLocation at the world origin, which is
--- where the rooms are built. Left in place, players spawn there at random instead of in the
--- lobby, and the template floor z-fights the arena's. Only the template's own top-level parts
--- are removed; returns how many.
-function LobbyBuilder.ClearTemplate(root)
-	local removed = 0
-	for _, child in root:GetChildren() do
-		if (child.Name == "Baseplate" and child:IsA("BasePart")) or child:IsA("SpawnLocation") then
-			child:Destroy()
-			removed += 1
-		end
-	end
-	return removed
-end
-
 function LobbyBuilder.Build(parent)
 	local origin = RunConfig.LobbyPosition
 

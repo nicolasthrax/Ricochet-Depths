@@ -14,7 +14,7 @@ twice). Everything added in 0.6.0-dev and 0.7.0-dev is headless-only. The ordere
 | `luau-compile` on all sources | PASS | 73 sources + 27 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 449 tests, 0 failures |
+| Headless test suite | PASS | 448 tests, 0 failures |
 | No z-fighting | PASS | no two overlapping visible top faces within 0.05 studs, in any layout |
 | Room mechanics and dressing | PASS | gates clear of spawn and markers; blocking mechanics count as cover; dressing inert and outside the play space |
 | Geometry integrity | PASS | every layout: bevels and reflectors at 45°, inside the walls, clear of the spawn pad and every enemy marker; room 3 flank and spawn sightlines |
@@ -49,7 +49,6 @@ else is still unverified.
 - [ ] Damage numbers and camera shake appear; Screen shake Off removes the shake (V7.3–7.4)
 - [ ] Ready pads light and start a run after the countdown (V7.7)
 - [ ] Shop: an unaffordable purchase is refused; a bought upgrade applies to the next run; a trail shows on shots (V7.8–7.10)
-- [ ] Players spawn in the lobby, never on a template baseplate
 - [ ] Camera turns, tilts and zooms; aiming still matches after turning (V8.1–8.2)
 - [ ] No cursor line; no flicker at the spawn pad or under the aim cues (V8.3–8.4)
 - [ ] Enemy models render and flash on telegraph (V8.5)

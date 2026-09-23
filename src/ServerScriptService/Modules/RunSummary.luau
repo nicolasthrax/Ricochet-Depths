@@ -26,6 +26,7 @@ function RunSummary.ForPlayer(playerState, context)
 		Outcome = context.outcome,
 		DurationSeconds = math.floor(context.duration * 10) / 10,
 		RoomsCleared = playerState.roomsCleared,
+		JoinedAtRoom = playerState.joinedAtRoom,
 		RoomCount = context.roomCount,
 		EnemiesDefeated = playerState.kills,
 		BestChain = playerState.bestChain,

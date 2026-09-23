@@ -82,6 +82,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 6 | Balance numbers are first-pass guesses, never played. | High | Tune from playtest data. |
 | 7 | Run length target of 6–8 minutes is unverified against real play. The dry-run simulator puts the floor well below it, but that is a bot estimate. | High | Measure in the first playtest. |
 | 8 | 85% of simulated runs end in room 3. May be an artifact of a bot that cannot bank shots. | Medium | Watch in the first playtest before changing anything. |
+| 9 | Persistence data-loss races: a reward granted mid-save can vanish; a cross-server rejoin can erase a payout that the ledger then refuses to re-grant. | **High** | Proposal in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`, pending review. Should be resolved before any playtest where salvage matters. |
 
 ## 7. Rollback
 

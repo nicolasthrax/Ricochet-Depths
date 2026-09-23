@@ -20,7 +20,11 @@ function Flow.methods:_beginRoom(index, now)
 		local joiner = self._states[player]
 		if joiner and not table.find(self._participants, player) then
 			joiner:ResetRun()
-			joiner.roomsCleared = index - 1 -- credited with the rooms the team already cleared
+			-- No credit for rooms cleared before they arrived. roomsCleared only ever grows in
+			-- _onRoomCleared, for participants present at the clear, so it counts rooms this
+			-- player was actually in. Pre-crediting let a player wait out a run and join at the
+			-- elite room to collect the whole team's room payout.
+			joiner.joinedAtRoom = index
 			table.insert(self._participants, player)
 			self:_log("LateJoin", { RunId = self._runId, Room = index }, now)
 		end

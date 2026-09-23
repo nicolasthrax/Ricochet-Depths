@@ -22,8 +22,8 @@ defect; each is an untested assumption.
 
 | # | Assumption the stub makes | What the engine does instead | Watch for |
 |---|---|---|---|
-| 1 | `task.wait` returns immediately, so `PlayerDataService` retries cost nothing. | Real backoff yields up to ~7.5s per profile. `BindToClose` calls `SaveAll` **synchronously**, so four struggling profiles could approach Roblox's ~30s shutdown budget. | Data loss on a server shutdown while the datastore is slow. Studio step V6b. |
-| 2 | No yielding means no interleaving, so a load can never overlap a leave or a rejoin. | A player can leave, or rejoin, while their `Load` is still yielding. The session is detached mid-flight and the completed load writes to a table no longer in `_sessions`. | A fast rejoin producing a stale or missing profile. |
+| 1 | `task.wait` returns immediately, so `PlayerDataService` retries cost nothing. | Real backoff yields up to ~7.5s per profile. `BindToClose` calls `SaveAll` **synchronously**, so four struggling profiles could exceed Roblox's ~30s shutdown budget. | Data loss on a server shutdown while the datastore is slow. Studio step V6b. See `docs/PERSISTENCE_SHUTDOWN_PLAN.md` P1–P2. |
+| 2 | No yielding means no interleaving, so a load can never overlap a leave, a rejoin or another save. | A player can leave or rejoin while their `Load` yields, and a reward can be granted while a save yields. The latter loses the reward outright. | Lost salvage after a run, or a stale profile after a fast rejoin. See `docs/PERSISTENCE_SHUTDOWN_PLAN.md` P3–P5. |
 | 3 | `WorldAdapter.Teleport` always finds a `HumanoidRootPart`. | A player mid-respawn has no character. `Teleport` returns false and **`_beginRoom` ignores it**, leaving that player at the previous room's coordinates after the geometry is destroyed. | A player falling out of the world at a room transition. |
 | 4 | RemoteEvent arguments pass by reference with no serialisation. | Roblox deep-copies and drops non-string/number keys, functions and metatables, with a 1MB cap. Payloads were reviewed and are all primitives, but nothing tests this. | Malformed or empty payloads client-side. |
 | 5 | One shared virtual clock across "server" and "client". | `os.clock()` is per-process and unrelated across machines. *(This one did bite — see the upgrade countdown fix in 0.5.1-dev.)* | Any other cross-machine time comparison. |
@@ -148,8 +148,8 @@ replication, character controllers, rendering, input, or DataStore.
 | 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
 | 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
-| 9 | A late joiner is credited with `roomsCleared = index - 1`, so joining at the elite room still pays for the rooms the team cleared without them. Possible farming vector. | Design decision to confirm; untouched because it is a balance call. |
-| 10 | Any participant can dismiss the results screen for the whole team. | Design decision to confirm; currently documented as intentional. |
+| 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
+| 10 | **Persistence has known, unfixed data-loss races.** A change made during an in-flight save is lost; a cross-server rejoin can overwrite a payout while the ledger marks it paid, so it can never be re-granted; concurrent `Release` and `SaveAll` double-write one key; sequential shutdown saves can exceed Roblox's 30s budget. None is reachable headlessly. | Proposal in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`, awaiting review. Do not change persistence code until approved. |
 | 11 | Duplicate small idioms across modules: flattening a Vector3 to XZ (five places), point-in-box tests (`EnemyService.FindEnclosingMover`, `RoomService.GetSpawnPoint`), and list removal. | Flagged only; consolidating would move code between modules, which needs approval. |
 
 ## Manual Studio validation still required
@@ -173,6 +173,17 @@ confirmed by hand; see `docs/TEST_PLAN.md` for the steps.
 - [ ] MS-13 2, 3 and 4 simulated clients complete a run together.
 
 ## Changelog
+
+### 0.5.2-dev — late-join credit
+- Fixed: a late joiner was credited with every room the team had cleared before they arrived, so a
+  player could wait out a run and join at the elite room to collect four rooms' payout for one.
+  `roomsCleared` now counts only rooms the player was present for, and `joinedAtRoom` records
+  where they entered. Also flows through to the persisted `BestRoomsCleared` stat, which was
+  inflated the same way.
+- Added `docs/PERSISTENCE_SHUTDOWN_PLAN.md`: a reviewed-before-built proposal for bounding
+  shutdown saves and handling loads and saves that overlap a leave or rejoin. No persistence code
+  was changed.
+- Recorded results-dismiss-for-everyone as an accepted MVP tradeoff.
 
 ### 0.5.1-dev — post-split review pass
 - Fixed: a room that fails to build left the run in Combat with no room to clear, hanging until

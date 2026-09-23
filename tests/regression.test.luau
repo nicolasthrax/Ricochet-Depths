@@ -242,3 +242,101 @@ describe("spawn point fallback must not return a blocked point", function()
 		expect(point.Z).toBe(0)
 	end)
 end)
+
+describe("late joiners are credited only for rooms they were present for", function()
+	local RewardServiceModule = __require("RewardService")
+
+	local function wipeRoom(match, enemies, shooter, clock)
+		local guard = 0
+		while enemies:GetActiveCount() > 0 and guard < 500 do
+			guard += 1
+			local enemy = enemies:GetEnemies()[1]
+			match:HandleImpact(
+				{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
+				{ direction = Vector3.new(0, 0, 1), damage = 100, damagePerBounce = 0, contacts = 1, shooter = shooter },
+				clock
+			)
+		end
+	end
+
+	local function stepFor(match, clock, seconds)
+		for _ = 1, math.max(1, math.ceil(seconds / DT)) do
+			clock += DT
+			match:Step(DT, clock)
+		end
+		return clock
+	end
+
+	it("does not pay a player held out until the elite room for the rooms before it", function()
+		local match, net, enemies = buildMatch(40)
+		local upgrades = match._upgrades
+		local founder = { Name = "Founder", UserId = 401 }
+		local latecomer = { Name = "Latecomer", UserId = 402 }
+
+		match:RegisterPlayer(founder)
+		match:RequestStart(founder, 0)
+		local clock = stepFor(match, 0, RunConfig.StartCountdown + DT)
+
+		local eliteIndex = RunConfig.RoomCount()
+		for roomIndex = 1, eliteIndex - 1 do
+			expect(match:GetRunSnapshot().RoomIndex).toBe(roomIndex)
+
+			-- The latecomer arrives during the last normal room, so the earliest boundary that
+			-- can admit them is the start of the elite room.
+			if roomIndex == eliteIndex - 1 then
+				match:RegisterPlayer(latecomer)
+				expect(match:IsPendingJoin(latecomer)).toBe(true)
+			end
+
+			wipeRoom(match, enemies, founder, clock)
+			clock = stepFor(match, clock, DT)
+			local offer = upgrades:GetOffer(founder)
+			match:ChooseUpgrade(founder, offer.id, offer.cards[1].Id, clock)
+			clock = stepFor(match, clock, RunConfig.TransitionDuration + DT * 2)
+		end
+
+		-- Admitted at the elite room, and not a moment before.
+		expect(match:GetRunSnapshot().RoomIndex).toBe(eliteIndex)
+		expect(match:IsParticipant(latecomer)).toBe(true)
+		local lateState = match:GetPlayerState(latecomer)
+		expect(lateState.roomsCleared).toBe(0)
+		expect(lateState.joinedAtRoom).toBe(eliteIndex)
+
+		wipeRoom(match, enemies, founder, clock)
+		clock = stepFor(match, clock, DT)
+		expect(match:GetState()).toBe(RunConfig.States.Results)
+
+		local founderState = match:GetPlayerState(founder)
+		expect(founderState.roomsCleared).toBe(eliteIndex)
+		-- One room: the only one the latecomer was actually in.
+		expect(lateState.roomsCleared).toBe(1)
+
+		-- The payout follows. Before the fix the latecomer was paid as if present for all four.
+		local founderSummary, lateSummary
+		for _, call in net.RunResults.calls do
+			if call.player == founder then
+				founderSummary = call.payload
+			elseif call.player == latecomer then
+				lateSummary = call.payload
+			end
+		end
+		expect(lateSummary.RoomsCleared).toBe(1)
+		expect(founderSummary.RoomsCleared).toBe(eliteIndex)
+		expect(lateSummary.Reward).toBe(RewardServiceModule.Compute(lateState, "Extracted", true))
+		expect(lateSummary.Reward).toBeLessThan(founderSummary.Reward)
+	end)
+
+	it("credits a player who starts the run from room one as before", function()
+		local match, _net, enemies = buildMatch(41)
+		local founder = { Name = "Solo", UserId = 403 }
+		match:RegisterPlayer(founder)
+		match:RequestStart(founder, 0)
+		local clock = stepFor(match, 0, RunConfig.StartCountdown + DT)
+
+		local state = match:GetPlayerState(founder)
+		expect(state.joinedAtRoom).toBe(1)
+		wipeRoom(match, enemies, founder, clock)
+		stepFor(match, clock, DT)
+		expect(state.roomsCleared).toBe(1)
+	end)
+end)

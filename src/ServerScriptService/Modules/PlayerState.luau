@@ -33,6 +33,9 @@ function PlayerState:ResetRun()
 	self.bestChain = 0
 	self.damageTaken = 0
 	self.roomsCleared = 0
+	-- The room this player entered the run at. 1 for everyone who starts together; a late
+	-- joiner's is set when they are admitted at a room boundary.
+	self.joinedAtRoom = 1
 	self.lastFireAt = -math.huge
 	self.invulnerableUntil = 0
 end

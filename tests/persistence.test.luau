@@ -3,26 +3,9 @@ local PlayerDataConfig = __require("PlayerDataConfig")
 local PlayerDataService = __require("PlayerDataService")
 
 -- Stand-in DataStore: records calls and can be told to fail a number of times or forever.
+-- Serialises like a real DataStore, so an unsaved in-memory change can never look persisted.
 local function fakeStore()
-	local store = { data = {}, calls = 0, failuresRemaining = 0, alwaysFail = false, conflicts = 0 }
-
-	function store:UpdateAsync(key, transform)
-		self.calls += 1
-		if self.alwaysFail or self.failuresRemaining > 0 then
-			self.failuresRemaining -= 1
-			error("simulated datastore failure", 0)
-		end
-		-- Simulate another server writing between read and write.
-		if self.conflicts > 0 then
-			self.conflicts -= 1
-			self.data[key] = self.externalWrite and self.externalWrite(self.data[key]) or self.data[key]
-		end
-		local updated = transform(self.data[key])
-		self.data[key] = updated
-		return updated
-	end
-
-	return store
+	return __FakeDataStore.new()
 end
 
 local function player(userId)
@@ -314,12 +297,7 @@ end)
 
 describe("settings", function()
 	local function loadedService()
-		local store = { data = {} }
-		function store:UpdateAsync(key, transform)
-			local updated = transform(self.data[key])
-			self.data[key] = updated
-			return updated
-		end
+		local store = __FakeDataStore.new()
 		local service = PlayerDataService.new(store)
 		local subject = player(60)
 		service:Load(subject)
@@ -403,5 +381,54 @@ describe("settings", function()
 		expect(service:GetPublicProfile(subject).Flags.OnboardingSeen).toBe(false)
 		service:RecordRunEnd(subject, { Outcome = "Defeated", EnemiesDefeated = 1, BestChain = 1, RoomsCleared = 0 })
 		expect(service:GetPublicProfile(subject).Flags.OnboardingSeen).toBe(true)
+	end)
+end)
+
+describe("every profile field survives a save", function()
+	-- Save writes back an explicit list of fields. A field added to the schema but not to that
+	-- list is silently dropped on every save. Settings went unsaved this way for a whole schema
+	-- version, hidden by a fake store that shared its table with the session.
+	it("round-trips every top-level field through a real save", function()
+		local store = __FakeDataStore.new()
+		local service = PlayerDataService.new(store)
+		local subject = player(70)
+		service:Load(subject)
+
+		local profile = service:GetSession(subject).profile
+		local skipped = { SchemaVersion = true, LastSaved = true } -- owned by the save itself
+		local marked = {}
+		for field, value in PlayerDataConfig.DefaultProfile() do
+			if not skipped[field] then
+				expect(type(value)).toBe("table")
+				profile[field] = profile[field] or {}
+				profile[field].__roundTripMarker = field
+				marked[field] = true
+			end
+		end
+		service:GetSession(subject).dirty = true
+		expect((service:Save(subject, 1))).toBe(true)
+
+		local stored = store:Peek("profile_70")
+		for field in marked do
+			expect(stored[field]).toBeTruthy()
+			if stored[field].__roundTripMarker ~= field then
+				error(string.format("profile field %q is not written by Save", field), 0)
+			end
+		end
+	end)
+
+	it("persists a settings change across a reload", function()
+		local store = __FakeDataStore.new()
+		local subject = player(71)
+
+		local first = PlayerDataService.new(store)
+		first:Load(subject)
+		first:ApplySettings(subject, { ReducedFlash = true, EffectIntensity = 0.5 })
+		first:Release(subject, 1)
+
+		local second = PlayerDataService.new(store)
+		local profile = second:Load(subject)
+		expect(profile.Settings.ReducedFlash).toBe(true)
+		expect(profile.Settings.EffectIntensity).toBe(0.5)
 	end)
 end)

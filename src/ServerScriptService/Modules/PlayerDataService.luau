@@ -143,6 +143,7 @@ function PlayerDataService:Save(player, now)
 			merged.Currency = snapshot.Currency
 			merged.Unlocks = snapshot.Unlocks
 			merged.Flags = snapshot.Flags
+			merged.Settings = snapshot.Settings
 			merged.Stats = snapshot.Stats
 			merged.LastSaved = now or 0
 			return merged

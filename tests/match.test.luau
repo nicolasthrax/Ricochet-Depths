@@ -374,12 +374,7 @@ describe("persisted rewards", function()
 		reset()
 		local PlayerDataService = __require("PlayerDataService")
 
-		local store = { data = {} }
-		function store:UpdateAsync(key, transform)
-			local updated = transform(self.data[key])
-			self.data[key] = updated
-			return updated
-		end
+		local store = __FakeDataStore.new()
 
 		local persistence = PlayerDataService.new(store)
 		local ctx = build(77)

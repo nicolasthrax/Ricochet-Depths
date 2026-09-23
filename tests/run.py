@@ -97,7 +97,9 @@ def build_bundle(test_files):
         source = re.sub(r"\bos\.clock\b", "__clock", source)
         chunks.append(f"__factories[{name!r}] = function()\n{source}\nend\n")
     for path in test_files:
-        chunks.append(f"-- ==== {os.path.relpath(path, ROOT)} ====\n" + open(path).read() + "\n")
+        # Each file gets its own block so top-level locals cannot accumulate across files
+        # toward Luau's 200-locals-per-function limit on the single bundled chunk.
+        chunks.append(f"-- ==== {os.path.relpath(path, ROOT)} ====\ndo\n" + open(path).read() + "\nend\n")
     chunks.append("__finishTests()\n")
     return "\n".join(chunks), modules
 

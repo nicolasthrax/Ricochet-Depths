@@ -9,7 +9,7 @@ local OnboardingView = {}
 OnboardingView.__index = OnboardingView
 
 local HINTS = {
-	Lobby = "Walk to the glowing pedestal and hold to begin a descent.",
+	Lobby = "Stand on a ready pad, or hold at the glowing pedestal, to begin a descent.",
 	Aim = "Drag away from your target, then release to fire.",
 	Ricochet = "Shots bounce. Bank them off walls to reach what you cannot see.",
 	Shield = "Shielded enemies block shots from the front. Come at them from the side.",
@@ -72,10 +72,6 @@ function OnboardingView:MarkAllSeen()
 		self._seen[hintId] = true
 	end
 	self:Hide()
-end
-
-function OnboardingView:HasSeen(hintId)
-	return self._seen[hintId] == true
 end
 
 function OnboardingView:Destroy()

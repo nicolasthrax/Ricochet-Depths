@@ -11,7 +11,8 @@ function RewardService.new()
 	return setmetatable({ _granted = {} }, RewardService)
 end
 
--- outcome is "Extracted", "Defeated" or "TimedOut".
+-- Only "Extracted" pays in full; every other outcome (Defeated, TimedOut, Abandoned, Aborted)
+-- pays the defeat fraction.
 function RewardService.Compute(playerState, outcome, eliteCleared)
 	local base = playerState.roomsCleared * RewardConfig.PerRoomCleared + playerState.kills * RewardConfig.PerKill
 	if eliteCleared then
@@ -40,10 +41,6 @@ end
 
 function RewardService:WasGranted(runId, playerKey)
 	return self._granted[tostring(runId) .. "|" .. tostring(playerKey)] ~= nil
-end
-
-function RewardService:Forget(runId, playerKey)
-	self._granted[tostring(runId) .. "|" .. tostring(playerKey)] = nil
 end
 
 return RewardService

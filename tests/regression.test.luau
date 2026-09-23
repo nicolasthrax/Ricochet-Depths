@@ -340,3 +340,124 @@ describe("late joiners are credited only for rooms they were present for", funct
 		expect(state.roomsCleared).toBe(1)
 	end)
 end)
+
+-- Found in the 0.6.0-dev bug sweep. Each failed before its fix.
+describe("bug sweep regressions", function()
+	local ProjectileConfig = __require("ProjectileConfig")
+
+	local function matchWith(extra)
+		local arena = Instance.new("Folder")
+		local enemies = EnemyService.new(arena, PLANE_Y, 9)
+		local net = {}
+		for _, name in { "RunStateChanged", "PlayerStateChanged", "UpgradeOffer", "UpgradeResolved", "RunResults", "EnemyDefeated" } do
+			net[name] = silentRemote()
+		end
+		local deps = {
+			rooms = RoomService.new(arena, enemies, PLANE_Y, Random.new(9)),
+			enemies = enemies,
+			upgrades = UpgradeService.new(9),
+			projectiles = ProjectileService.new(arena, arena, PLANE_Y),
+			rewards = RewardService.new(),
+			net = net,
+		}
+		for key, value in extra or {} do
+			deps[key] = value
+		end
+		return MatchService.new(deps), enemies
+	end
+
+	it("honours ConsumeOnEnemyHit: a damaging hit swallows the shot, a shield block never does", function()
+		local match, enemies = matchWith()
+		local chaser = enemies:Spawn("Chaser", Vector3.new(10, PLANE_Y, 0))
+		local bulwark = enemies:Spawn("Bulwark", Vector3.new(-10, PLANE_Y, 0))
+		bulwark.facing = Vector3.new(1, 0, 0) -- facing the shot below, so it blocks
+		local entry = { damage = 1, damagePerBounce = 0, contacts = 1, direction = Vector3.new(-1, 0, 0) }
+		local function impact(part)
+			return match:HandleImpact({ Instance = part, Position = Vector3.zero, Normal = Vector3.new(1, 0, 0) }, entry, 0)
+		end
+
+		local previous = ProjectileConfig.ConsumeOnEnemyHit
+		ProjectileConfig.ConsumeOnEnemyHit = true
+		local swallowed = impact(chaser.part)
+		local blocked = impact(bulwark.part)
+		local wall = impact(Instance.new("Part"))
+		ProjectileConfig.ConsumeOnEnemyHit = previous
+
+		expect(swallowed).toBe(true)
+		expect(blocked).toBe(false)
+		expect(wall).toBe(false)
+		-- Off (the default), every hit ricochets.
+		local survivor = enemies:Spawn("Chaser", Vector3.new(20, PLANE_Y, 0))
+		expect(impact(survivor.part)).toBe(false)
+	end)
+
+	it("records a run that earned nothing, so stats and onboarding still advance", function()
+		local recorded, granted = {}, 0
+		local persistence = {
+			GrantReward = function(_, _, _, amount)
+				granted += amount
+				return amount
+			end,
+			RecordRunEnd = function(_, player, summary)
+				table.insert(recorded, { player = player, summary = summary })
+			end,
+			SaveInBackground = function() end,
+		}
+		local match = matchWith({ persistence = persistence })
+		local player = Harness.addPlayer("Zero")
+		match:RequestStart(player, 0)
+		match:_finish("Defeated", 1) -- nothing cleared, nothing killed: a zero payout
+		expect(granted).toBe(0)
+		expect(#recorded).toBe(1)
+		expect(recorded[1].summary.Outcome).toBe("Defeated")
+		Harness.removePlayer(player)
+	end)
+
+	it("returns a participant who respawns mid-run to the current room", function()
+		local teleports, speeds = {}, {}
+		local world = {
+			GetPosition = function()
+				return Vector3.new(0, PLANE_Y, 0)
+			end,
+			Teleport = function(target, position)
+				table.insert(teleports, { player = target, position = position })
+				return true
+			end,
+			SetWalkSpeed = function(target, speed)
+				speeds[target] = speed
+				return true
+			end,
+		}
+		local match = matchWith({ world = world })
+		local player = Harness.addPlayer("Respawner")
+
+		-- In the lobby a respawn is the engine's business: nothing is moved.
+		match:RegisterPlayer(player)
+		match:HandleCharacterAdded(player)
+		expect(#teleports).toBe(0)
+
+		match:RequestStart(player, 0)
+		local clock = 0
+		while match:GetState() ~= RunConfig.States.Combat and clock < 10 do
+			clock += DT
+			match:Step(DT, clock)
+		end
+		expect(match:GetState()).toBe(RunConfig.States.Combat)
+		table.clear(teleports)
+		speeds[player] = nil
+
+		match:HandleCharacterAdded(player)
+		expect(#teleports).toBe(1)
+		expect(teleports[1].position).toBe(match._rooms:GetSpawnPoint())
+		expect(speeds[player]).toBe(RunConfig.BaseWalkSpeed)
+
+		-- Someone waiting to join at the next room boundary stays put until then.
+		local waiting = Harness.addPlayer("Waiting")
+		match:RegisterPlayer(waiting)
+		match:HandleCharacterAdded(waiting)
+		expect(#teleports).toBe(1)
+
+		Harness.removePlayer(player)
+		Harness.removePlayer(waiting)
+	end)
+end)

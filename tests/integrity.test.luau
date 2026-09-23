@@ -122,8 +122,6 @@ describe("enemy configuration is self-consistent", function()
 			expect(archetype.Health).toBeGreaterThan(0)
 			expect(archetype.Size.Y).toBe(EnemyConfig.BodyHeight)
 			expect(#archetype.DisplayName).toBeGreaterThan(0)
-			expect(archetype.Xp).toBeGreaterThanOrEqual(0)
-			expect(archetype.Score).toBeGreaterThanOrEqual(0)
 		end
 	end)
 

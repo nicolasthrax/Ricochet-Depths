@@ -67,6 +67,24 @@ function Flow.methods:_beginRoom(index, now)
 	return nil
 end
 
+-- A participant whose character respawned mid-run (a reset, or a fall out of the world)
+-- appears at the lobby's SpawnLocation; this puts them back in the current room. It also covers
+-- a room start that could not teleport someone who was mid-respawn at the time.
+function Flow.methods:HandleCharacterAdded(player)
+	local state = self._states[player]
+	if not state or not self:IsRunActive() or not table.find(self._participants, player) then
+		return false
+	end
+	if not self._rooms:GetCurrent() or not self._world then
+		return false -- no room yet: the room start teleports everyone
+	end
+	self._world.Teleport(player, self._rooms:GetSpawnPoint())
+	if self._world.SetWalkSpeed then
+		self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed + state.stats.MoveSpeedBonus)
+	end
+	return true
+end
+
 function Flow.methods:_onRoomCleared(now)
 	local definition = RunConfig.GetRoom(self._roomIndex)
 	if definition and definition.Kind == "Elite" then
@@ -132,8 +150,11 @@ function Flow.methods:_finish(outcome, now)
 			-- Two guards in series: the in-memory ledger stops a repeated completion event on
 			-- this server, and the profile ledger stops a repeat across reconnects or servers.
 			summary.Reward = self._rewards:Grant(self._runId, player, summary.Reward)
-			if summary.Reward > 0 and self._persistence then
-				summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
+			if self._persistence then
+				if summary.Reward > 0 then
+					summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
+				end
+				-- Every finished run counts, paid or not: stats advance and onboarding retires.
 				self._persistence:RecordRunEnd(player, summary)
 				-- Written now, not left for autosave or leave: a payout is the one change whose
 				-- loss really hurts, and this single write carries it with the run's stats.

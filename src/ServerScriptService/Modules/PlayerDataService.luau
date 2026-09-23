@@ -708,12 +708,6 @@ function PlayerDataService:GetPublicProfile(player)
 	}
 end
 
-function PlayerDataService:SetFlag(player, name, value)
-	return self:Update(player, function(profile)
-		profile.Flags[name] = value
-	end)
-end
-
 function PlayerDataService:RecordRunEnd(player, summary)
 	return self:Update(player, function(profile)
 		profile.Stats.RunsStarted += 1

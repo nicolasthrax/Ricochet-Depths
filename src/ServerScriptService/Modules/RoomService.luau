@@ -133,13 +133,6 @@ function RoomService:IsCleared(now)
 	return false
 end
 
-function RoomService:ForceClear()
-	if self._current then
-		self._current.forcedClear = true
-	end
-	self._enemies:Clear()
-end
-
 -- Elite rooms keep a small escort alive while the core lives, so the fight keeps pressure on.
 function RoomService:Step(_deltaTime, now)
 	local current = self._current

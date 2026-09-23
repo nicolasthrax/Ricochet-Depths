@@ -112,6 +112,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	RunService:BindToRenderStep(RENDER_STEP, Enum.RenderPriority.Camera.Value + 1, renderAim)
 end)
 
+-- Alt-tabbing mid-drag means the release is never seen. Drop the gesture rather than leave it
+-- live, where the next click's release would fire it from the stale press point.
+UserInputService.WindowFocusReleased:Connect(function()
+	if activeInput then
+		endDrag()
+	end
+end)
+
 UserInputService.InputChanged:Connect(function(input)
 	if not AimMath.IsSameGesture(activeInput, input) then
 		return

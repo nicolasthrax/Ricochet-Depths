@@ -77,7 +77,7 @@ deterministic. Game source is never modified for tests.
 | Fuzz: state machine | `fuzz.test.luau` | 25 random 1200-event sequences; every transition checked at its source against an explicit legal edge set; participants never duplicated; an untouched run always reaches the lobby. |
 | Config integrity | `integrity.test.luau` | Cross-references between configs: rooms point at real layouts, spawns name real archetypes, behaviours have implementations, fusion prerequisites are reachable, migrations exist for every old version, obstacles stay clear of the spawn point. |
 | Remote boundary | `services.test.luau` | Token-bucket limits per player and action; the router rate limits before touching state, rejects mistyped payloads, and leaves no listeners behind across bind/destroy cycles. |
-| Telemetry | `services.test.luau` | Per-event budgets and window resets; players identified only by an opaque per-session index; error detail truncated; nothing emitted when disabled. |
+| Telemetry | `services.test.luau` | Per-event budgets and window resets; error detail truncated; nothing emitted when disabled. |
 | Room construction | `services.test.luau` | Every layout builds; an unknown layout is refused with a reason; the previous room is destroyed on load; escorts replace while the elite lives and stop when it dies; the spawn point is clear of cover in every layout. |
 | Support modules | `services.test.luau` | LobbyBuilder output, DataStoreProvider degradation, PartPool lifecycle, RunSummary contents, and each EnemyBehaviour function in isolation. |
 

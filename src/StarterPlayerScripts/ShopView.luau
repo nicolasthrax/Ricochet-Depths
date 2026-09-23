@@ -129,6 +129,7 @@ function ShopView:_activate(item)
 		return
 	end
 	self.status.Text = "Buying " .. item.Title .. "..."
+	self.status.TextColor3 = UiConfig.Colors.TextMuted
 	self._onPurchase(item.Id)
 end
 
@@ -195,10 +196,6 @@ end
 
 function ShopView:Close()
 	self.panel.Visible = false
-end
-
-function ShopView:IsOpen()
-	return self.panel.Visible
 end
 
 return ShopView

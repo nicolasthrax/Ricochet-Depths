@@ -28,8 +28,6 @@ EnemyConfig.Archetypes = {
 		WanderRadius = 7,
 		WanderInterval = 2.2,
 		ContactDamage = 0,
-		Xp = 1,
-		Score = 10,
 	},
 
 	Chaser = {
@@ -46,8 +44,6 @@ EnemyConfig.Archetypes = {
 		ContactDamage = 10,
 		ContactRange = 5,
 		ContactCooldown = 1,
-		Xp = 2,
-		Score = 20,
 	},
 
 	Bulwark = {
@@ -63,8 +59,6 @@ EnemyConfig.Archetypes = {
 		ContactDamage = 16,
 		ContactRange = 6.5,
 		ContactCooldown = 1.3,
-		Xp = 3,
-		Score = 45,
 		-- Shielded across the front: direct shots bounce off, so the answer is a ricochet
 		-- that arrives from the flank or behind.
 		Shield = {
@@ -99,8 +93,6 @@ EnemyConfig.Archetypes = {
 		ContactDamage = 22,
 		ContactRange = 9,
 		ContactCooldown = 1.2,
-		Xp = 25,
-		Score = 400,
 		Shield = {
 			HalfAngleDegrees = 88,
 			DamageMultiplier = 0,
@@ -114,12 +106,6 @@ EnemyConfig.Archetypes = {
 			TelegraphColor = Color3.fromRGB(255, 226, 140),
 			Duration = 0.7,
 			SpeedMultiplier = 5,
-		},
-		-- Escorts respawn while the core lives, so the fight keeps pressure on.
-		Escort = {
-			ArchetypeId = "Chaser",
-			Count = 2,
-			RespawnDelay = 7,
 		},
 	},
 }

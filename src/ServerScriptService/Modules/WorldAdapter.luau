@@ -32,10 +32,4 @@ function WorldAdapter.SetWalkSpeed(player, speed)
 	return true
 end
 
-function WorldAdapter.IsAlive(player)
-	local character = player and player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	return humanoid ~= nil and humanoid.Health > 0
-end
-
 return WorldAdapter

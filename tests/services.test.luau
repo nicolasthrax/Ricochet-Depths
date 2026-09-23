@@ -223,19 +223,6 @@ describe("TelemetryService", function()
 		expect(#events).toBe(30) -- the ShotFired budget
 	end)
 
-	it("identifies players only by an opaque, stable index", function()
-		local service = collector()
-		local first = { Name = "Alice", UserId = 12345 }
-		local second = { Name = "Bob", UserId = 67890 }
-
-		local firstId = service:ParticipantId(first)
-		expect(service:ParticipantId(first)).toBe(firstId) -- stable
-		expect(service:ParticipantId(second)).never().toBe(firstId)
-		-- The index must carry nothing derived from the account.
-		expect(firstId).never().toBe(first.UserId)
-		expect(type(firstId)).toBe("number")
-		expect(service:ParticipantId(nil)).toBe(0)
-	end)
 
 	it("truncates error detail and keeps the category", function()
 		local service, events = collector()

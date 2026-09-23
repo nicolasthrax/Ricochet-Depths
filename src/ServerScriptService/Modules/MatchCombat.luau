@@ -104,8 +104,9 @@ function Combat.methods:HandleImpact(result, entry, now)
 		}, now)
 	end
 
-	-- Shots ricochet off enemies too, which is what lets a single shot chain kills.
-	return false
+	-- By default shots ricochet off enemies too, which is what lets a single shot chain kills.
+	-- With ConsumeOnEnemyHit a damaging hit ends the shot; a shield block still bounces it.
+	return ProjectileConfig.ConsumeOnEnemyHit and not hit.blocked
 end
 
 function Combat.methods:HandlePlayerContact(player, damage, _enemy, now)

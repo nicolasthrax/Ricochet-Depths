@@ -65,14 +65,18 @@ EnemyConfig.Archetypes = {
 		Material = Enum.Material.SmoothPlastic,
 		MoveSpeed = 5,
 		StandoffDistance = 6,
-		ContactDamage = 16,
+		-- Playtest: too punishing. Was 16.
+		ContactDamage = 12,
 		ContactRange = 6.5,
 		ContactCooldown = 1.3,
-		-- Shielded across the front: direct shots bounce off, so the answer is a ricochet
-		-- that arrives from the flank or behind.
+		-- Shielded across one side: direct shots into it bounce off. Playtest: a shield that
+		-- always faced the player was too hard, so it now turns steadily on its own and its
+		-- back comes round every few seconds; banking round it still works any time.
 		Shield = {
-			-- Blocked when the incoming heading is within this half-angle of dead-on.
-			HalfAngleDegrees = 72,
+			-- Blocked when the incoming heading is within this half-angle of the shield's heading.
+			HalfAngleDegrees = 62,
+			-- Degrees per second the shield turns, independent of where the Bulwark walks.
+			SpinSpeed = 70,
 			DamageMultiplier = 0,
 			Color = Color3.fromRGB(226, 246, 252),
 			Thickness = 0.6,

@@ -4,8 +4,10 @@
 are a standing STOP condition; this is for review before any code in `PlayerDataService` or its
 wiring in `GameBootstrap` is touched.
 
-Roblox platform limits quoted here are from Roblox's DataStore documentation as I understand it
-at time of writing. Verify them against the current docs before building on them.
+Platform limits relied on here: `BindToClose` handlers get up to **30 seconds**. There is **no
+per-key write cooldown** — the old six-second same-key limit was removed in June 2023 — so writes
+compete only against the general request budget, which scales with player count. An earlier
+draft of this document assumed the cooldown still applied; that has been corrected throughout.
 
 ---
 
@@ -33,9 +35,10 @@ comfortably pass 30s. Saves after the cutoff are simply lost.
 
 **P2 — Duplicate concurrent saves of the same key.** On shutdown Roblox also removes each player,
 so `PlayerRemoving` fires `Release` in its own thread *while* `SaveAll` is iterating. Both call
-`Save` on the same session at once — two `UpdateAsync` requests for one key. DataStore enforces a
-short cooldown between writes to the same key (about six seconds), so the second write can be
-throttled into a delay that eats the shutdown budget, or fail outright.
+`Save` on the same session at once — two `UpdateAsync` requests for one key. With no per-key
+cooldown the second write is not delayed, so this is **less severe than first drafted**: the cost
+is a wasted request from the budget. The part that still matters is that two in-flight saves on
+one session are exactly the interleaving that triggers P3.
 
 **P3 — A change made during an in-flight save is lost.** `Save` yields inside `UpdateAsync`. If
 `GrantReward` or `ApplySettings` runs during that yield and after the transform has already read
@@ -82,7 +85,10 @@ rejoin creates a new one for the same `UserId`.
 
 The only data whose loss really hurts is a payout. Today it sits unsaved until the next autosave
 (120s) or the player leaving. **Proposal: save immediately after `GrantReward`.** That costs one
-extra `UpdateAsync` per player per run, and turns most shutdown saves into settings-only no-ops.
+extra `UpdateAsync` per player per run — about one write per player every six to eight minutes,
+negligible against a budget that scales with player count — and turns most shutdown saves into
+settings-only no-ops. With no per-key cooldown, that write cannot collide with the next save of the
+same profile, so it adds no queueing either.
 With this in place, P1 degrades from "players lose rewards" to "players may lose an options
 change".
 
@@ -146,8 +152,8 @@ Before any implementation:
    to a scheduler that advances the virtual clock and resumes due threads in order. Existing tests
    must stay green under it.
 2. **Realistic fake DataStore.** `UpdateAsync` yields for a configurable duration, invokes its
-   transform possibly more than once, enforces the per-key write cooldown, and can be told to fail
-   or stall.
+   transform possibly more than once, draws from a request budget that throttles when exhausted
+   (no per-key cooldown), and can be told to fail or stall.
 3. **New cases**, each written to fail against today's code first:
    - Four stalled profiles: shutdown returns before the deadline, and reports every unfinished save.
    - `Release` and `SaveAll` on the same session produce exactly one write.
@@ -171,8 +177,13 @@ Before any implementation:
 1. Delta currency (C3) or session locking? The recommendation is delta; locking is the better fit
    only if you expect to add tradeable or otherwise non-commutative state later.
 2. Is a 25s shutdown deadline right, or do you want more margin?
-3. Is one extra `UpdateAsync` per player per run acceptable for save-on-reward?
-4. When a shutdown save fails outright, is logging it enough for the playtest, or do you want a
+3. When a shutdown save fails outright, is logging it enough for the playtest, or do you want a
    recovery path (for example, a pending-grant record written to a separate key)?
-5. Should the harness scheduler (§6.1) land first, on its own, since it is test-only and would
+4. Should the harness scheduler (§6.1) land first, on its own, since it is test-only and would
    start exposing interleaving bugs anywhere else in the codebase too?
+
+**Resolved:** *Is one extra `UpdateAsync` per player per run acceptable for save-on-reward?* Yes.
+With the per-key cooldown gone, the only cost is one request against a budget that scales with
+player count, and that request cannot queue behind other writes to the same profile. That makes
+save-on-reward the clear first step. It is the cheapest change in this plan and removes most of
+P1's real-world impact on its own.

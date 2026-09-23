@@ -22,6 +22,16 @@ function WorldAdapter.Teleport(player, position)
 	return true
 end
 
+function WorldAdapter.SetWalkSpeed(player, speed)
+	local character = player and player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+	humanoid.WalkSpeed = speed
+	return true
+end
+
 function WorldAdapter.IsAlive(player)
 	local character = player and player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")

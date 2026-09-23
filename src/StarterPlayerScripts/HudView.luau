@@ -129,8 +129,7 @@ function HudView:UpdateRun(snapshot)
 			or string.format("%d targets left", snapshot.EnemiesRemaining)
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
 	elseif snapshot.State == RunConfig.States.Lobby then
-		self.objectiveLabel.Text = "Use the pedestal to begin a descent"
-		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
+		self:_renderLobbyObjective()
 	else
 		self.objectiveLabel.Text = ""
 	end
@@ -139,6 +138,32 @@ function HudView:UpdateRun(snapshot)
 	self.banner.Visible = banner ~= nil
 	if banner then
 		self.bannerLabel.Text = banner
+	end
+end
+
+-- The lobby line: ready-pad progress when anyone is gathering, otherwise how to start.
+function HudView:_renderLobbyObjective()
+	local ready = self._lobbyReady
+	if ready and ready.Countdown then
+		self.objectiveLabel.Text = string.format("Descending in %d...", ready.Countdown)
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Health
+	elseif ready and ready.Ready > 0 then
+		self.objectiveLabel.Text = string.format("Ready %d / %d  -  everyone onto a pad", ready.Ready, ready.Total)
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
+	else
+		self.objectiveLabel.Text = "Stand on a ready pad, or use the pedestal to descend"
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
+	end
+end
+
+-- snapshot is the LobbyReadyState payload.
+function HudView:SetLobbyReady(snapshot)
+	if type(snapshot) ~= "table" then
+		return
+	end
+	self._lobbyReady = snapshot.Active and snapshot or nil
+	if snapshot.Active then
+		self:_renderLobbyObjective()
 	end
 end
 

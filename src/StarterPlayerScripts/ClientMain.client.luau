@@ -11,6 +11,8 @@ local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local SettingsView = require(script.Parent:WaitForChild("SettingsView"))
+local ShopView = require(script.Parent:WaitForChild("ShopView"))
+local SoundPlayer = require(script.Parent:WaitForChild("SoundPlayer"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -18,6 +20,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 local chooseUpgrade = Remotes.Get("ChooseUpgrade")
 local requestReturnToLobby = Remotes.Get("RequestReturnToLobby")
 local updateSettings = Remotes.Get("UpdateSettings")
+local purchaseShopItem = Remotes.Get("PurchaseShopItem")
+local equipShopItem = Remotes.Get("EquipShopItem")
 
 local hud = HudView.new(playerGui)
 local settingsView = SettingsView.new(playerGui, function(settings)
@@ -25,7 +29,14 @@ local settingsView = SettingsView.new(playerGui, function(settings)
 end)
 settingsView:SetVersion("Build " .. RunConfig.Version)
 local onboarding = OnboardingView.new(playerGui)
+local shopView = ShopView.new(playerGui, function(itemId)
+	purchaseShopItem:FireServer(itemId)
+end, function(itemId)
+	equipShopItem:FireServer(itemId)
+end)
+local sounds = SoundPlayer.Shared()
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
+	sounds:Play("CardSelect")
 	chooseUpgrade:FireServer(offerId, cardId)
 end)
 -- Declared before construction so the dismiss callback closes over the local, not a global.
@@ -41,12 +52,21 @@ local function publishState(state)
 end
 publishState(RunConfig.States.Lobby)
 
+local lastState = nil
 Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	if type(snapshot) ~= "table" then
 		return
 	end
+	-- A room just cleared: combat gave way to the upgrade round.
+	if lastState == RunConfig.States.Combat and snapshot.State == RunConfig.States.UpgradeChoice then
+		sounds:Play("RoomClear")
+	end
+	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
 	publishState(snapshot.State)
+	if snapshot.State ~= RunConfig.States.Lobby then
+		shopView:Close() -- the shop is lobby-only
+	end
 
 	if snapshot.State == RunConfig.States.Lobby then
 		onboarding:Show("Lobby")
@@ -82,11 +102,27 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	if type(profile.Flags) == "table" and profile.Flags.OnboardingSeen then
 		onboarding:MarkAllSeen()
 	end
+	shopView:SetProfile(profile)
 	settingsView:Apply(profile.Settings)
 	local settings = settingsView:GetSettings()
 	player:SetAttribute("EffectIntensity", settings.EffectIntensity)
 	player:SetAttribute("ReducedFlash", settings.ReducedFlash)
 	player:SetAttribute("ScreenShake", settings.ScreenShake)
+end)
+
+Remotes.Get("ShopOpen").OnClientEvent:Connect(function()
+	shopView:Open()
+end)
+
+Remotes.Get("ShopResult").OnClientEvent:Connect(function(payload)
+	shopView:ShowResult(payload)
+	if type(payload) == "table" and payload.Ok and payload.Action == "Purchase" then
+		sounds:Play("CardSelect")
+	end
+end)
+
+Remotes.Get("LobbyReadyState").OnClientEvent:Connect(function(snapshot)
+	hud:SetLobbyReady(snapshot)
 end)
 
 Remotes.Get("UpgradeOffer").OnClientEvent:Connect(function(payload)
@@ -109,6 +145,9 @@ Remotes.Get("RunResults").OnClientEvent:Connect(function(summary)
 		return
 	end
 	cardPicker:Hide()
+	if summary.Outcome == "Extracted" then
+		sounds:Play("RoomClear")
+	end
 	results:Show(summary)
 end)
 

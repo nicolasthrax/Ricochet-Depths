@@ -91,3 +91,73 @@ describe("AimIndicator world line", function()
 		expect(line.Transparency).toBe(1)
 	end)
 end)
+
+describe("AimIndicator ground cues", function()
+	it("projects the line onto the floor and marks the landing point", function()
+		local world = Instance.new("Folder")
+		local indicator = AimIndicator.new(Instance.new("Folder"), world, 0)
+		local folder = world:FindFirstChild("AimWorldVisual")
+		local groundLine = folder:FindFirstChild("AimGroundLine")
+		local drop = folder:FindFirstChild("AimDropLine")
+		local reticle = folder:FindFirstChild("AimReticle")
+
+		indicator:Show(Vector2.new(0, 0), Vector2.new(0, -1), 0, true, Vector3.new(0, 3, 0), Vector3.new(0, 0, -1))
+		local tipZ = -AimConfig.WorldLineMinLength
+
+		expect(reticle.Transparency).toBe(AimConfig.ReticleTransparency)
+		expect(reticle.CFrame.Position.Z).toBeCloseTo(tipZ)
+		expect(reticle.CFrame.Position.Y).toBeLessThan(0.1)
+		expect(groundLine.CFrame.Position.Z).toBeCloseTo(tipZ / 2)
+		expect(groundLine.Size.Z).toBeCloseTo(AimConfig.WorldLineMinLength)
+		-- The drop line spans the gap between the floor and the aim tip on the projectile plane.
+		expect(drop.Size.Y + AimConfig.GroundLift / 2).toBeCloseTo(3)
+		expect(drop.CFrame.Position.Z).toBeCloseTo(tipZ)
+
+		indicator:Hide()
+		for _, part in folder:GetChildren() do
+			expect(part.Transparency).toBe(1)
+			expect(part.CanQuery).toBe(false)
+		end
+	end)
+end)
+
+describe("dual-zone touch input", function()
+	local viewport = Vector2.new(1000, 500)
+
+	it("leaves the left of the screen to the movement thumbstick", function()
+		expect(AimMath.IsInAimZone(Enum.UserInputType.Touch, Vector2.new(100, 300), viewport, AimConfig)).toBe(false)
+		local edge = viewport.X * AimConfig.TouchAimZoneStart
+		expect(AimMath.IsInAimZone(Enum.UserInputType.Touch, Vector2.new(edge - 1, 300), viewport, AimConfig)).toBe(false)
+	end)
+
+	it("aims with touches that start on the right of the screen", function()
+		local edge = viewport.X * AimConfig.TouchAimZoneStart
+		expect(AimMath.IsInAimZone(Enum.UserInputType.Touch, Vector2.new(edge + 1, 300), viewport, AimConfig)).toBe(true)
+		expect(AimMath.IsInAimZone(Enum.UserInputType.Touch, Vector2.new(990, 20), viewport, AimConfig)).toBe(true)
+	end)
+
+	it("never zones the mouse: a desktop player can aim from anywhere", function()
+		expect(AimMath.IsInAimZone(Enum.UserInputType.MouseButton1, Vector2.new(5, 5), viewport, AimConfig)).toBe(true)
+	end)
+
+	it("aims anywhere when the viewport size is unknown rather than refusing every touch", function()
+		expect(AimMath.IsInAimZone(Enum.UserInputType.Touch, Vector2.new(5, 5), nil, AimConfig)).toBe(true)
+	end)
+end)
+
+describe("touch deadzone", function()
+	it("is wider for a finger than for a mouse, so a tap never fires", function()
+		expect(AimConfig.TouchDeadzonePixels).toBeGreaterThan(AimConfig.DeadzonePixels)
+		expect(AimMath.DeadzoneFor(Enum.UserInputType.Touch, AimConfig)).toBe(AimConfig.TouchDeadzonePixels)
+		expect(AimMath.DeadzoneFor(Enum.UserInputType.MouseButton1, AimConfig)).toBe(AimConfig.DeadzonePixels)
+	end)
+
+	it("ignores a short touch wobble that a mouse drag of the same length would fire", function()
+		local origin = Vector2.new(600, 300)
+		local wobble = Vector2.new(600 + (AimConfig.DeadzonePixels + AimConfig.TouchDeadzonePixels) / 2, 300)
+		local mouseDirection = AimMath.ReadDrag(origin, wobble, AimConfig, AimConfig.DeadzonePixels)
+		local touchDirection = AimMath.ReadDrag(origin, wobble, AimConfig, AimConfig.TouchDeadzonePixels)
+		expect(mouseDirection).toBeTruthy()
+		expect(touchDirection).toBeNil()
+	end)
+end)

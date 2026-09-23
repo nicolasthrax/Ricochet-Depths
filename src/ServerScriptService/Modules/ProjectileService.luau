@@ -46,7 +46,7 @@ end
 -- lifetimeBonus and damagePerBounce. Omitted fields fall back to the config defaults.
 function ProjectileService:Fire(shooter, origin, direction, power, options)
 	local base = Vector3.new(origin.X, self._planeY, origin.Z)
-	local part = self._pool:Acquire(self:_resolveMuzzle(base, direction))
+	local part = self._pool:Acquire(self:_resolveMuzzle(base, direction), options and options.trail)
 	if not part then
 		return false
 	end

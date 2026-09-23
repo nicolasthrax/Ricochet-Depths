@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "0.4.0-dev"
+RunConfig.Version = "0.6.0-dev"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -15,6 +15,8 @@ RunConfig.States = {
 }
 
 RunConfig.BaseHealth = 100
+-- Roblox's default Humanoid walk speed; the salvage shop's Stride adds to it for a run.
+RunConfig.BaseWalkSpeed = 16
 -- Brief grace after spawning or respawning so a player cannot be chain-hit.
 RunConfig.SpawnInvulnerability = 2.5
 RunConfig.StartCountdown = 3
@@ -40,6 +42,17 @@ RunConfig.RemoteRules = {
 	RequestStartRun = { Cooldown = 1, Burst = 2 },
 	RequestReturnToLobby = { Cooldown = 1, Burst = 2 },
 	UpdateSettings = { Cooldown = 0.5, Burst = 4 },
+	PurchaseShopItem = { Cooldown = 0.4, Burst = 3 },
+	EquipShopItem = { Cooldown = 0.3, Burst = 3 },
+}
+
+-- Lobby ready-up: players stand on the pads, and once every player in the lobby is on one
+-- (or every pad is taken) the descent starts after a short countdown.
+RunConfig.Lobby = {
+	ReadyPadCount = 4,
+	ReadyCountdown = 3,
+	-- How often the ready state is pushed to clients while it is not changing.
+	ReadyBroadcastInterval = 0.5,
 }
 
 RunConfig.Rooms = {
@@ -65,9 +78,14 @@ RunConfig.Rooms = {
 		DisplayName = "Fractured Crossing",
 		Layout = "Crossing",
 		Kind = "Normal",
+		-- Difficulty pass. About 85% of simulated runs ended here, and the dry run's damage
+		-- breakdown put ~100% of room-3 damage on Bulwark lunges (Chasers ~1%). Two Bulwarks
+		-- lunging together was the wall, so the room keeps its four Chasers and fields one
+		-- Bulwark, posted away from the spawn with open ground around it to flank through.
+		-- Markers index the layout's EnemySpawns; without them groups take markers in order.
 		Spawns = {
-			{ Archetype = "Chaser", Count = 4 },
-			{ Archetype = "Bulwark", Count = 2 },
+			{ Archetype = "Chaser", Count = 4, Markers = { 1, 2, 3, 4 } },
+			{ Archetype = "Bulwark", Count = 1, Markers = { 9 } },
 		},
 	},
 	{

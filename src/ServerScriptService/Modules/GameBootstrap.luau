@@ -9,6 +9,7 @@ local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
 local EnemyService = require(script.Parent.EnemyService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
+local LobbyReady = require(script.Parent.LobbyReady)
 local MatchService = require(script.Parent.MatchService)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfig"))
@@ -19,6 +20,8 @@ local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local RewardService = require(script.Parent.RewardService)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RoomService = require(script.Parent.RoomService)
+local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+local ShopService = require(script.Parent.ShopService)
 local TelemetryService = require(script.Parent.TelemetryService)
 local UpgradeService = require(script.Parent.UpgradeService)
 local WorldAdapter = require(script.Parent.WorldAdapter)
@@ -42,7 +45,7 @@ function GameBootstrap.Start()
 	arena.Name = "Arena"
 	arena.Parent = workspace
 
-	local _, startPrompt = LobbyBuilder.Build(workspace)
+	local _, startPrompt, lobbyParts = LobbyBuilder.Build(workspace)
 
 	local planeY = RoomConfig.FloorY + ProjectileConfig.PlaneHeight
 	local enemies = EnemyService.new(arena, planeY, seed)
@@ -75,7 +78,25 @@ function GameBootstrap.Start()
 		net[name] = Remotes.Get(name)
 	end
 
-	local match = MatchService.new({
+	local profileSync = Remotes.Get("ProfileSync")
+	local function pushProfile(player)
+		local public = persistence:GetPublicProfile(player)
+		if public then
+			profileSync:FireClient(player, public)
+		end
+	end
+
+	-- The shop is open in the lobby only; `match` is assigned just below, before any request
+	-- can arrive.
+	local match
+	local shop = ShopService.new(persistence, {
+		canShop = function()
+			return match ~= nil and match:GetState() == RunConfig.States.Lobby
+		end,
+		onChanged = pushProfile,
+	})
+
+	match = MatchService.new({
 		rooms = rooms,
 		enemies = enemies,
 		upgrades = UpgradeService.new(seed),
@@ -87,26 +108,83 @@ function GameBootstrap.Start()
 		world = WorldAdapter,
 		persistence = persistence,
 		runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
+		-- Salvage-shop bonuses are read as each run starts; with the shop off, nobody has any.
+		metaProvider = FeatureFlags.SalvageShop and function(player)
+			return shop:GetRunBonuses(player)
+		end or nil,
 	})
 
 	projectiles.OnImpact = function(result, entry)
 		return match:HandleImpact(result, entry, os.clock())
 	end
 
-	local profileSync = Remotes.Get("ProfileSync")
-	local function pushProfile(player)
-		local public = persistence:GetPublicProfile(player)
-		if public then
-			profileSync:FireClient(player, public)
-		end
-	end
-
-	local router = RemoteRouter.new(match, persistence, pushProfile)
+	local router = RemoteRouter.new(match, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil)
 	router:Bind()
 
 	startPrompt.Triggered:Connect(function(player)
 		match:RequestStart(player, os.clock())
 	end)
+
+	-- The kiosk only opens the view; every purchase still goes through ShopService. With the
+	-- shop off there is no entry point at all.
+	local shopOpen, shopResult = Remotes.Get("ShopOpen"), Remotes.Get("ShopResult")
+	if FeatureFlags.SalvageShop then
+		lobbyParts.shopPrompt.Triggered:Connect(function(player)
+			pushProfile(player)
+			shopOpen:FireClient(player)
+		end)
+	else
+		lobbyParts.shopPrompt.Enabled = false
+	end
+
+	-- Ready pads: when everyone in the lobby stands on one, the descent starts by itself.
+	local lobbyReady = LobbyReady.new(LobbyReady.PadsFromParts(lobbyParts.readyPads))
+	local lobbyReadyState = Remotes.Get("LobbyReadyState")
+	local padLit = {}
+	local lastReadyKey, nextReadyPush = nil, 0
+	local function stepLobby(now)
+		local inLobby = match:GetState() == RunConfig.States.Lobby
+		local snapshot = inLobby and lobbyReady:Step(now, Players:GetPlayers(), WorldAdapter.GetPosition)
+			or { Ready = 0, Total = 0, Occupied = {} }
+		for index, pad in lobbyParts.readyPads do
+			local lit = snapshot.Occupied[index] == true
+			if padLit[index] ~= lit then
+				padLit[index] = lit
+				LobbyBuilder.SetPadReady(pad, lit)
+			end
+		end
+
+		-- Pushed on every change, and at a steady beat while a countdown runs.
+		local countdown = snapshot.Countdown and math.ceil(snapshot.Countdown) or nil
+		local key = string.format("%s:%d:%d:%s", tostring(inLobby), snapshot.Ready, snapshot.Total, tostring(countdown))
+		if key ~= lastReadyKey or (countdown and now >= nextReadyPush) then
+			lastReadyKey = key
+			nextReadyPush = now + RunConfig.Lobby.ReadyBroadcastInterval
+			lobbyReadyState:FireAllClients({
+				Active = inLobby,
+				Ready = snapshot.Ready,
+				Total = snapshot.Total,
+				Countdown = countdown,
+			})
+		end
+
+		if snapshot.Start then
+			match:RequestStart(snapshot.Starter, now)
+		end
+	end
+
+	-- A purchase another server beat to the salvage is undone on the next save; tell the player.
+	local function reportRefusedPurchases()
+		for _, player in Players:GetPlayers() do
+			local refused = shop:DrainRejections(player)
+			for _, rejection in refused do
+				shopResult:FireClient(player, { Ok = false, Action = "Refunded", ItemId = rejection.ItemId })
+			end
+			if #refused > 0 then
+				pushProfile(player)
+			end
+		end
+	end
 
 	local function onPlayerAdded(player)
 		match:RegisterPlayer(player)
@@ -166,10 +244,12 @@ function GameBootstrap.Start()
 		match:Step(deltaTime, now)
 		effects:Step(now)
 		persistence:StepAutosave(now)
+		stepLobby(now)
 
 		-- Developer overlay feed. Nothing here reaches a normal player in a published build.
 		if now >= nextDebugPush then
 			nextDebugPush = now + DebugConfig.OverlayUpdateInterval
+			reportRefusedPurchases()
 			local snapshot = GameBootstrap._debugSnapshot(match, projectiles, enemies, effects, telemetry, persistence)
 			for _, player in Players:GetPlayers() do
 				if DebugConfig.IsDebugUser(player) then
@@ -187,6 +267,7 @@ function GameBootstrap.Start()
 		router = router,
 		telemetry = telemetry,
 		persistence = persistence,
+		shop = shop,
 	}
 end
 

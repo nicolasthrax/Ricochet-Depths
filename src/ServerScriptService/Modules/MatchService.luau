@@ -36,6 +36,9 @@ function MatchService.new(deps)
 	self._runKeyPrefix = deps.runKeyPrefix or "local"
 	self._net = deps.net or {}
 	self._world = deps.world -- teleport/position adapter, so tests need no characters
+	-- player -> salvage-shop bonuses for a run starting now. Optional: without it every player
+	-- starts from the base stats.
+	self._metaProvider = deps.metaProvider
 
 	self._states = {}
 	self._participants = {}
@@ -90,6 +93,7 @@ function MatchService:RequestStart(player, now)
 	-- Shared ownership: everyone registered in the lobby joins the descent together.
 	table.clear(self._participants)
 	for candidate, state in self._states do
+		self:_refreshMeta(candidate, state)
 		state:ResetRun()
 		table.insert(self._participants, candidate)
 	end
@@ -135,6 +139,13 @@ function MatchService:ChooseUpgrade(player, offerId, cardId, now)
 	self:_pushPlayerState(player)
 	self:_log("CardChosen", { CardId = card.Id, RunId = self._runId, Room = self._roomIndex }, now)
 	return card
+end
+
+-- Reads the player's shop bonuses as they stand now, for the run about to start.
+function MatchService:_refreshMeta(player, state)
+	if self._metaProvider then
+		state:SetMeta(self._metaProvider(player))
+	end
 end
 
 --// combat hooks -------------------------------------------------------------

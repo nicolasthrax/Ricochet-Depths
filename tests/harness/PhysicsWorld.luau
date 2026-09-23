@@ -9,8 +9,10 @@
 --   2. Hits carry the face normal of the surface actually struck, not a per-object normal.
 --   3. RaycastParams filtering (Include/Exclude by ancestry) and CanQuery are honoured.
 --
--- It is still a stub: no rotation, no meshes, no continuous collision between two moving
--- bodies. Anything outside that list needs a real engine.
+-- Boxes may also be turned about the vertical axis (yaw), which is all the room geometry ever
+-- uses: the ray is carried into the box's own frame, clipped there, and the struck face's
+-- normal is turned back out. It is still a stub: no pitch or roll, no meshes, no continuous
+-- collision between two moving bodies. Anything outside that list needs a real engine.
 
 local PhysicsWorld = {}
 PhysicsWorld.__index = PhysicsWorld
@@ -21,12 +23,31 @@ function PhysicsWorld.new()
 	return setmetatable({ _boxes = {}, _order = {} }, PhysicsWorld)
 end
 
-function PhysicsWorld:AddBox(instance, center, size)
+-- yawDegrees follows CFrame.Angles(0, yaw, 0); omitted means axis-aligned.
+function PhysicsWorld:AddBox(instance, center, size, yawDegrees)
 	if not self._boxes[instance] then
 		table.insert(self._order, instance)
 	end
-	self._boxes[instance] = { instance = instance, center = center, half = size * 0.5 }
+	local yaw = math.rad(yawDegrees or 0)
+	self._boxes[instance] = {
+		instance = instance,
+		center = center,
+		half = size * 0.5,
+		cos = math.cos(yaw),
+		sin = math.sin(yaw),
+		rotated = (yawDegrees or 0) % 360 ~= 0,
+	}
 	return instance
+end
+
+-- World vector to the box's own frame, and back. Local (x, z) lands at
+-- (x cos + z sin, -x sin + z cos) in the world.
+local function toBoxFrame(box, vector)
+	return Vector3.new(vector.X * box.cos - vector.Z * box.sin, vector.Y, vector.X * box.sin + vector.Z * box.cos)
+end
+
+local function fromBoxFrame(box, vector)
+	return Vector3.new(vector.X * box.cos + vector.Z * box.sin, vector.Y, -vector.X * box.sin + vector.Z * box.cos)
 end
 
 function PhysicsWorld:MoveBox(instance, center)
@@ -97,16 +118,25 @@ local function passesFilter(instance, params)
 	return matched
 end
 
--- Slab method. Returns entry distance, exit distance and the entry face normal.
+-- Slab method, in the box's own frame. Returns entry distance, exit distance and the entry
+-- face's axis and sign in that frame.
 local function intersectBox(origin, direction, box)
 	local tMin, tMax = -math.huge, math.huge
 	local normalAxis, normalSign = nil, 0
 
+	local center = Vector3.zero
+	if box.rotated then
+		origin = toBoxFrame(box, origin - box.center)
+		direction = toBoxFrame(box, direction)
+	else
+		center = box.center
+	end
+
 	for _, axis in { "X", "Y", "Z" } do
 		local originComponent = origin[axis]
 		local directionComponent = direction[axis]
-		local minimum = box.center[axis] - box.half[axis]
-		local maximum = box.center[axis] + box.half[axis]
+		local minimum = center[axis] - box.half[axis]
+		local maximum = center[axis] + box.half[axis]
 
 		if math.abs(directionComponent) < EPSILON then
 			-- Parallel to this slab: a miss unless the origin already lies between its faces.
@@ -173,9 +203,13 @@ function PhysicsWorld:Raycast(origin, delta, params)
 		return nil
 	end
 
+	local normal = AXIS_VECTORS[bestAxis] * bestSign
+	if bestBox.rotated then
+		normal = fromBoxFrame(bestBox, normal)
+	end
 	return {
 		Position = origin + direction * bestDistance,
-		Normal = AXIS_VECTORS[bestAxis] * bestSign,
+		Normal = normal,
 		Instance = bestBox.instance,
 		Distance = bestDistance,
 	}
@@ -189,41 +223,21 @@ function PhysicsWorld:Install()
 	return self
 end
 
--- Builds the four walls and pillars of a RoomConfig layout as real boxes, parented under
--- `parent` so raycast filters behave exactly as they do in the game.
+-- Builds every solid of a RoomConfig layout (walls, pillars, bevels and reflectors, from the
+-- same RoomGeometry RoomBuilder uses) as real boxes, parented under `parent` so raycast filters
+-- behave exactly as they do in the game.
 function PhysicsWorld:AddRoomLayout(layout, roomConfig, parent)
 	local interior = layout.InteriorSize
-	local thickness = roomConfig.WallThickness
 	local height = roomConfig.WallHeight
-	local floorY = roomConfig.FloorY
-	local wallY = floorY + height / 2
+	local wallY = roomConfig.FloorY + height / 2
 
-	local outerX = interior.X + thickness * 2
-	local outerZ = interior.Y + thickness * 2
-	local halfX = interior.X / 2 + thickness / 2
-	local halfZ = interior.Y / 2 + thickness / 2
-
-	local function addPart(name, size, position)
+	for _, solid in __require("RoomGeometry").Solids(layout, roomConfig) do
 		local part = Instance.new("Part")
-		part.Name = name
-		part.Size = size
-		part.Position = position
+		part.Name = solid.Name
+		part.Size = Vector3.new(solid.Size.X, height, solid.Size.Y)
+		part.Position = Vector3.new(solid.Center.X, wallY, solid.Center.Y)
 		part.Parent = parent
-		self:AddBox(part, position, size)
-		return part
-	end
-
-	addPart("WallNorth", Vector3.new(outerX, height, thickness), Vector3.new(0, wallY, halfZ))
-	addPart("WallSouth", Vector3.new(outerX, height, thickness), Vector3.new(0, wallY, -halfZ))
-	addPart("WallEast", Vector3.new(thickness, height, outerZ), Vector3.new(halfX, wallY, 0))
-	addPart("WallWest", Vector3.new(thickness, height, outerZ), Vector3.new(-halfX, wallY, 0))
-
-	for index, obstacle in layout.Obstacles do
-		addPart(
-			"Obstacle" .. index,
-			Vector3.new(obstacle.Size.X, height, obstacle.Size.Y),
-			Vector3.new(obstacle.Offset.X, wallY, obstacle.Offset.Y)
-		)
+		self:AddBox(part, part.Position, part.Size, solid.Yaw)
 	end
 
 	return {

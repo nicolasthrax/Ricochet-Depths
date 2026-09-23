@@ -37,6 +37,8 @@ UpgradeConfig.BaseStats = {
 	MaxHealthBonus = 0,
 	RoomClearHeal = 0,
 	RewardMultiplier = 1,
+	-- Studs per second added to walk speed. Only the salvage shop moves this today.
+	MoveSpeedBonus = 0,
 }
 
 UpgradeConfig.Cards = {

@@ -52,9 +52,9 @@ client-side in `ClientMain`.
 |---|---|---|
 | 2.1 | Walk to the pedestal. | A prompt appears reading **Begin Descent / Ricochet Depths**. |
 | 2.2 | Hold the prompt key (E on desktop) for about a third of a second. | Banner reads `Descending...`. Output shows `[telemetry …] RunStart {Players=1 RunId=1}`. |
-| 2.3 | Wait 3 seconds. | You are teleported into a large walled room with three pillars. HUD reads `Room 1 / 4 - Collapsed Atrium` and `6 targets left`. Output shows `RoomStart {Room=1 RoomId=Atrium …}`. |
+| 2.3 | Wait 3 seconds. | You are teleported into a large walled room with three pillars, and the camera switches to a fixed high-angle view that follows you (mouse wheel zooms). The floor is dark with a faint grid; every wall and pillar has a glowing cap and base strip. HUD reads `Room 1 / 4 - Collapsed Atrium` and `6 targets left`. Output shows `RoomStart {Room=1 RoomId=Atrium …}`. |
 | 2.4 | Confirm you are **not** stuck inside a pillar. | You can walk freely in all four directions. *(Two layouts had cover on the spawn point; this was fixed headlessly and V2.4 is the engine-side confirmation.)* |
-| 2.5 | Press and drag the mouse **away** from a target, then release. | A cyan line pivots at the press point while dragging, a power bar fills at the bottom, and on release a glowing ball leaves your character travelling flat. |
+| 2.5 | Press and drag the mouse **away** from a target, then release. | A cyan line pivots at the press point while dragging, and a neon aim line starts just ahead of your character (not through the torso) with a faint floor shadow, a drop line and a diamond reticle on the floor at its tip. A power bar fills at the bottom, and on release a glowing ball leaves from the start of the aim line, travelling flat. |
 | 2.6 | Watch the ball reach a wall. | It reflects off the wall at a mirrored angle and a small white burst appears at the contact point. |
 | 2.7 | Hit a pink Drifter. | It vanishes immediately. The `targets left` count drops by one. |
 | 2.8 | Drag less than about 15 pixels and release. | Nothing fires. This is the deadzone, not a bug. |
@@ -175,6 +175,30 @@ whether `Release` ran on leave, and whether the scope in 6b.3 matched.
 
 ---
 
+## V7 — Content, juice, touch and the salvage shop (0.6.0-dev)
+
+Everything below was built and tested headlessly only. Run it after V1–V6 pass.
+
+| # | Do this | Expect |
+|---|---|---|
+| 7.1 | Start a run and look at room 1 from the tactical camera. | A two-tone checker floor under a faint grid, a glowing line just inside each wall, and **amber**-trimmed metal pieces: a 45° bevel in each corner and two diagonal reflectors south of the pillars. |
+| 7.2 | Fire straight at one of the diagonal reflectors. | The shot turns 90° and carries on. Nothing gets stuck behind a corner bevel. |
+| 7.3 | Hit a Chaser once, then shoot a Bulwark in the face. | A floating **1** rises over the Chaser; **BLOCKED** rises over the Bulwark. |
+| 7.4 | Kill an enemy, then set Options → Screen shake to **Off** and kill another. | The camera kicks on the first kill and stays still on the second. |
+| 7.5 | Reach room 3 (Fractured Crossing). | HUD reads `5 targets left`: four Chasers and **one** Bulwark, which starts in the north-west area with open ground around it. |
+| 7.6 | Audio. Sound ids ship as placeholders and `FeatureFlags.Audio` is off, so the game is silent. To check the hooks, put any sound id into `SoundConfig.Cues.WallBounce.SoundId`, set `FeatureFlags.Audio = true`, and bank a shot several times. | Each bounce plays, higher-pitched than the last, up to twice the base pitch. No Output warnings with the flag off. |
+| 7.7 | In the lobby, stand on one of the four pads behind the pedestal. | The pad lights green, the HUD reads `Descending in 3...`, and the run starts on its own. Stepping off before zero cancels it. |
+| 7.8 | Use the **Salvage Shop** kiosk prompt with no salvage and press Buy on anything. | The shop opens with your balance; buying says `Not enough salvage` and nothing changes. |
+| 7.9 | Finish a run for salvage, buy **Reinforced Frame**, then start a run. | The balance drops by the price, and the run starts at `110 / 110` health. |
+| 7.10 | Buy **Ember Trail** and fire. | Your shots leave an orange ribbon; teammates' shots do not. Tapping Unequip turns it off. |
+| 7.11 | Device emulator (phone): drag on the **left** third of the screen, then on the **right** half, then tap the right half. | Left moves the character with the thumbstick and never aims. Right aims and fires on release. A tap fires nothing. |
+
+**Pass:** 7.2, 7.5, 7.7 and 7.9 are the must-haves.
+**On failure at 7.2:** a shot passing through a reflector or escaping the room means the engine
+disagrees with the harness's rotated-box model; capture the heading and position.
+
+---
+
 ## Record your results
 
 | Step | Pass / Fail | Notes |
@@ -187,6 +211,7 @@ whether `Release` ran on leave, and whether the scope in 6b.3 matched.
 | V5 co-op and late join | | |
 | V6a read-only fallback | | |
 | V6b persistence | | |
+| V7 content, juice, touch, shop | | |
 
 For any failure, capture: the step number, the full Output text including the stack trace, what
 you saw instead, and a clip if it is visual. Those four things are enough to reproduce it

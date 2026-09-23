@@ -404,9 +404,13 @@ describe("every profile field survives a save", function()
 		local marked = {}
 		for field, value in PlayerDataConfig.DefaultProfile() do
 			if not skipped[field] then
-				expect(type(value)).toBe("table")
-				profile[field] = profile[field] or {}
-				profile[field].__roundTripMarker = field
+				if type(value) == "table" then
+					profile[field] = profile[field] or {}
+					profile[field].__roundTripMarker = field
+				else
+					expect(type(value)).toBe("string")
+					profile[field] = "__roundTripMarker:" .. field
+				end
 				marked[field] = true
 			end
 		end
@@ -416,7 +420,9 @@ describe("every profile field survives a save", function()
 		local stored = store:Peek("profile_70")
 		for field in marked do
 			expect(stored[field]).toBeTruthy()
-			if stored[field].__roundTripMarker ~= field then
+			local value = stored[field]
+			local marker = if type(value) == "table" then value.__roundTripMarker else value
+			if marker ~= field and marker ~= "__roundTripMarker:" .. field then
 				error(string.format("profile field %q is not written by Save", field), 0)
 			end
 		end

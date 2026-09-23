@@ -19,6 +19,7 @@ function Flow.methods:_beginRoom(index, now)
 	for _, player in self._pendingJoins do
 		local joiner = self._states[player]
 		if joiner and not table.find(self._participants, player) then
+			self:_refreshMeta(player, joiner)
 			joiner:ResetRun()
 			-- No credit for rooms cleared before they arrived. roomsCleared only ever grows in
 			-- _onRoomCleared, for participants present at the clear, so it counts rooms this
@@ -53,6 +54,9 @@ function Flow.methods:_beginRoom(index, now)
 			state:GrantInvulnerability(now)
 			if self._world then
 				self._world.Teleport(player, spawnPoint)
+				if self._world.SetWalkSpeed then
+					self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed + state.stats.MoveSpeedBonus)
+				end
 			end
 			self:_pushPlayerState(player)
 		end
@@ -162,6 +166,9 @@ function Flow.methods:_cleanup(now)
 			state:ResetRun()
 			if self._world then
 				self._world.Teleport(player, RunConfig.LobbyPosition)
+				if self._world.SetWalkSpeed then
+					self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed)
+				end
 			end
 			self:_pushPlayerState(player)
 		end

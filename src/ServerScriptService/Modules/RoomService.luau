@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RoomBuilder = require(script.Parent.RoomBuilder)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
+local RoomGeometry = require(ReplicatedStorage:WaitForChild("RoomGeometry"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
 local RoomService = {}
@@ -33,7 +34,27 @@ function RoomService:Unload()
 	self._current = nil
 end
 
--- Spawn markers are reused in order and jittered slightly so repeat rooms do not look identical.
+-- Which marker each enemy in a room definition takes, as { archetype, marker } in spawn order.
+-- A group may pin its enemies to specific markers with `Markers`; otherwise enemies take
+-- markers in order. Pure, so tests can see exactly where a room puts its enemies.
+function RoomService.AssignSpawns(definition, layout)
+	local assignments = {}
+	local markerCount = #layout.EnemySpawns
+	local index = 0
+	for _, group in definition.Spawns do
+		for member = 1, group.Count do
+			index += 1
+			local marker = group.Markers and group.Markers[((member - 1) % #group.Markers) + 1] or index
+			table.insert(assignments, {
+				archetype = group.Archetype,
+				marker = ((marker - 1) % markerCount) + 1,
+			})
+		end
+	end
+	return assignments
+end
+
+-- Spawn markers are jittered slightly so repeat rooms do not look identical.
 function RoomService:_spawnPositionFor(layout, index)
 	local markers = layout.EnemySpawns
 	local marker = markers[((index - 1) % #markers) + 1]
@@ -54,22 +75,19 @@ function RoomService:Load(roomDefinition, now)
 	end
 
 	self._room = room
-	self._enemies:SetBounds(bounds.center, bounds.half)
+	self._enemies:SetBounds(bounds.center, bounds.half, bounds.diagonal)
 
-	local spawned, failed, index = 0, 0, 0
+	local spawned, failed = 0, 0
 	local elite = nil
-	for _, group in roomDefinition.Spawns do
-		for _ = 1, group.Count do
-			index += 1
-			local enemy = self._enemies:Spawn(group.Archetype, self:_spawnPositionFor(layout, index))
-			if enemy then
-				spawned += 1
-				if enemy.archetype.IsElite then
-					elite = enemy
-				end
-			else
-				failed += 1
+	for _, assignment in RoomService.AssignSpawns(roomDefinition, layout) do
+		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker))
+		if enemy then
+			spawned += 1
+			if enemy.archetype.IsElite then
+				elite = enemy
 			end
+		else
+			failed += 1
 		end
 	end
 
@@ -152,9 +170,9 @@ end
 local SPAWN_HEIGHT = 4
 local SPAWN_SEARCH_STEP = 6
 
--- A point on the floor clear of pillars. The room centre is preferred, but a layout with cover
--- there would otherwise teleport players inside solid geometry, so this spirals outward until
--- it finds somewhere clear.
+-- A point on the floor clear of cover, rotated pieces included. The room centre is preferred,
+-- but a layout with cover there would otherwise teleport players inside solid geometry, so this
+-- spirals outward until it finds somewhere clear.
 function RoomService:GetSpawnPoint()
 	local current = self._current
 	local floorY = current and current.bounds.center.Y or 0
@@ -163,7 +181,7 @@ function RoomService:GetSpawnPoint()
 		return fallback
 	end
 
-	local obstacles = current.layout.Obstacles
+	local footprints = RoomGeometry.Footprints(current.layout, RoomConfig)
 	local clearance = RoomConfig.SpawnPadSize.X / 2 + 1
 	local half = current.bounds.half
 
@@ -174,11 +192,9 @@ function RoomService:GetSpawnPoint()
 			return -math.huge
 		end
 		local worst = math.huge
-		for _, obstacle in obstacles do
-			local gapX = math.abs(x - obstacle.Offset.X) - (obstacle.Size.X / 2 + clearance)
-			local gapZ = math.abs(z - obstacle.Offset.Y) - (obstacle.Size.Y / 2 + clearance)
-			-- A point escapes a box as soon as it is outside on either axis.
-			worst = math.min(worst, math.max(gapX, gapZ))
+		for _, solid in footprints do
+			-- A point escapes a box as soon as it is outside on either of the box's own axes.
+			worst = math.min(worst, RoomGeometry.Clearance(solid, x, z) - clearance)
 		end
 		return worst
 	end

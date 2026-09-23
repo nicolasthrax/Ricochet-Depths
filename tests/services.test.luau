@@ -284,6 +284,24 @@ describe("RoomBuilder", function()
 		expect(room:GetAttribute("LayoutId")).toBe("Atrium")
 	end)
 
+	it("keeps decor out of play: no collisions, queries or touches, and off the projectile plane", function()
+		local room = RoomBuilder.Build(Instance.new("Folder"), "Atrium")
+		local decor = room:FindFirstChild("Decor")
+		expect(decor).toBeTruthy()
+		local planeY = RoomConfig.FloorY + __require("ProjectileConfig").PlaneHeight
+		local count = 0
+		for _, part in decor:GetChildren() do
+			count += 1
+			expect(part.CanCollide).toBe(false)
+			expect(part.CanQuery).toBe(false)
+			expect(part.CanTouch).toBe(false)
+			local bottom = part.Position.Y - part.Size.Y / 2
+			local top = part.Position.Y + part.Size.Y / 2
+			expect(top < planeY - 1 or bottom > planeY + 1).toBe(true)
+		end
+		expect(count).toBeGreaterThan(0)
+	end)
+
 	it("refuses an unknown layout with a reason instead of erroring", function()
 		local room, reason = RoomBuilder.Build(Instance.new("Folder"), "NoSuchLayout")
 		expect(room).toBeNil()

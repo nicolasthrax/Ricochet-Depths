@@ -16,15 +16,36 @@ function PlayerState.new(player)
 	self.name = player and player.Name or "Unknown"
 	self.upgrades = {}
 	self.upgradeOrder = {}
+	-- Permanent salvage-shop bonuses: { stats = { [stat] = delta }, trail = def|nil }. They
+	-- outlive ResetRun and are refreshed from the profile when a run starts.
+	self.meta = { stats = {}, trail = nil }
 	self:ResetRun()
 	return self
+end
+
+function PlayerState:SetMeta(meta)
+	self.meta = {
+		stats = type(meta) == "table" and type(meta.stats) == "table" and meta.stats or {},
+		trail = type(meta) == "table" and meta.trail or nil,
+	}
+end
+
+-- The stats a run starts from: the base values plus shop bonuses. Cards fold over these.
+function PlayerState:_startingStats()
+	local stats = table.clone(UpgradeConfig.BaseStats)
+	for stat, delta in self.meta.stats do
+		if stats[stat] ~= nil and type(delta) == "number" then
+			stats[stat] += delta
+		end
+	end
+	return stats
 end
 
 function PlayerState:ResetRun()
 	table.clear(self.upgrades)
 	table.clear(self.upgradeOrder)
-	self.stats = table.clone(UpgradeConfig.BaseStats)
-	self.maxHealth = RunConfig.BaseHealth
+	self.stats = self:_startingStats()
+	self.maxHealth = RunConfig.BaseHealth + self.stats.MaxHealthBonus
 	self.health = self.maxHealth
 	self.alive = true
 	self.kills = 0
@@ -43,7 +64,7 @@ end
 -- Folds every held card over the base stats. Add effects scale linearly with stacks,
 -- Multiply effects compound, so two 0.8x cards give 0.64x.
 function PlayerState:RecomputeStats()
-	local stats = table.clone(UpgradeConfig.BaseStats)
+	local stats = self:_startingStats()
 	for cardId, stacks in self.upgrades do
 		local card = UpgradeConfig.Get(cardId)
 		if card then

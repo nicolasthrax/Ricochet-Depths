@@ -48,6 +48,7 @@ function Combat.methods:HandleFire(player, direction, power, now)
 		speedMultiplier = state.stats.SpeedMultiplier,
 		lifetimeBonus = state.stats.LifetimeBonus,
 		damagePerBounce = state.stats.DamagePerBounce,
+		trail = state.meta.trail, -- cosmetic, from the salvage shop
 	}
 
 	local fired = 0
@@ -63,17 +64,28 @@ function Combat.methods:HandleFire(player, direction, power, now)
 	return fired > 0, fired == 0 and "projectile pool exhausted" or nil
 end
 
-function Combat.methods:HandleImpact(result, entry, now)
-	if self._effects then
-		self._effects:Queue(result.Position, result.Normal)
+-- What an impact looks and sounds like on clients.
+local function impactKind(hit)
+	if not hit then
+		return "Wall"
+	elseif hit.killed then
+		return "Kill"
+	elseif hit.blocked then
+		return "Block"
 	end
+	return "Hit"
+end
 
+function Combat.methods:HandleImpact(result, entry, now)
 	local hit = self._enemies:ApplyHit(
 		result.Instance,
 		entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0),
 		entry.direction,
 		entry.shooter
 	)
+	if self._effects then
+		self._effects:Queue(result.Position, result.Normal, impactKind(hit), entry.contacts, hit and hit.damage or 0)
+	end
 	if not hit then
 		return false -- geometry: let it ricochet
 	end

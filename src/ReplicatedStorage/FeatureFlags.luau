@@ -7,6 +7,9 @@ FeatureFlags.CoopRuns = true
 FeatureFlags.Persistence = true
 FeatureFlags.AccessibilitySettings = true
 FeatureFlags.Telemetry = true
+-- Permanent upgrades and cosmetic trails bought with salvage earned in runs. Salvage cannot be
+-- bought, so this is not monetization; CosmeticStore below (a paid storefront) stays off.
+FeatureFlags.SalvageShop = true
 
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.Monetization = false -- no game passes, products or premium currency exist in code

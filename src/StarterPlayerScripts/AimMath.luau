@@ -21,11 +21,32 @@ function AimMath.IsSameGesture(active, input)
 	return false
 end
 
+-- Whether a press starting at `position` should begin an aim. On touch the left of the screen
+-- belongs to the movement thumbstick; the mouse aims from anywhere. With no viewport size to go
+-- on, every touch aims rather than none.
+function AimMath.IsInAimZone(inputType, position, viewportSize, config)
+	if inputType ~= Enum.UserInputType.Touch then
+		return true
+	end
+	if not viewportSize or viewportSize.X <= 0 then
+		return true
+	end
+	return position.X >= viewportSize.X * config.TouchAimZoneStart
+end
+
+-- Minimum pull, in pixels, before a drag counts as an aim.
+function AimMath.DeadzoneFor(inputType, config)
+	if inputType == Enum.UserInputType.Touch then
+		return config.TouchDeadzonePixels
+	end
+	return config.DeadzonePixels
+end
+
 -- Slingshot: the shot goes opposite the pull. Returns a unit screen direction and 0..1
--- power, or nil inside the deadzone.
-function AimMath.ReadDrag(origin, current, config)
+-- power, or nil inside the deadzone. deadzone defaults to the mouse deadzone.
+function AimMath.ReadDrag(origin, current, config, deadzone)
 	local pull = Vector2.new(current.X - origin.X, current.Y - origin.Y)
-	if pull.Magnitude < config.DeadzonePixels then
+	if pull.Magnitude < (deadzone or config.DeadzonePixels) then
 		return nil, 0
 	end
 	return -pull.Unit, math.clamp(pull.Magnitude / config.MaxDragPixels, 0, 1)

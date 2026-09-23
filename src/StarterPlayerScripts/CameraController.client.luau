@@ -9,10 +9,18 @@ local UserInputService = game:GetService("UserInputService")
 local CameraConfig = require(ReplicatedStorage:WaitForChild("CameraConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local CameraMath = require(script.Parent:WaitForChild("CameraMath"))
+local CameraShake = require(script.Parent:WaitForChild("CameraShake"))
 
 local RENDER_STEP = "RicochetCamera"
 
 local player = Players.LocalPlayer
+local shake = CameraShake.Shared()
+
+-- The player's comfort setting, 0..1, published by ClientMain from the saved profile.
+local function shakeScale()
+	local value = player:GetAttribute("ScreenShake")
+	return type(value) == "number" and value or 1
+end
 
 local active = false
 local focus = nil
@@ -41,7 +49,9 @@ local function update(deltaTime)
 	distance += (targetDistance - distance) * CameraMath.SmoothAlpha(CameraConfig.ZoomRate, deltaTime)
 
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = CameraMath.ComputeFrame(focus, CameraConfig.Pitch, CameraConfig.Yaw, distance)
+	-- Shake moves the camera, never the focus, so aiming maths is unaffected by it.
+	local frame = CameraMath.ComputeFrame(focus, CameraConfig.Pitch, CameraConfig.Yaw, distance)
+	camera.CFrame = frame + shake:Sample(os.clock(), shakeScale())
 end
 
 local function activate()

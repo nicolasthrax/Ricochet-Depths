@@ -31,14 +31,15 @@ PlayerDataService.STALE_LOAD = "stale load"
 PlayerDataService.DEADLINE_REACHED = "shutdown deadline reached"
 
 -- Fields the store owns. A save never copies these from memory: currency and the run ledger
--- change only through grants applied inside the transform, and the rest are the save's own
--- bookkeeping. Every other profile field is copied, so a field added to the schema is saved
+-- change only through grants applied inside the transform, meta upgrades only through purchases
+-- applied there too, and the rest are the save's own bookkeeping. Every other profile field is copied, so a field added to the schema is saved
 -- without anyone having to remember to add it here.
 PlayerDataService.STORE_OWNED_FIELDS = {
 	SchemaVersion = true,
 	LastSaved = true,
 	Currency = true,
 	GrantedRuns = true,
+	MetaUpgrades = true,
 }
 
 local PROFILE_FIELDS = {}
@@ -188,6 +189,18 @@ local function sameLedger(before, ledger)
 	return true
 end
 
+local function sameLevels(before, levels)
+	if countKeys(before) ~= countKeys(levels) then
+		return false
+	end
+	for itemId, level in before do
+		if levels[itemId] ~= level then
+			return false
+		end
+	end
+	return true
+end
+
 -- Sessions are keyed by account, not by Player object. Roblox hands a rejoining player a new
 -- Player object; keying by that object allowed two sessions for one DataStore key, which is how a
 -- rejoin could read a profile from before the old session's save had landed.
@@ -264,6 +277,12 @@ function PlayerDataService:Load(player)
 		-- Grants credited here but not yet written, keyed by run. Currency is written as these
 		-- deltas, never as a balance, so two servers writing one account compose.
 		pendingGrants = {},
+		-- Purchases made here but not yet written, keyed by item and target level. Each is
+		-- re-checked against the stored balance at commit time; see _applyPurchases.
+		pendingPurchases = {},
+		purchaseSequence = 0,
+		-- Purchases the store refused at commit time, waiting to be reported to the player.
+		purchaseRejections = {},
 	}
 	self._sessions[account] = session
 
@@ -314,20 +333,23 @@ function PlayerDataService:Update(player, mutator)
 	local profile = session.profile
 	-- Snapshot by value: a mutator edits these tables in place, so keeping the table references
 	-- alone would neither detect nor undo the change.
-	local currencyTable, ledgerTable = profile.Currency, profile.GrantedRuns
+	local currencyTable, ledgerTable, levelsTable = profile.Currency, profile.GrantedRuns, profile.MetaUpgrades
 	local currencyBefore = snapshotCurrency(currencyTable)
 	local ledgerBefore = snapshotLedger(ledgerTable)
+	local levelsBefore = table.clone(levelsTable)
 
 	mutator(profile)
 
 	if
 		profile.Currency ~= currencyTable
 		or profile.GrantedRuns ~= ledgerTable
+		or profile.MetaUpgrades ~= levelsTable
 		or not sameCurrency(currencyBefore, currencyTable)
 		or not sameLedger(ledgerBefore, ledgerTable)
+		or not sameLevels(levelsBefore, levelsTable)
 	then
 		-- Put everything back exactly as it was, into the original tables.
-		profile.Currency, profile.GrantedRuns = currencyTable, ledgerTable
+		profile.Currency, profile.GrantedRuns, profile.MetaUpgrades = currencyTable, ledgerTable, levelsTable
 		table.clear(currencyTable)
 		for key, value in currencyBefore do
 			currencyTable[key] = value
@@ -336,11 +358,55 @@ function PlayerDataService:Update(player, mutator)
 		for runKey, entry in ledgerBefore do
 			ledgerTable[runKey] = { Amount = entry.Amount, At = entry.At }
 		end
-		error("currency and the run ledger change only through GrantReward, not Update", 2)
+		table.clear(levelsTable)
+		for itemId, level in levelsBefore do
+			levelsTable[itemId] = level
+		end
+		error("currency, the run ledger and meta upgrades change only through grants and purchases, not Update", 2)
 	end
 
 	markChanged(session)
 	return profile
+end
+
+-- Pending purchases in the order they were made, so buying level 1 then level 2 of an item
+-- commits in that order.
+local function orderedPurchases(pending)
+	local list = {}
+	for key, purchase in pending do
+		table.insert(list, { key = key, purchase = purchase })
+	end
+	table.sort(list, function(a, b)
+		return a.purchase.Sequence < b.purchase.Sequence
+	end)
+	return list
+end
+
+-- Applies pending purchases to a stored profile inside the save transform, after grants, so a
+-- purchase can spend salvage a pending run grant has just added. Each is checked against the
+-- store as it stands at commit time, not against this server's memory:
+--   * the stored level already reaches the target: bought already (here or on another server),
+--     so it is acknowledged and not charged again;
+--   * the stored level is one below and the stored balance covers the cost: charged and applied;
+--   * anything else: refused, and reported back so the player sees it undone.
+-- Returns key -> "applied" | "owned" | "rejected".
+local function applyPurchases(merged, pending)
+	local outcomes = {}
+	for _, entry in orderedPurchases(pending) do
+		local purchase = entry.purchase
+		local storedLevel = merged.MetaUpgrades[purchase.ItemId] or 0
+		local balance = merged.Currency.Salvage or 0
+		if storedLevel >= purchase.Level then
+			outcomes[entry.key] = "owned"
+		elseif storedLevel == purchase.Level - 1 and balance >= purchase.Cost then
+			merged.Currency.Salvage = balance - purchase.Cost
+			merged.MetaUpgrades[purchase.ItemId] = purchase.Level
+			outcomes[entry.key] = "applied"
+		else
+			outcomes[entry.key] = "rejected"
+		end
+	end
+	return outcomes
 end
 
 -- One UpdateAsync attempt sequence for the session's current state.
@@ -348,6 +414,8 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 	local profile = session.profile
 	local writtenRevision = session.revision
 	local applied = {}
+	local purchaseOutcomes = {}
+	local purchasesCarried = {}
 
 	local ok, result = self:_retry("save", function()
 		return self._store:UpdateAsync(session.storeKey, function(stored)
@@ -355,6 +423,7 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			-- only the run that commits counts, so these are reset on every run.
 			writtenRevision = session.revision
 			applied = {}
+			purchasesCarried = table.clone(session.pendingPurchases)
 
 			local merged = PlayerDataService.Normalise(stored)
 
@@ -372,6 +441,8 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			-- The stored copy is capped too. Nothing re-adds pruned runs from memory any more,
 			-- which is what used to let this grow without limit across servers.
 			pruneLedger(merged.GrantedRuns)
+
+			purchaseOutcomes = applyPurchases(merged, purchasesCarried)
 
 			for _, field in PROFILE_FIELDS do
 				if not PlayerDataService.STORE_OWNED_FIELDS[field] then
@@ -396,13 +467,42 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 		end
 	end
 
-	-- Currency is store-owned now: what the store holds, plus whatever is still waiting to go.
-	-- This is also how this server learns of grants other servers committed.
+	-- Purchases the committed write settled, one way or the other, are done. A refused one is
+	-- queued for the player to hear about; the reconciliation below undoes it in memory.
+	for key, outcome in purchaseOutcomes do
+		local purchase = purchasesCarried[key]
+		if session.pendingPurchases[key] == purchase then
+			session.pendingPurchases[key] = nil
+			if outcome == "rejected" then
+				table.insert(session.purchaseRejections, {
+					ItemId = purchase.ItemId,
+					Level = purchase.Level,
+					Cost = purchase.Cost,
+				})
+			end
+		end
+	end
+
+	-- Currency is store-owned now: what the store holds, plus grants still waiting to go, less
+	-- purchases still waiting to go. This is also how this server learns of grants and
+	-- purchases other servers committed.
 	local stillPending = 0
 	for _, grant in session.pendingGrants do
 		stillPending += grant.Amount
 	end
+	for _, purchase in session.pendingPurchases do
+		stillPending -= purchase.Cost
+	end
 	profile.Currency.Salvage = (result.Currency.Salvage or 0) + stillPending
+
+	-- Levels likewise: the store's, raised by anything still pending here.
+	table.clear(profile.MetaUpgrades)
+	for itemId, level in result.MetaUpgrades or {} do
+		profile.MetaUpgrades[itemId] = level
+	end
+	for _, purchase in session.pendingPurchases do
+		profile.MetaUpgrades[purchase.ItemId] = math.max(profile.MetaUpgrades[purchase.ItemId] or 0, purchase.Level)
+	end
 
 	-- Take back the runs the store knows about, then keep memory within the same cap. The rest
 	-- of the live profile is left alone: anything changed during the write is newer than what
@@ -504,6 +604,80 @@ function PlayerDataService:GrantReward(player, runKey, amount)
 	return grant.Amount
 end
 
+-- A salvage-shop purchase, applied the way grants are: optimistically in memory now, and
+-- re-checked against the stored balance when the save commits (see applyPurchases). The shop's
+-- business rules (catalogue, prices, when the shop is open) live in ShopService; this only
+-- guarantees the money side. Returns the new in-memory balance, or nil and a reason.
+function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost)
+	if type(itemId) ~= "string" or itemId == "" then
+		return nil, "invalid item"
+	end
+	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) then
+		return nil, "invalid level"
+	end
+	if type(cost) ~= "number" or cost ~= cost or cost <= 0 or cost ~= math.floor(cost) then
+		return nil, "invalid cost"
+	end
+	local session = self:_sessionFor(player)
+	if not session or not session.loaded or session.failed then
+		return nil, "profile not loaded"
+	end
+
+	local profile = session.profile
+	if (profile.MetaUpgrades[itemId] or 0) ~= level - 1 then
+		return nil, "level mismatch"
+	end
+	if (profile.Currency.Salvage or 0) < cost then
+		return nil, "insufficient salvage"
+	end
+
+	session.purchaseSequence += 1
+	session.pendingPurchases[itemId .. "#" .. level] = {
+		ItemId = itemId,
+		Level = level,
+		Cost = cost,
+		Sequence = session.purchaseSequence,
+	}
+	profile.Currency.Salvage -= cost
+	profile.MetaUpgrades[itemId] = level
+	markChanged(session)
+	return profile.Currency.Salvage
+end
+
+function PlayerDataService:GetBalance(player)
+	local session = self:_sessionFor(player)
+	if not session or not session.profile then
+		return 0
+	end
+	return session.profile.Currency.Salvage or 0
+end
+
+-- A copy of item id -> level owned, including purchases not yet written.
+function PlayerDataService:GetMetaLevels(player)
+	local session = self:_sessionFor(player)
+	if not session or not session.profile then
+		return {}
+	end
+	return table.clone(session.profile.MetaUpgrades)
+end
+
+-- Purchases the store refused since the last call, oldest first. Each is reported once.
+function PlayerDataService:TakePurchaseRejections(player)
+	local session = self:_sessionFor(player)
+	if not session then
+		return {}
+	end
+	local rejections = session.purchaseRejections
+	session.purchaseRejections = {}
+	return rejections
+end
+
+function PlayerDataService:SetEquippedTrail(player, itemId)
+	return self:Update(player, function(profile)
+		profile.EquippedTrail = itemId
+	end)
+end
+
 -- Settings arrive from the client, so they are sanitised against the spec before storage.
 function PlayerDataService:ApplySettings(player, incoming)
 	local session = self:_sessionFor(player)
@@ -528,6 +702,8 @@ function PlayerDataService:GetPublicProfile(player)
 		Settings = table.clone(profile.Settings),
 		Flags = table.clone(profile.Flags),
 		Stats = table.clone(profile.Stats),
+		MetaUpgrades = table.clone(profile.MetaUpgrades),
+		EquippedTrail = profile.EquippedTrail,
 		ReadOnly = session.failed == true,
 	}
 end

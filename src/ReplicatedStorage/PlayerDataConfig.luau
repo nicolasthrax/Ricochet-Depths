@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 4
+PlayerDataConfig.SchemaVersion = 5
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -47,6 +47,11 @@ function PlayerDataConfig.DefaultProfile()
 			BestRoomsCleared = 0,
 		},
 		GrantedRuns = {},
+		-- Permanent salvage-shop purchases: item id -> level owned. Store-owned, like currency:
+		-- changed only by purchases applied inside the save transform.
+		MetaUpgrades = {},
+		-- The cosmetic trail shown on this player's shots; "" for none. A player preference.
+		EquippedTrail = "",
 		Settings = PlayerDataConfig.DefaultSettings(),
 		LastSaved = 0,
 	}
@@ -121,6 +126,12 @@ PlayerDataConfig.Migrations = {
 			end
 		end
 		profile.GrantedRuns = ledger
+		return profile
+	end,
+	-- v4 -> v5: the salvage shop. Nothing is owned yet and no trail is equipped.
+	[4] = function(profile)
+		profile.MetaUpgrades = type(profile.MetaUpgrades) == "table" and profile.MetaUpgrades or {}
+		profile.EquippedTrail = type(profile.EquippedTrail) == "string" and profile.EquippedTrail or ""
 		return profile
 	end,
 }

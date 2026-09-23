@@ -10,6 +10,8 @@ local REMOTE_NAMES = {
 	"RequestStartRun",
 	"RequestReturnToLobby",
 	"UpdateSettings", -- accessibility options, sanitised server-side before storage
+	"PurchaseShopItem", -- salvage shop item id; price and eligibility are decided server-side
+	"EquipShopItem", -- an owned trail's item id, or "" to clear
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -19,7 +21,10 @@ local REMOTE_NAMES = {
 	"UpgradeOffer",
 	"UpgradeResolved",
 	"RunResults",
-	"ProfileSync", -- currency, flags and settings for this player
+	"ProfileSync", -- currency, flags, settings and shop levels for this player
+	"ShopResult", -- outcome of a shop request, or a purchase the store later refused
+	"ShopOpen", -- the kiosk prompt was used: open the shop view
+	"LobbyReadyState", -- ready pads: how many are ready and the start countdown
 	"DebugStats", -- developer overlay only; sent to allowlisted users
 }
 

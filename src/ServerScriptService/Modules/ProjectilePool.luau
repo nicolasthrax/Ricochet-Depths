@@ -21,6 +21,26 @@ local function createProjectilePart()
 	part.CastShadow = false
 	part.Transparency = 1
 	part.Position = ProjectileConfig.StoragePosition
+
+	-- A cosmetic trail, built once with the part and only ever enabled or recoloured. Two
+	-- attachments across the ball give it a ribbon the width of the projectile.
+	local top = Instance.new("Attachment")
+	top.Name = "TrailTop"
+	top.Position = Vector3.new(0, ProjectileConfig.Radius * 0.8, 0)
+	top.Parent = part
+	local bottom = Instance.new("Attachment")
+	bottom.Name = "TrailBottom"
+	bottom.Position = Vector3.new(0, -ProjectileConfig.Radius * 0.8, 0)
+	bottom.Parent = part
+	local trail = Instance.new("Trail")
+	trail.Name = "Trail"
+	trail.Attachment0 = top
+	trail.Attachment1 = bottom
+	trail.FaceCamera = true
+	trail.LightEmission = 1
+	trail.Transparency = NumberSequence.new(0.1, 1)
+	trail.Enabled = false
+	trail.Parent = part
 	return part
 end
 
@@ -32,7 +52,8 @@ function ProjectilePool.new(parent)
 end
 
 -- Returns nil when the pool is dry. Callers drop the shot rather than allocating.
-function ProjectilePool:Acquire(position)
+-- trail is an optional ShopConfig trail definition ({ Color, Lifetime }).
+function ProjectilePool:Acquire(position, trail)
 	local part = self._pool:Acquire()
 	if not part then
 		return nil
@@ -41,10 +62,22 @@ function ProjectilePool:Acquire(position)
 	part.Position = position
 	part.Anchored = false
 	part.Transparency = 0
+	-- Enabled only after the move from storage, so the ribbon never streaks in from there.
+	local effect = part:FindFirstChild("Trail")
+	if effect and trail then
+		effect.Color = ColorSequence.new(trail.Color)
+		effect.Lifetime = trail.Lifetime
+		effect.Enabled = true
+	end
 	return part
 end
 
 function ProjectilePool:Release(part)
+	-- Disabled before the move back to storage, for the same reason.
+	local effect = part:FindFirstChild("Trail")
+	if effect then
+		effect.Enabled = false
+	end
 	part.Anchored = true
 	part.AssemblyLinearVelocity = Vector3.zero
 	part.Transparency = 1

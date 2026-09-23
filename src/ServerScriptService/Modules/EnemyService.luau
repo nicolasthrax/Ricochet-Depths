@@ -37,8 +37,10 @@ function EnemyService:SetTargetProvider(provider)
 end
 
 -- Keeps enemies inside the playable area; halfExtents is a Vector2 on the XZ plane.
-function EnemyService:SetBounds(center, halfExtents)
-	self._bounds = { center = center, half = halfExtents }
+-- diagonal, when given, caps |x| + |z| around the centre: rooms with bevelled corners use it
+-- to keep enemies out of the sealed space behind each bevel, where no shot could reach them.
+function EnemyService:SetBounds(center, halfExtents, diagonal)
+	self._bounds = { center = center, half = halfExtents, diagonal = diagonal }
 end
 
 function EnemyService:Spawn(archetypeId, position)
@@ -165,11 +167,19 @@ function EnemyService:_clampToBounds(position)
 		return position
 	end
 	local center, half = self._bounds.center, self._bounds.half
-	return Vector3.new(
-		math.clamp(position.X, center.X - half.X, center.X + half.X),
-		position.Y,
-		math.clamp(position.Z, center.Z - half.Y, center.Z + half.Y)
-	)
+	local x = math.clamp(position.X - center.X, -half.X, half.X)
+	local z = math.clamp(position.Z - center.Z, -half.Y, half.Y)
+
+	-- Pull a corner position back along the diagonal onto the bevel-safe line.
+	local diagonal = self._bounds.diagonal
+	if diagonal then
+		local excess = math.abs(x) + math.abs(z) - diagonal
+		if excess > 0 then
+			x -= math.sign(x) * excess / 2
+			z -= math.sign(z) * excess / 2
+		end
+	end
+	return Vector3.new(center.X + x, position.Y, center.Z + z)
 end
 
 function EnemyService:_applyVisuals(enemy)

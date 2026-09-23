@@ -11,13 +11,19 @@ function EffectBroadcaster.new(remote)
 		_remote = remote,
 		_positions = {},
 		_normals = {},
+		_kinds = {},
+		_contacts = {},
+		_damage = {},
 		_count = 0,
 		_dropped = 0,
 		_nextFlush = 0,
 	}, EffectBroadcaster)
 end
 
-function EffectBroadcaster:Queue(position, normal)
+-- kind is what was struck: "Wall", "Hit", "Block" (a shield took it) or "Kill". contacts is
+-- the projectile's contact count so far, which drives the rising bounce pitch; damage is what
+-- landed, for the popup. All three are cosmetic and default to a plain wall contact.
+function EffectBroadcaster:Queue(position, normal, kind, contacts, damage)
 	if self._count >= EffectConfig.MaxImpactsPerBatch then
 		self._dropped += 1
 		return false
@@ -25,6 +31,9 @@ function EffectBroadcaster:Queue(position, normal)
 	self._count += 1
 	self._positions[self._count] = position
 	self._normals[self._count] = normal
+	self._kinds[self._count] = kind or "Wall"
+	self._contacts[self._count] = contacts or 0
+	self._damage[self._count] = damage or 0
 	return true
 end
 
@@ -33,13 +42,17 @@ function EffectBroadcaster:Flush()
 		return 0
 	end
 
-	local positions = table.move(self._positions, 1, self._count, 1, table.create(self._count))
-	local normals = table.move(self._normals, 1, self._count, 1, table.create(self._count))
-	local sent = self._count
+	local count = self._count
+	local function take(list)
+		return table.move(list, 1, count, 1, table.create(count))
+	end
+	local positions, normals = take(self._positions), take(self._normals)
+	-- Parallel arrays of plain values: they survive remote serialisation unchanged.
+	local details = { Kinds = take(self._kinds), Contacts = take(self._contacts), Damage = take(self._damage) }
 
 	self._count = 0
-	self._remote:FireAllClients(positions, normals)
-	return sent
+	self._remote:FireAllClients(positions, normals, details)
+	return count
 end
 
 function EffectBroadcaster:Step(now)

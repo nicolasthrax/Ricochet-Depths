@@ -12,6 +12,7 @@ local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local AimIndicator = require(script.Parent:WaitForChild("AimIndicator"))
 local AimMath = require(script.Parent:WaitForChild("AimMath"))
+local SoundPlayer = require(script.Parent:WaitForChild("SoundPlayer"))
 
 local RENDER_STEP = "RicochetAim"
 -- Same plane the server flies projectiles on, so the world line matches the real shot.
@@ -24,6 +25,7 @@ local indicator = AimIndicator.new(player:WaitForChild("PlayerGui"), workspace, 
 local dragOrigin = nil
 local dragCurrent = nil
 local activeInput = nil
+local activeDeadzone = AimConfig.DeadzonePixels
 local lastFireAt = -math.huge
 
 -- Mirrors the server's cooldown so a refused shot is visible before it is sent.
@@ -84,7 +86,7 @@ local function renderAim()
 		endDrag()
 		return
 	end
-	local aimScreen, power = AimMath.ReadDrag(dragOrigin, dragCurrent, AimConfig)
+	local aimScreen, power = AimMath.ReadDrag(dragOrigin, dragCurrent, AimConfig, activeDeadzone)
 	if not aimScreen then
 		indicator:Hide()
 		return
@@ -97,8 +99,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed or activeInput or not isAimInput(input) or not canAim() then
 		return
 	end
+	local position = Vector2.new(input.Position.X, input.Position.Y)
+	local camera = workspace.CurrentCamera
+	-- Left-side touches drive the movement thumbstick; only right-side touches aim.
+	if not AimMath.IsInAimZone(input.UserInputType, position, camera and camera.ViewportSize, AimConfig) then
+		return
+	end
 	activeInput = input
-	dragOrigin = Vector2.new(input.Position.X, input.Position.Y)
+	activeDeadzone = AimMath.DeadzoneFor(input.UserInputType, AimConfig)
+	dragOrigin = position
 	dragCurrent = dragOrigin
 	RunService:BindToRenderStep(RENDER_STEP, Enum.RenderPriority.Camera.Value + 1, renderAim)
 end)
@@ -118,10 +127,11 @@ UserInputService.InputEnded:Connect(function(input)
 		return
 	end
 
-	local origin = dragOrigin
+	local origin, deadzone = dragOrigin, activeDeadzone
 	endDrag()
 
-	local aimScreen, power = AimMath.ReadDrag(origin, Vector2.new(input.Position.X, input.Position.Y), AimConfig)
+	local released = Vector2.new(input.Position.X, input.Position.Y)
+	local aimScreen, power = AimMath.ReadDrag(origin, released, AimConfig, deadzone)
 	if not aimScreen or not canAim() then
 		return
 	end
@@ -134,5 +144,7 @@ UserInputService.InputEnded:Connect(function(input)
 	if worldDirection then
 		lastFireAt = os.clock()
 		fireProjectile:FireServer(worldDirection, power)
+		-- Heard the instant the shot is sent: waiting for the server would make it feel laggy.
+		SoundPlayer.Shared():Play("Fire")
 	end
 end)

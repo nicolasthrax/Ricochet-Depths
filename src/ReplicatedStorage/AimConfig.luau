@@ -4,6 +4,11 @@ return {
 	MaxDragPixels = 220,
 	-- Drags shorter than this are ignored, so a plain tap never fires.
 	DeadzonePixels = 14,
+	-- A fingertip wobbles more than a mouse, so touch needs a longer pull before it counts.
+	TouchDeadzonePixels = 28,
+	-- Touch is split in two: touches starting left of this fraction of the screen width belong
+	-- to the movement thumbstick, touches starting right of it aim. The mouse is never zoned.
+	TouchAimZoneStart = 0.4,
 
 	LineMinLength = 40,
 	LineMaxLength = 170,
@@ -27,7 +32,7 @@ return {
 	DropLineWidth = 0.12,
 	DropLineTransparency = 0.35,
 	ReticleSize = 3.2,
-	ReticleTransparency = 0.55,
+	ReticleTransparency = 0.35,
 	ReticleCoreSize = 1.1,
 	-- Lift above the floor so ground cues never z-fight with it or the grid.
 	GroundLift = 0.06,

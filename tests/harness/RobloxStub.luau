@@ -185,6 +185,23 @@ Color3.fromRGB = function(r, g, b)
 	return Color3.new((r or 0) / 255, (g or 0) / 255, (b or 0) / 255)
 end
 
+-- Sequences keep only their keypoints; enough to check what a Trail or Beam was given.
+local function makeSequence(typeName)
+	local mt = { __robloxType = typeName }
+	return {
+		new = function(first, last)
+			if type(first) == "table" and getmetatable(first) == nil then
+				return setmetatable({ Keypoints = first }, mt) -- a list of keypoints
+			end
+			return setmetatable({
+				Keypoints = { { Time = 0, Value = first }, { Time = 1, Value = last == nil and first or last } },
+			}, mt)
+		end,
+	}
+end
+ColorSequence = makeSequence("ColorSequence")
+NumberSequence = makeSequence("NumberSequence")
+
 local UDimMt = { __robloxType = "UDim" }
 UDim = {
 	new = function(scale, offset)
@@ -473,6 +490,23 @@ function Instance.new(className, parent)
 		rawset(instance, "CanCollide", true)
 		rawset(instance, "Transparency", 0)
 		rawset(instance, "Touched", Signal.new("Touched"))
+	elseif className == "ProximityPrompt" then
+		rawset(instance, "Triggered", Signal.new("Triggered"))
+		rawset(instance, "Enabled", true)
+	elseif className == "TextButton" or className == "ImageButton" then
+		rawset(instance, "Activated", Signal.new("Activated"))
+		rawset(instance, "MouseButton1Click", Signal.new("MouseButton1Click"))
+	elseif className == "Sound" then
+		-- Plays are counted, not heard: enough to test pooling and throttling.
+		rawset(instance, "_plays", 0)
+		rawset(instance, "IsPlaying", false)
+		rawset(instance, "Play", function(self)
+			rawset(self, "_plays", rawget(self, "_plays") + 1)
+			rawset(self, "IsPlaying", true)
+		end)
+		rawset(instance, "Stop", function(self)
+			rawset(self, "IsPlaying", false)
+		end)
 	elseif remoteClasses[className] then
 		rawset(instance, "OnServerEvent", Signal.new("OnServerEvent"))
 		rawset(instance, "OnClientEvent", Signal.new("OnClientEvent"))

@@ -2,12 +2,27 @@
   "name": "RicochetDepths",
   "tree": {
     "$className": "DataModel",
-    "ReplicatedStorage": { "$className": "ReplicatedStorage", "$path": "src/ReplicatedStorage" },
-    "ServerScriptService": { "$className": "ServerScriptService", "$path": "src/ServerScriptService" },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "$path": "src/ReplicatedStorage"
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$path": "src/ServerScriptService"
+    },
     "StarterPlayer": {
       "$className": "StarterPlayer",
-      "StarterPlayerScripts": { "$className": "StarterPlayerScripts", "$path": "src/StarterPlayerScripts" },
-      "StarterCharacterScripts": { "$className": "StarterCharacterScripts", "$path": "src/StarterCharacterScripts" }
+      "$properties": {
+        "DevTouchMovementMode": "DynamicThumbstick"
+      },
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "$path": "src/StarterPlayerScripts"
+      },
+      "StarterCharacterScripts": {
+        "$className": "StarterCharacterScripts",
+        "$path": "src/StarterCharacterScripts"
+      }
     },
     "Lighting": {
       "$className": "Lighting",
@@ -18,8 +33,16 @@
         "Brightness": 2.4,
         "ClockTime": 14.2,
         "GeographicLatitude": 35,
-        "Ambient": [0.13, 0.14, 0.18],
-        "OutdoorAmbient": [0.36, 0.38, 0.46],
+        "Ambient": [
+          0.13,
+          0.14,
+          0.18
+        ],
+        "OutdoorAmbient": [
+          0.36,
+          0.38,
+          0.46
+        ],
         "EnvironmentDiffuseScale": 0.6,
         "EnvironmentSpecularScale": 0.4,
         "ExposureCompensation": 0.1
@@ -29,8 +52,16 @@
         "$properties": {
           "Density": 0.28,
           "Offset": 0.1,
-          "Color": [0.62, 0.66, 0.78],
-          "Decay": [0.28, 0.3, 0.4],
+          "Color": [
+            0.62,
+            0.66,
+            0.78
+          ],
+          "Decay": [
+            0.28,
+            0.3,
+            0.4
+          ],
           "Glare": 0,
           "Haze": 1.2
         }

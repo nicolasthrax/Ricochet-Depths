@@ -139,6 +139,21 @@ local function simulateRun(seed, scenario)
 		return match:HandleImpact(result, entry, Harness.now())
 	end
 
+	-- Who is doing the damage, per room: the audit question for any room that ends runs.
+	local damageByRoom = {}
+	local deliverContact = enemies.OnPlayerContact
+	enemies.OnPlayerContact = function(target, damage, enemy, now)
+		local state = match:GetPlayerState(target)
+		local before = state and state.health or 0
+		deliverContact(target, damage, enemy, now)
+		local taken = before - (state and state.health or 0)
+		if taken > 0 then
+			local room = match:GetRunSnapshot().RoomIndex
+			damageByRoom[room] = damageByRoom[room] or {}
+			damageByRoom[room][enemy.archetypeId] = (damageByRoom[room][enemy.archetypeId] or 0) + taken
+		end
+	end
+
 	local trackedEnemies = {}
 	local builtLayout = nil
 	local poolFolder = arena:FindFirstChild("ProjectilePool")
@@ -329,6 +344,7 @@ local function simulateRun(seed, scenario)
 		kills = state and state.kills or 0,
 		shots = shots,
 		frames = frames,
+		damageByRoom = damageByRoom,
 	}
 
 	match:UnregisterPlayer(player, clock)
@@ -368,6 +384,7 @@ for _, scenario in SCENARIOS do
 	local perRoom = {}
 	local endedIn = {}
 	local totalKills, totalShots = 0, 0
+	local damageByRoom = {}
 
 	for run = 1, scenario.runs do
 		local result = simulateRun(4000 + run, scenario)
@@ -375,6 +392,12 @@ for _, scenario in SCENARIOS do
 		endedIn[result.endedInRoom] = (endedIn[result.endedInRoom] or 0) + 1
 		totalKills += result.kills
 		totalShots += result.shots
+		for room, byArchetype in result.damageByRoom do
+			damageByRoom[room] = damageByRoom[room] or {}
+			for archetype, amount in byArchetype do
+				damageByRoom[room][archetype] = (damageByRoom[room][archetype] or 0) + amount
+			end
+		end
 
 		-- Room times come from every room that was actually cleared, in any run. Full-run
 		-- durations only make sense for a run that finished.
@@ -447,6 +470,24 @@ for _, scenario in SCENARIOS do
 	print(string.format("  average accepted shots per run: %.1f", totalShots / scenario.runs))
 	if totalShots > 0 then
 		print(string.format("  kills per shot: %.2f", totalKills / totalShots))
+	end
+
+	for index = 1, RunConfig.RoomCount() do
+		local byArchetype = damageByRoom[index]
+		if byArchetype then
+			local total, parts = 0, {}
+			for _, amount in byArchetype do
+				total += amount
+			end
+			for archetype, amount in byArchetype do
+				table.insert(parts, string.format("%s %.0f%%", archetype, amount / total * 100))
+			end
+			table.sort(parts)
+			print(string.format(
+				"  damage taken in room %d: %.0f per run  (%s)",
+				index, total / scenario.runs, table.concat(parts, ", ")
+			))
+		end
 	end
 
 	__DRYRUN_RESULTS = __DRYRUN_RESULTS or {}

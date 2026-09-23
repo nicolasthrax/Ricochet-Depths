@@ -5,14 +5,14 @@ presentation from any existing game.
 
 ## Current milestone
 
-**Headless hardening complete. Blocked on manual Studio validation.**
+**Milestone 12 (0.6.0-dev): content, juice, touch and the salvage shop. Built headlessly;
+awaiting Studio validation (V7).**
 
-Milestones 1–11 are implemented and the automated gate is green. Nothing has been run inside
-Roblox Studio, and nothing in this repository should be read as engine-validated. The work since
-the last entry pushed the headless ceiling as high as it will go — now 290 tests, box-accurate
-collision, property-based fuzzing, and a dry-run simulator — specifically so that the first
-Studio session is execution rather than discovery. Run `docs/STUDIO_VALIDATION_CHECKLIST.md`
-top to bottom when Studio is available.
+The core loop has now run in Studio. A first Play Solo session (reported by the owner) confirmed
+the server bootstrap, room 1 spawning with 6 targets, aiming with a visible aim line, firing,
+wall ricochets, projectile pooling, telemetry logging and the read-only datastore fallback.
+Everything added in Milestone 12 has only been tested headlessly: 385 tests, up from 290. Run
+`docs/STUDIO_VALIDATION_CHECKLIST.md` V2–V7 next.
 
 ### Where the stub is more forgiving than the engine
 
@@ -44,8 +44,12 @@ replication, character controllers, rendering, input, or DataStore.
 | Run loop | Full four-room run, defeat, replay, four soft-lock guards, every state transition legal under 25 random 1200-event sequences | Teleports landing players somewhere sensible |
 | Co-op | 2/3/4-player runs, per-player offers, late join, partial-team death | Real clients, real replication, real latency |
 | Persistence | Schema migration, retries, read-only fallback, reward ledger, autosave | Actual DataStore behaviour and quotas |
-| UI | Nothing. Views are constructed but never rendered | All of it: layout, scaling, touch, readability |
-| Input | Nothing | All of it: drag-to-aim on mouse and touch |
+| Room geometry | 45° bevels and reflectors built from one `RoomGeometry` description; rotated-box raycasting in the harness; reflection off a 45° face; containment in all four layouts; spawn, marker and flank clearance | That the engine's collision agrees with the harness's rotated boxes |
+| Shop and meta | Purchases, refusals, max level, read-only refusal, cross-server double-spend and overspend, grant-then-buy in one save, schema v5 migration, bonuses reaching a run, trails on pooled shots, the remote path end to end through `GameBootstrap` | Real DataStore behaviour under a purchase |
+| Lobby | Ready-pad countdown, reset, crowding, over-full lobby; pads and kiosk built; a run starting from a pad through the real bootstrap | Walking onto the pads, the kiosk prompt |
+| Audio and juice | Pitch and volume curves, pooled voices, throttling, inert placeholders; camera shake decay and cap; damage-popup pooling; impact payload classification | Everything audible and visible |
+| UI | `ShopView` renders prices, levels and actions from a profile. Other views are constructed but never rendered | All of it: layout, scaling, touch, readability |
+| Input | Aim gesture tracking, touch zones and deadzones as pure functions | The gestures themselves on a real device |
 | Performance | Instance counts and pool accounting only | Frame time, replication cost, mobile headroom |
 
 ## Completed milestones
@@ -144,10 +148,11 @@ replication, character controllers, rendering, input, or DataStore.
 | 2 | Co-op is verified only headlessly. 2–4 real clients have never connected. | Blocker for playtest. |
 | 3 | Balance numbers are first-pass guesses. The simulated floor suggests runs are well under the 6–8 minute target, but that is a bot estimate, not a measurement. | Tune from playtest data only. |
 | 3a | The dry-run bots cannot plan bank shots, so they understate how fast a skilled player clears cover-heavy rooms and overstate how lethal room 3 is. | Inherent to the tool; stated wherever its numbers appear. |
-| 4 | No audio; `FeatureFlags.Audio` is off and no sound assets are wired. | Post-playtest. |
-| 5 | Enemies clamp to arena bounds but do not path around pillars. | Revisit if playtests flag it. |
+| 4 | Audio hooks are wired (fire, bounces with rising pitch, hits, blocks, shatter, card pick, room clear), but every `SoundConfig` id is an empty placeholder and `FeatureFlags.Audio` is off, so the game is silent. | Upload original assets, fill the ids, flip the flag. |
+| 5 | Enemies clamp to arena bounds but do not path around pillars or reflectors. They are held out of the sealed triangle behind each corner bevel. | Revisit if playtests flag it. |
+| 5a | The dry-run bots walk through cover and cannot bank, so they measure nothing about flank geometry; Room 3's layout changes are checked by geometry tests, not by the bots. | Inherent to the tool. |
 | 6 | Telemetry only prints to the Studio output; no external transport is wired. | Needs a destination chosen. |
-| 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
+| 7 | Impact bursts are still placeholder parts, not particles. Damage numbers and camera shake are in. | Post-playtest polish. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 | 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
 | 10a | Profile `Stats` (runs started, best chain and so on) are still last-write-wins across servers, so two servers finishing runs for one account at once can undercount them. Not money, and not in the approved plan. | Candidate follow-up: counters as deltas, bests merged with `max`. |
@@ -205,17 +210,35 @@ where every enemy is, never hesitate, and cannot plan a bank shot — the game's
 
 | Bot | Room 1 | Room 2 | Room 3 | Room 4 | Modelled run floor |
 |---|---|---|---|---|---|
-| Direct fire, exact aim | 49.0s | 15.4s | 11.7s | 6.2s | ~93s |
-| Direct fire with aim error | 9.3s | 9.0s | 11.6s | 6.5s | ~47s |
-| Probing (throws shots off-angle when blocked) | 7.9s | 7.9s | 11.7s | 8.2s | ~46s |
+| Direct fire, exact aim | 49.0s | 15.4s | 11.9s (n=2) | no clears | not enough samples |
+| Direct fire with aim error | 8.3s | 8.1s | 11.9s | 7.6s | ~46s |
+| Probing (throws shots off-angle when blocked) | 7.7s | 8.6s | 16.0s | 3.8s | ~47s |
 
-Medians. The run floor is the sum of per-room medians plus fixed pacing; full-run samples are too
-scarce to quote because the bots keep dying.
+Medians, 0.6.0-dev. The run floor is the sum of per-room medians plus fixed pacing; full-run
+samples are too scarce to quote because the bots keep dying.
 
-Three hypotheses for playtest, **none acted on**:
+### Room 3 audit (0.6.0-dev)
 
-1. **Room 3 is a difficulty wall.** About 85% of simulated runs end there. A human may play it
-   better than a bot that only backs away, so this may be an artifact.
+The dry run now reports who deals the damage in each room. Room 3 was the audit target:
+
+| Room 3 | Runs ending there (aim error / probing, of 40) | Damage from Bulwarks |
+|---|---|---|
+| Before: old layout, 4 Chasers + 2 Bulwarks | 34 / 32 | ~100% (Chasers ~1%) |
+| New layout, 4 Chasers + 2 Bulwarks | 39 / 40 | 100% |
+| New layout, 3 Chasers + 2 Bulwarks | 40 / 35 | 100% |
+| **New layout, 4 Chasers + 1 Bulwark (shipped)** | **33 / 27** | 100% |
+
+Two Bulwarks lunging together was the wall; the Chasers were not. Room 3 now fields four Chasers
+and one Bulwark, posted away from the spawn with open ground around it. The layout was also
+reworked so the spawn has all eight directions open and the Bulwark has most approach angles
+free, both enforced by `tests/geometry.test.luau`. The bots cannot use flank geometry at all
+(they fire straight and walk through cover), so the layout's value is for human players and
+unmeasured until a playtest.
+
+Hypotheses for playtest:
+
+1. **Room 3 is still the hardest room.** About two thirds of probing-bot runs still end there,
+   down from four fifths. A human who banks shots should do far better; watch it in playtest.
 2. **Runs may be far shorter than the 420s target.** Even allowing for human aiming and full
    upgrade timers, the floor is well under target. Change nothing until real timings exist.
 3. **Ricochets are load-bearing, as intended.** The probing bot clears rooms 1 and 2 roughly six
@@ -225,6 +248,43 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.6.0-dev — Milestone 12: content, juice, touch and the salvage shop
+Includes the post-Studio fixes from PRs #1 and #2 (desktop aim line, tactical camera, aim
+ground cues, arena decor and lighting).
+
+- **Bank-shot geometry.** New `RoomGeometry` turns each layout into solids: walls, pillars, four
+  45° corner bevels and free-standing 45° reflectors. `RoomBuilder`, the spawn-point search and
+  the headless collision model all build from it, and the harness now raycasts rotated boxes.
+  Enemies are clamped out of the sealed corner behind each bevel.
+- **Arena look.** Two-tone checker floor, a glowing border inside each wall, metal bumpers with
+  amber hazard trim on every bevel and reflector.
+- **Room 3.** Audited with a new per-enemy damage breakdown in the dry run (see *Room 3 audit*):
+  one Bulwark instead of two, open flanks, a spawn that is not boxed in. Spawn groups can now pin
+  markers (`Markers` in `RunConfig.Rooms`), resolved by `RoomService.AssignSpawns`.
+- Fixed a regression caught by the dry run: the first Gallery reflector placement blocked direct
+  fire from the spawn; they now sit at the top of the side lanes.
+- **Audio.** `SoundConfig` (cues with briefs for asset authors, bounce pitch
+  `min(2.0, 1.0 + bounces * 0.15)`, distance falloff) and a pooled `SoundPlayer`. Hooked to
+  firing, impact batches, kills, card picks and room clears. Silent until assets exist.
+- **Juice.** Impact batches now carry what was struck (wall, hit, block, kill), the bounce count
+  and the damage. `DamagePopups` (pooled billboards) and trauma-based `CameraShake` (scaled by
+  the Screen shake setting) use them.
+- **Touch.** Left 40% of the screen belongs to the dynamic thumbstick; aiming starts only on the
+  right. A 28px touch deadzone (14px for the mouse) stops taps firing.
+- **Salvage shop.** `ShopConfig` (max health, walk speed, +1% projectile speed, three cosmetic
+  trails) and `ShopService`, opened from a lobby kiosk with a `ShopView`. Purchases are applied
+  like grants: optimistically in memory, then re-checked against the stored balance inside the
+  save transform, so two servers can neither double-charge a level nor overspend a balance; a
+  refused purchase is rolled back and reported. Profile schema v5 adds `MetaUpgrades`
+  (store-owned) and `EquippedTrail`. `FeatureFlags.SalvageShop` gates all of it.
+- **Lobby.** A four-pad ready zone: when every lobby player stands on a pad (or all four pads
+  are taken) a three-second countdown starts the descent. Pads light as they fill; the HUD shows
+  progress.
+- Harness: rotated boxes, `Sound`, `ProximityPrompt.Triggered`, button `Activated`,
+  `ColorSequence` and `NumberSequence`; the profile round-trip guard now covers string fields.
+  A `GameBootstrap` smoke test drives the real wiring end to end.
+- 290 → 385 tests.
 
 ### 0.5.7-dev — persistence step 5; overhaul complete
 - Fixed P1: shutdown saved players one after another, so the flush took the sum of every save.

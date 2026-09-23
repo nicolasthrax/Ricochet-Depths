@@ -9,11 +9,13 @@ local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RemoteRouter = {}
 RemoteRouter.__index = RemoteRouter
 
-function RemoteRouter.new(match, persistence, onProfileChanged)
+-- shop is optional; without it the shop remotes are never bound.
+function RemoteRouter.new(match, persistence, onProfileChanged, shop)
 	return setmetatable({
 		_match = match,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
+		_shop = shop,
 		_guard = RemoteGuard.new(RunConfig.RemoteRules),
 		_connections = {},
 	}, RemoteRouter)
@@ -56,6 +58,29 @@ function RemoteRouter:Bind()
 			self._onProfileChanged(player)
 		end
 	end)
+
+	if self._shop then
+		local shopResult = Remotes.Get("ShopResult")
+		self:_connect("PurchaseShopItem", "PurchaseShopItem", function(player, now, itemId)
+			local ok, result = self._shop:Purchase(player, itemId, now)
+			shopResult:FireClient(player, {
+				Ok = ok,
+				Action = "Purchase",
+				ItemId = type(itemId) == "string" and itemId or nil,
+				Level = ok and result.Level or nil,
+				Reason = not ok and result or nil,
+			})
+		end)
+		self:_connect("EquipShopItem", "EquipShopItem", function(player, now, itemId)
+			local ok, reason = self._shop:Equip(player, itemId, now)
+			shopResult:FireClient(player, {
+				Ok = ok,
+				Action = "Equip",
+				ItemId = type(itemId) == "string" and itemId or nil,
+				Reason = reason,
+			})
+		end)
+	end
 end
 
 function RemoteRouter:ClearPlayer(player)

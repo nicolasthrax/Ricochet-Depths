@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CardPickerView = require(script.Parent:WaitForChild("CardPickerView"))
+local DescentCinematic = require(script.Parent:WaitForChild("DescentCinematic"))
 local HudView = require(script.Parent:WaitForChild("HudView"))
 local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
@@ -53,6 +54,7 @@ end, function(kind, id)
 	end
 end)
 local sounds = SoundPlayer.Shared()
+local descent = DescentCinematic.new(playerGui)
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 	sounds:Play("CardSelect")
 	chooseUpgrade:FireServer(offerId, cardId)
@@ -79,6 +81,7 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	if lastState == RunConfig.States.Combat and snapshot.State == RunConfig.States.UpgradeChoice then
 		sounds:Play("RoomClear")
 	end
+	descent:OnRunState(lastState, snapshot)
 	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
 	publishState(snapshot.State)

@@ -156,10 +156,9 @@ function HudView:_renderUpgrades(upgrades)
 	self.upgradePanel.Size = UDim2.fromOffset(210, 24 + (#upgrades + 1) * 18)
 end
 
+-- Starting and Transition have the descent cinematic's own caption instead.
 local BANNERS = {
-	[RunConfig.States.Starting] = "Descending...",
 	[RunConfig.States.UpgradeChoice] = "Choose an upgrade",
-	[RunConfig.States.Transition] = "Moving deeper...",
 }
 
 function HudView:UpdateRun(snapshot)
@@ -168,6 +167,13 @@ function HudView:UpdateRun(snapshot)
 	end
 
 	local inRun = snapshot.State ~= RunConfig.States.Lobby
+	-- Upgrades belong to a run: hidden in the lobby, and cleared when a run ends. The Store
+	-- button is the reverse.
+	self.upgradePanel.Visible = inRun
+	self.storeButton.Visible = not inRun
+	if not inRun and #self.upgradeEntries > 1 then
+		self:_renderUpgrades({})
+	end
 	local zone = RunConfig.Zones[snapshot.Zone or ""]
 	local where = zone and string.format("%s: %s", zone.DisplayName, snapshot.RoomName) or snapshot.RoomName
 	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s", snapshot.RoomIndex, snapshot.RoomCount, where)

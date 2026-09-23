@@ -44,6 +44,11 @@ local function characterFocus()
 end
 
 local function update(deltaTime)
+	-- The descent cinematic owns the camera while it plays.
+	if player:GetAttribute("Cinematic") then
+		focus = nil -- snap back onto the character when it hands over
+		return
+	end
 	local camera = workspace.CurrentCamera
 	local target = characterFocus()
 	if not camera or not target then

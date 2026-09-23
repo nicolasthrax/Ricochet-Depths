@@ -114,7 +114,7 @@ describe("step 1: a run's payout is written as soon as it is granted", function(
 		-- hold the payout, or a crash before the player leaves would lose it.
 		local stored = store.data["profile_5001"]
 		expect(stored.Currency.Salvage).toBe(summary.Reward)
-		expect(stored.GrantedRuns[summary.RunKey]).toBe(summary.Reward)
+		expect(stored.GrantedRuns[summary.RunKey].Amount).toBe(summary.Reward)
 	end)
 
 	it("writes the payout and the run's stats together in one request", function()
@@ -206,11 +206,11 @@ describe("step 2 (P3): a change made while a save is in flight is kept", functio
 		-- In memory: the completing save must not roll the profile back to what it captured.
 		local profile = persistence:GetSession(player).profile
 		expect(profile.Currency.Salvage).toBe(150)
-		expect(profile.GrantedRuns["run-2"]).toBe(50)
+		expect(profile.GrantedRuns["run-2"].Amount).toBe(50)
 		-- In the store: the late change is written by a follow-up, with no further request.
 		local stored = store:Peek(key)
 		expect(stored.Currency.Salvage).toBe(150)
-		expect(stored.GrantedRuns["run-2"]).toBe(50)
+		expect(stored.GrantedRuns["run-2"].Amount).toBe(50)
 	end)
 
 	it("does not lose a settings change made while a save is in flight", function()
@@ -592,5 +592,238 @@ describe("step 3: session lifecycle guards", function()
 		expect(results[2].profile).toBeTruthy()
 		expect(persistence:IsLoaded(player)).toBe(true)
 		expect(persistence:GetStats().staleLoads).toBe(1)
+	end)
+end)
+
+--// Step 4: grant-based currency and a timestamp-ordered, capped ledger ----------
+
+local function countKeys(map)
+	local count = 0
+	for _ in map do
+		count += 1
+	end
+	return count
+end
+
+-- A wall clock the test controls. Ledger timestamps must come from a clock that means the same
+-- thing on every server, and os.clock() does not.
+local function manualClock(start)
+	local clock = { now = start or 1000 }
+	function clock.read()
+		return clock.now
+	end
+	return clock
+end
+
+describe("step 4 (P5): currency survives a cross-server race", function()
+	it("keeps A's committed payout when B, loaded before that commit, saves its own", function()
+		local store = countingStore()
+		local wall = manualClock()
+		local serverA = PlayerDataService.new(store, { wallClock = wall.read })
+		local serverB = PlayerDataService.new(store, { wallClock = wall.read })
+		-- One account, one Player object per server.
+		local onA = { Name = "Roamer", UserId = 8001 }
+		local onB = { Name = "Roamer", UserId = 8001 }
+		Harness.setClock(0)
+
+		serverA:Load(onA)
+		serverA:GrantReward(onA, "run-A", 100) -- A prepares +100
+		store.writeLatency = 2
+		task.spawn(function()
+			serverA:Save(onA, 0) -- ...and yields before committing
+		end)
+		store.writeLatency = 0
+
+		local loadedOnB = serverB:Load(onB) -- B loads before A commits
+		expect(loadedOnB.Currency.Salvage).toBe(0)
+		Harness.settle() -- A commits 100
+		expect(store:Peek("profile_8001").Currency.Salvage).toBe(100)
+
+		wall.now += 60
+		serverB:GrantReward(onB, "run-B", 50) -- B earns +50
+		expect((serverB:Save(onB, 10))).toBe(true)
+
+		local stored = store:Peek("profile_8001")
+		expect(stored.Currency.Salvage).toBe(150) -- not 50
+		expect(stored.GrantedRuns["run-A"]).never().toBeNil()
+		expect(stored.GrantedRuns["run-B"]).never().toBeNil()
+		-- And B's own view catches up with what the store now holds.
+		expect(serverB:GetSession(onB).profile.Currency.Salvage).toBe(150)
+	end)
+
+	it("counts every grant when four servers pay the same account at once", function()
+		local store = countingStore()
+		local wall = manualClock()
+		local servers, players = {}, {}
+		for index = 1, 4 do
+			servers[index] = PlayerDataService.new(store, { wallClock = wall.read })
+			players[index] = { Name = "Everywhere", UserId = 8002 }
+			servers[index]:Load(players[index]) -- all load the empty profile first
+		end
+
+		for index = 1, 4 do
+			for run = 1, 10 do
+				wall.now += 1
+				servers[index]:GrantReward(players[index], string.format("s%d-run-%02d", index, run), 1)
+			end
+		end
+		for index = 1, 4 do
+			expect((servers[index]:Save(players[index], 1))).toBe(true)
+		end
+
+		expect(store:Peek("profile_8002").Currency.Salvage).toBe(40) -- not 10
+	end)
+
+	it("never applies a run twice, even when two servers each hold it as pending", function()
+		-- Guard, not a regression: the old absolute-balance code also ends at 100 here, by
+		-- coincidence. Without the ledger check, the new delta code would reach 200.
+		local store = countingStore()
+		local wall = manualClock()
+		local serverA = PlayerDataService.new(store, { wallClock = wall.read })
+		local serverB = PlayerDataService.new(store, { wallClock = wall.read })
+		local onA = { Name = "Dup", UserId = 8003 }
+		local onB = { Name = "Dup", UserId = 8003 }
+		serverA:Load(onA)
+		serverB:Load(onB)
+
+		serverA:GrantReward(onA, "run-X", 100)
+		serverB:GrantReward(onB, "run-X", 100) -- the same run, credited on both
+		serverA:Save(onA, 1)
+		serverB:Save(onB, 2)
+
+		expect(store:Peek("profile_8003").Currency.Salvage).toBe(100)
+		expect(serverB:GetSession(onB).profile.Currency.Salvage).toBe(100)
+	end)
+end)
+
+describe("step 4: the ledger is pruned oldest-first, by time", function()
+	local PlayerDataConfig = __require("PlayerDataConfig")
+
+	-- Fills the ledger to its cap with runs whose keys sort AFTER the newest one, then adds the
+	-- newest. Alphabetical pruning would throw away the run that was just paid.
+	local function fillThenAddNewest()
+		local store = countingStore()
+		local wall = manualClock(1)
+		local persistence = PlayerDataService.new(store, { wallClock = wall.read })
+		local player = { Name = "Ledger", UserId = 8101 }
+		persistence:Load(player)
+
+		persistence:GrantReward(player, "zzz-oldest", 1)
+		for index = 1, PlayerDataConfig.RunLedgerSize - 1 do
+			wall.now += 1
+			persistence:GrantReward(player, string.format("mmm-%02d", index), 1)
+		end
+		wall.now += 100
+		local granted = persistence:GrantReward(player, "aaa-newest", 7)
+		return store, persistence, player, granted
+	end
+
+	it("drops the oldest run in memory, never the one just paid", function()
+		local _store, persistence, player, granted = fillThenAddNewest()
+		expect(granted).toBe(7)
+
+		local ledger = persistence:GetSession(player).profile.GrantedRuns
+		expect(ledger["aaa-newest"]).never().toBeNil()
+		expect(ledger["zzz-oldest"]).toBeNil()
+		expect(countKeys(ledger)).toBe(PlayerDataConfig.RunLedgerSize)
+	end)
+
+	it("refuses to pay the newest run a second time", function()
+		local _store, persistence, player = fillThenAddNewest()
+		local before = persistence:GetSession(player).profile.Currency.Salvage
+		local again, reason = persistence:GrantReward(player, "aaa-newest", 7)
+		expect(again).toBe(0)
+		expect(reason).toBe("already granted")
+		expect(persistence:GetSession(player).profile.Currency.Salvage).toBe(before)
+	end)
+
+	it("prunes the stored copy oldest-first too", function()
+		local store, persistence, player = fillThenAddNewest()
+		expect((persistence:Save(player, 1))).toBe(true)
+
+		local stored = store:Peek("profile_8101").GrantedRuns
+		expect(stored["aaa-newest"]).never().toBeNil()
+		expect(stored["zzz-oldest"]).toBeNil()
+		expect(countKeys(stored)).toBe(PlayerDataConfig.RunLedgerSize)
+	end)
+
+	it("keeps the stored ledger within its cap however many servers write to it", function()
+		local store = countingStore()
+		local wall = manualClock()
+		local servers, players = {}, {}
+		for index = 1, 4 do
+			servers[index] = PlayerDataService.new(store, { wallClock = wall.read })
+			players[index] = { Name = "Busy", UserId = 8102 }
+			servers[index]:Load(players[index])
+		end
+		local newest
+		for index = 1, 4 do
+			for run = 1, 10 do
+				wall.now += 1
+				newest = string.format("s%d-run-%02d", index, run)
+				servers[index]:GrantReward(players[index], newest, 1)
+			end
+			servers[index]:Save(players[index], index)
+		end
+
+		local stored = store:Peek("profile_8102").GrantedRuns
+		expect(countKeys(stored)).toBeLessThanOrEqual(PlayerDataConfig.RunLedgerSize)
+		expect(stored[newest]).never().toBeNil() -- the most recent run of all survives
+		expect(stored["s1-run-01"]).toBeNil() -- the oldest are the ones gone
+	end)
+
+	it("migrates a numeric ledger from schema v3 into timestamped records", function()
+		local profile = PlayerDataService.Normalise({
+			SchemaVersion = 3,
+			Currency = { Salvage = 30 },
+			GrantedRuns = { ["job-1"] = 10, ["job-2"] = 20 },
+		})
+		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
+		expect(profile.Currency.Salvage).toBe(30)
+		expect(profile.GrantedRuns["job-1"].Amount).toBe(10)
+		expect(type(profile.GrantedRuns["job-2"].At)).toBe("number")
+	end)
+end)
+
+describe("step 4: money changes only through grants", function()
+	it("refuses a direct currency edit through Update instead of dropping it silently", function()
+		local persistence = PlayerDataService.new(countingStore())
+		local player = { Name = "Spender", UserId = 8201 }
+		persistence:Load(player)
+		persistence:GrantReward(player, "run-1", 100)
+
+		local ok = pcall(function()
+			persistence:Update(player, function(profile)
+				profile.Currency.Salvage -= 40
+			end)
+		end)
+		expect(ok).toBe(false)
+		-- Rolled back, so memory never disagrees with what a save would write.
+		expect(persistence:GetSession(player).profile.Currency.Salvage).toBe(100)
+	end)
+
+	it("refuses a direct ledger edit through Update", function()
+		local persistence = PlayerDataService.new(countingStore())
+		local player = { Name = "Forger", UserId = 8202 }
+		persistence:Load(player)
+		local ok = pcall(function()
+			persistence:Update(player, function(profile)
+				profile.GrantedRuns["forged"] = { Amount = 9999, At = 1 }
+			end)
+		end)
+		expect(ok).toBe(false)
+		expect(persistence:GetSession(player).profile.GrantedRuns["forged"]).toBeNil()
+	end)
+
+	it("still accepts ordinary Update changes", function()
+		local store = countingStore()
+		local persistence = PlayerDataService.new(store)
+		local player = { Name = "Normal", UserId = 8203 }
+		persistence:Load(player)
+		persistence:Update(player, function(profile)
+			profile.Flags.OnboardingSeen = true
+		end)
+		expect((persistence:Save(player, 1))).toBe(true)
+		expect(store:Peek("profile_8203").Flags.OnboardingSeen).toBe(true)
 	end)
 end)

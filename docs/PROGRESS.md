@@ -150,6 +150,7 @@ replication, character controllers, rendering, input, or DataStore.
 | 7 | Effects are placeholder parts, not particles. | Post-playtest polish. |
 | 8 | `MatchService` and its four installed halves use a mixin pattern; a method name collision between them would silently overwrite. Names are currently distinct. | Acceptable; noted for future edits. |
 | 9 | **Accepted MVP tradeoff, not a bug.** Any participant can dismiss the results screen for the whole team, possibly while others are still reading their summary. Shared run, shared results. | Revisit only if playtesters report it. |
+| 10a | Profile `Stats` (runs started, best chain and so on) are still last-write-wins across servers, so two servers finishing runs for one account at once can undercount them. Not money, and not in the approved plan. | Candidate follow-up: counters as deltas, bests merged with `max`. |
 | 10 | **Persistence has known data-loss races, being fixed in five steps.** A change made during an in-flight save is lost; a cross-server rejoin can overwrite a payout while the ledger marks it paid, so it can never be re-granted; concurrent `Release` and `SaveAll` double-write one key; sequential shutdown saves can exceed Roblox's 30s budget. | Approved plan in `docs/PERSISTENCE_SHUTDOWN_PLAN.md`; progress tracked under *Persistence plan progress*. |
 | 11 | Duplicate small idioms across modules: flattening a Vector3 to XZ (five places), point-in-box tests (`EnemyService.FindEnclosingMover`, `RoomService.GetSpawnPoint`), and list removal. | Flagged only; consolidating would move code between modules, which needs approval. |
 
@@ -181,7 +182,7 @@ report after every step.
 | 1 | Save immediately on reward grant | Most of P1's real-world impact | **Landed** |
 | 2 | One save in flight per session, change counter instead of a dirty flag | P2, P3 | **Landed** |
 | 3 | Generation tokens discard stale loads; sessions keyed by `UserId` | P4, same-server P5 | **Landed** |
-| 4 | Grant-based currency applied inside the save transform | P5 | Not started |
+| 4 | Grant-based currency applied inside the save transform; time-ordered, capped ledger | Cross-server P5, ledger double-pay and growth | **Landed** |
 | 5 | Parallel shutdown saves under a shared 25s deadline | P1 | Not started |
 
 The interim P3 exposure Step 1 introduced is closed by Step 2.
@@ -219,6 +220,26 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 0.5.6-dev — persistence step 4
+- Fixed cross-server P5: currency was written as an absolute balance, last write wins, so a
+  server that loaded before another server's payout landed overwrote it on its next save (A's
+  +100 then B's +50 ended at 50). Sessions now hold per-run pending grants, and the save
+  transform adds each to whatever the store holds at commit time, skipping any run the stored
+  ledger already records. After a save, memory reconciles to the stored balance plus anything
+  still pending, which is also how a server learns of other servers' grants.
+- Fixed a double payment: the ledger was pruned alphabetically, and run keys begin with a random
+  server id, so a run could be dropped the moment it was paid and then paid again. Pruning is now
+  strictly oldest-first by the wall-clock time of the grant.
+- Fixed unbounded ledger growth: saves unioned the in-memory ledger into the store and never
+  trimmed the stored copy. The transform now prunes the stored copy to the same cap, and no longer
+  re-adds pruned runs from memory.
+- Schema v4: ledger entries become `{ Amount, At }` records. Migration from v3 stamps old entries
+  `At = 0`, so they are pruned first; entries already in record form pass through.
+- Currency and the ledger are store-owned: `Update` now refuses to change them, restoring the
+  profile and raising an error rather than letting a direct edit be silently dropped.
+- Saves copy every profile field except a declared store-owned set, so a newly added field is
+  persisted without being added to a list. This is the root cause of the earlier Settings bug.
 
 ### 0.5.5-dev — persistence step 3
 - Sessions are keyed by `UserId` with an owning `Player` and a load token, instead of by `Player`

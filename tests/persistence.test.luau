@@ -55,11 +55,13 @@ describe("load and save", function()
 		expect(service:IsLoaded(subject)).toBe(true)
 		expect(profile.Currency.Salvage).toBe(0)
 
+		service:GrantReward(subject, "run-1", 120)
 		service:Update(subject, function(current)
-			current.Currency.Salvage += 120
+			current.Flags.OnboardingSeen = true
 		end)
 		expect((service:Save(subject, 10))).toBe(true)
 		expect(store.data["profile_1"].Currency.Salvage).toBe(120)
+		expect(store.data["profile_1"].Flags.OnboardingSeen).toBe(true)
 	end)
 
 	it("skips a save when nothing changed", function()
@@ -228,14 +230,15 @@ describe("reward ledger", function()
 		store.conflicts = 1
 		store.externalWrite = function(stored)
 			stored = PlayerDataService.Normalise(stored)
-			stored.GrantedRuns["job-B"] = 50
+			stored.GrantedRuns["job-B"] = { Amount = 50, At = 1 }
 			return stored
 		end
 		service:Save(subject, 3)
 
 		local saved = store.data["profile_14"]
-		expect(saved.GrantedRuns["job-A"]).toBe(100)
-		expect(saved.GrantedRuns["job-B"]).toBe(50)
+		expect(saved.GrantedRuns["job-A"].Amount).toBe(100)
+		expect(saved.GrantedRuns["job-B"].Amount).toBe(50)
+		expect(saved.Currency.Salvage).toBe(100) -- job-B's 50 was never credited to this store
 	end)
 end)
 
@@ -372,7 +375,7 @@ describe("settings", function()
 		})
 		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
 		expect(profile.Currency.Salvage).toBe(42)
-		expect(profile.GrantedRuns["job-1"]).toBe(10)
+		expect(profile.GrantedRuns["job-1"].Amount).toBe(10)
 		expect(profile.Settings.EffectIntensity).toBe(1)
 	end)
 
@@ -395,7 +398,9 @@ describe("every profile field survives a save", function()
 		service:Load(subject)
 
 		local profile = service:GetSession(subject).profile
-		local skipped = { SchemaVersion = true, LastSaved = true } -- owned by the save itself
+		-- Store-owned fields are written by the transform itself, never copied from memory; their
+		-- own tests cover them. Everything else must round-trip.
+		local skipped = PlayerDataService.STORE_OWNED_FIELDS
 		local marked = {}
 		for field, value in PlayerDataConfig.DefaultProfile() do
 			if not skipped[field] then

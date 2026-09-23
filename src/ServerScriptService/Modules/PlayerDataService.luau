@@ -9,11 +9,16 @@ local PlayerDataService = {}
 PlayerDataService.__index = PlayerDataService
 
 -- store must expose UpdateAsync(key, transform) and may yield, exactly like a Roblox DataStore.
+-- options.wallClock returns the time grants are stamped with. It must mean the same thing on
+-- every server, which is why it is wall-clock time (os.time) and never os.clock, which is
+-- per-process and unrelated across servers.
 function PlayerDataService.new(store, options)
+	options = options or {}
 	return setmetatable({
 		_store = store,
 		_sessions = {},
-		_options = options or {},
+		_options = options,
+		_wallClock = options.wallClock or os.time,
 		_stats = { loads = 0, loadFailures = 0, staleLoads = 0, saves = 0, saveFailures = 0, retries = 0 },
 		_loadGeneration = 0,
 	}, PlayerDataService)
@@ -21,6 +26,22 @@ end
 
 -- Returned by Load when its result arrived after the player left or a newer load took over.
 PlayerDataService.STALE_LOAD = "stale load"
+
+-- Fields the store owns. A save never copies these from memory: currency and the run ledger
+-- change only through grants applied inside the transform, and the rest are the save's own
+-- bookkeeping. Every other profile field is copied, so a field added to the schema is saved
+-- without anyone having to remember to add it here.
+PlayerDataService.STORE_OWNED_FIELDS = {
+	SchemaVersion = true,
+	LastSaved = true,
+	Currency = true,
+	GrantedRuns = true,
+}
+
+local PROFILE_FIELDS = {}
+for field in PlayerDataConfig.DefaultProfile() do
+	table.insert(PROFILE_FIELDS, field)
+end
 
 local function keyFor(player)
 	return PlayerDataConfig.KeyPrefix .. tostring(player.UserId)
@@ -78,6 +99,79 @@ function PlayerDataService:_retry(label, operation, stillWanted)
 	end
 
 	return false, string.format("%s failed after %d attempts: %s", label, PlayerDataConfig.MaxRetries, tostring(lastError))
+end
+
+-- A ledger entry's grant time. Tolerates a bare number, the pre-v4 format, as time zero.
+local function entryAt(entry)
+	return type(entry) == "table" and (entry.At or 0) or 0
+end
+
+local function countKeys(map)
+	local count = 0
+	for _ in map do
+		count += 1
+	end
+	return count
+end
+
+-- Keeps the newest RunLedgerSize runs, dropping strictly oldest-first by grant time. Ties are
+-- broken by key only so the order is deterministic. The old policy sorted keys alphabetically;
+-- run keys begin with a random server id, so it could drop a run the moment it was paid and let
+-- that run be paid again.
+local function pruneLedger(ledger)
+	local excess = countKeys(ledger) - PlayerDataConfig.RunLedgerSize
+	if excess <= 0 then
+		return
+	end
+	local entries = {}
+	for runKey, entry in ledger do
+		table.insert(entries, { key = runKey, at = entryAt(entry) })
+	end
+	table.sort(entries, function(a, b)
+		if a.at ~= b.at then
+			return a.at < b.at
+		end
+		return a.key < b.key
+	end)
+	for index = 1, excess do
+		ledger[entries[index].key] = nil
+	end
+end
+
+-- Value snapshots for Update's guard on store-owned money fields.
+local function snapshotCurrency(currency)
+	return table.clone(currency)
+end
+
+local function sameCurrency(before, currency)
+	for key, value in before do
+		if currency[key] ~= value then
+			return false
+		end
+	end
+	return countKeys(before) == countKeys(currency)
+end
+
+local function snapshotLedger(ledger)
+	local copy = {}
+	for runKey, entry in ledger do
+		copy[runKey] = { Amount = type(entry) == "table" and entry.Amount or entry, At = entryAt(entry) }
+	end
+	return copy
+end
+
+local function sameLedger(before, ledger)
+	if countKeys(before) ~= countKeys(ledger) then
+		return false
+	end
+	for runKey, entry in before do
+		local current = ledger[runKey]
+		local amount = type(current) == "table" and current.Amount or current
+		if current == nil or amount ~= entry.Amount or entryAt(current) ~= entry.At then
+			return false
+		end
+	end
+	return true
 end
 
 -- Sessions are keyed by account, not by Player object. Roblox hands a rejoining player a new
@@ -153,6 +247,9 @@ function PlayerDataService:Load(player)
 		saving = false, -- true while this session's one permitted write chain is running
 		lastSave = 0,
 		lastAutosaveAt = 0,
+		-- Grants credited here but not yet written, keyed by run. Currency is written as these
+		-- deltas, never as a balance, so two servers writing one account compose.
+		pendingGrants = {},
 	}
 	self._sessions[account] = session
 
@@ -192,38 +289,81 @@ function PlayerDataService:Load(player)
 end
 
 -- mutator receives the profile and may change it in place; the change is then persisted.
+-- Currency and the run ledger are refused here: they are written only as grants, so a direct
+-- edit would never reach the store. Failing loudly beats a spend that silently evaporates.
 function PlayerDataService:Update(player, mutator)
 	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
 		return nil, "profile not loaded"
 	end
-	mutator(session.profile)
+
+	local profile = session.profile
+	-- Snapshot by value: a mutator edits these tables in place, so keeping the table references
+	-- alone would neither detect nor undo the change.
+	local currencyTable, ledgerTable = profile.Currency, profile.GrantedRuns
+	local currencyBefore = snapshotCurrency(currencyTable)
+	local ledgerBefore = snapshotLedger(ledgerTable)
+
+	mutator(profile)
+
+	if
+		profile.Currency ~= currencyTable
+		or profile.GrantedRuns ~= ledgerTable
+		or not sameCurrency(currencyBefore, currencyTable)
+		or not sameLedger(ledgerBefore, ledgerTable)
+	then
+		-- Put everything back exactly as it was, into the original tables.
+		profile.Currency, profile.GrantedRuns = currencyTable, ledgerTable
+		table.clear(currencyTable)
+		for key, value in currencyBefore do
+			currencyTable[key] = value
+		end
+		table.clear(ledgerTable)
+		for runKey, entry in ledgerBefore do
+			ledgerTable[runKey] = { Amount = entry.Amount, At = entry.At }
+		end
+		error("currency and the run ledger change only through GrantReward, not Update", 2)
+	end
+
 	markChanged(session)
-	return session.profile
+	return profile
 end
 
 -- One UpdateAsync attempt sequence for the session's current state.
 function PlayerDataService:_writeOnce(session, now)
 	local profile = session.profile
 	local writtenRevision = session.revision
+	local applied = {}
 
 	local ok, result = self:_retry("save", function()
 		return self._store:UpdateAsync(session.storeKey, function(stored)
-			-- Record exactly the revision this transform read. UpdateAsync may run it more than
-			-- once, and only the run that commits is the one that counts.
+			-- Record exactly what this transform read. UpdateAsync may run it more than once, and
+			-- only the run that commits counts, so these are reset on every run.
 			writtenRevision = session.revision
+			applied = {}
 
 			local merged = PlayerDataService.Normalise(stored)
-			-- Last write wins per field, but the run ledger is unioned so a concurrent write
-			-- on another server can never resurrect an already-paid run.
-			for runKey, value in profile.GrantedRuns do
-				merged.GrantedRuns[runKey] = value
+
+			-- Currency is never written as a balance. Each pending grant is added to whatever the
+			-- store holds right now, so a grant committed by another server in the meantime is
+			-- kept rather than overwritten. A run already in the stored ledger has been paid,
+			-- here or elsewhere, and is not added again.
+			for runKey, grant in session.pendingGrants do
+				if merged.GrantedRuns[runKey] == nil then
+					merged.Currency.Salvage = (merged.Currency.Salvage or 0) + grant.Amount
+					merged.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
+				end
+				applied[runKey] = grant -- applied now, or found already paid: acknowledged either way
 			end
-			merged.Currency = profile.Currency
-			merged.Unlocks = profile.Unlocks
-			merged.Flags = profile.Flags
-			merged.Settings = profile.Settings
-			merged.Stats = profile.Stats
+			-- The stored copy is capped too. Nothing re-adds pruned runs from memory any more,
+			-- which is what used to let this grow without limit across servers.
+			pruneLedger(merged.GrantedRuns)
+
+			for _, field in PROFILE_FIELDS do
+				if not PlayerDataService.STORE_OWNED_FIELDS[field] then
+					merged[field] = profile[field]
+				end
+			end
 			merged.LastSaved = now or 0
 			return merged
 		end)
@@ -234,14 +374,31 @@ function PlayerDataService:_writeOnce(session, now)
 		return false, result
 	end
 
-	-- Take back only what the store owns: run keys recorded by other servers. The live profile
-	-- is never replaced wholesale, because anything changed during the write is newer than what
-	-- the store now holds, and replacing it would roll that change back.
-	for runKey, value in result.GrantedRuns do
-		if profile.GrantedRuns[runKey] == nil then
-			profile.GrantedRuns[runKey] = value
+	-- Acknowledge exactly the grants the committed write carried. Any granted during the write
+	-- are still pending, and the revision counter guarantees another write follows for them.
+	for runKey, grant in applied do
+		if session.pendingGrants[runKey] == grant then
+			session.pendingGrants[runKey] = nil
 		end
 	end
+
+	-- Currency is store-owned now: what the store holds, plus whatever is still waiting to go.
+	-- This is also how this server learns of grants other servers committed.
+	local stillPending = 0
+	for _, grant in session.pendingGrants do
+		stillPending += grant.Amount
+	end
+	profile.Currency.Salvage = (result.Currency.Salvage or 0) + stillPending
+
+	-- Take back the runs the store knows about, then keep memory within the same cap. The rest
+	-- of the live profile is left alone: anything changed during the write is newer than what
+	-- was written, and replacing it would roll that change back.
+	for runKey, entry in result.GrantedRuns do
+		if profile.GrantedRuns[runKey] == nil then
+			profile.GrantedRuns[runKey] = entry
+		end
+	end
+	pruneLedger(profile.GrantedRuns)
 
 	session.savedRevision = math.max(session.savedRevision, writtenRevision)
 	session.lastSave = now or 0
@@ -308,32 +465,22 @@ function PlayerDataService:GrantReward(player, runKey, amount)
 	if not session or not session.loaded or session.failed then
 		return 0, "profile not loaded"
 	end
-	if session.profile.GrantedRuns[runKey] then
+	-- Pending grants are checked too: pruning may drop a run from the in-memory ledger before it
+	-- has been written, and it must still count as paid.
+	if session.profile.GrantedRuns[runKey] or session.pendingGrants[runKey] then
 		return 0, "already granted"
 	end
 
+	local grant = { Amount = math.floor(amount), At = self._wallClock() }
 	local profile = session.profile
-	profile.GrantedRuns[runKey] = math.floor(amount)
-	profile.Currency.Salvage += math.floor(amount)
+	profile.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
+	session.pendingGrants[runKey] = grant
+	-- Shown to the player straight away; reconciled against the store on the next save.
+	profile.Currency.Salvage += grant.Amount
 	markChanged(session)
 
-	self:_trimLedger(profile)
-	return math.floor(amount)
-end
-
--- Keeps the ledger bounded so a long-lived profile cannot grow without limit.
-function PlayerDataService:_trimLedger(profile)
-	local keys = {}
-	for runKey in profile.GrantedRuns do
-		table.insert(keys, runKey)
-	end
-	if #keys <= PlayerDataConfig.RunLedgerSize then
-		return
-	end
-	table.sort(keys)
-	for index = 1, #keys - PlayerDataConfig.RunLedgerSize do
-		profile.GrantedRuns[keys[index]] = nil
-	end
+	pruneLedger(profile.GrantedRuns)
+	return grant.Amount
 end
 
 -- Settings arrive from the client, so they are sanitised against the spec before storage.

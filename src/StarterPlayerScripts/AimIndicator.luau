@@ -1,4 +1,5 @@
--- Screen-space aim UI: a line from the drag origin plus a power bar.
+-- Aim feedback: a neon line in the world from the character along the shot, plus a
+-- screen-space drag line from the pointer and a power bar.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AimConfig = require(ReplicatedStorage:WaitForChild("AimConfig"))
@@ -6,13 +7,42 @@ local AimConfig = require(ReplicatedStorage:WaitForChild("AimConfig"))
 local AimIndicator = {}
 AimIndicator.__index = AimIndicator
 
-function AimIndicator.new(playerGui)
+local function makeWorldPart(name, shape, size, parent)
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = shape
+	part.Size = size
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = Enum.Material.Neon
+	part.Color = AimConfig.LineColor
+	part.Transparency = 1
+	part.Parent = parent
+	return part
+end
+
+function AimIndicator.new(playerGui, worldParent)
 	local self = setmetatable({}, AimIndicator)
+
+	-- Created on the client, so these parts exist only for this player.
+	local worldFolder = Instance.new("Folder")
+	worldFolder.Name = "AimWorldVisual"
+	worldFolder.Parent = worldParent or workspace
+
+	local thickness = AimConfig.WorldLineThickness
+	self._worldLine = makeWorldPart("AimLine", Enum.PartType.Block, Vector3.new(thickness, thickness, 1), worldFolder)
+	local tip = AimConfig.WorldTipSize
+	self._worldTip = makeWorldPart("AimTip", Enum.PartType.Ball, Vector3.new(tip, tip, tip), worldFolder)
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "AimUi"
 	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
+	-- InputObject.Position is measured below the top-bar inset, so the GUI must be too, or
+	-- the drag line starts offset from the pointer.
+	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = playerGui
 
 	local line = Instance.new("Frame")
@@ -48,9 +78,37 @@ function AimIndicator.new(playerGui)
 	return self
 end
 
+-- Transparency, not Parent or Visible, toggles the world parts so they never leave the tree.
+function AimIndicator:_showWorld(muzzle, worldDirection, power, color)
+	if not muzzle or not worldDirection then
+		self:_hideWorld()
+		return
+	end
+	local length = AimConfig.WorldLineMinLength
+		+ (AimConfig.WorldLineMaxLength - AimConfig.WorldLineMinLength) * power
+	local tipPosition = muzzle + worldDirection * length
+	local thickness = AimConfig.WorldLineThickness
+
+	self._worldLine.Size = Vector3.new(thickness, thickness, length)
+	-- lookAt points -Z along the shot, so the part's long Z axis spans muzzle to tip.
+	self._worldLine.CFrame = CFrame.lookAt(muzzle + worldDirection * (length / 2), tipPosition)
+	self._worldLine.Color = color
+	self._worldLine.Transparency = AimConfig.WorldLineTransparency
+
+	self._worldTip.CFrame = CFrame.new(tipPosition)
+	self._worldTip.Color = color
+	self._worldTip.Transparency = AimConfig.WorldLineTransparency
+end
+
+function AimIndicator:_hideWorld()
+	self._worldLine.Transparency = 1
+	self._worldTip.Transparency = 1
+end
+
 -- aimDirection is a unit Vector2 in screen space; power is 0..1. ready is false while the
 -- shot would be refused for cooldown, which tints the line instead of silently doing nothing.
-function AimIndicator:Show(originPixels, aimDirection, power, ready)
+-- muzzle and worldDirection place the world line; either may be nil (no character yet).
+function AimIndicator:Show(originPixels, aimDirection, power, ready, muzzle, worldDirection)
 	local length = AimConfig.LineMinLength + (AimConfig.LineMaxLength - AimConfig.LineMinLength) * power
 
 	self._line.Position = UDim2.fromOffset(originPixels.X, originPixels.Y)
@@ -63,9 +121,12 @@ function AimIndicator:Show(originPixels, aimDirection, power, ready)
 	self._fill.Size = UDim2.fromScale(power, 1)
 	self._fill.BackgroundColor3 = ready == false and AimConfig.CooldownColor or AimConfig.PowerBarFillColor
 	self._bar.Visible = true
+
+	self:_showWorld(muzzle, worldDirection, power, ready == false and AimConfig.CooldownColor or AimConfig.LineColor)
 end
 
 function AimIndicator:Hide()
+	self:_hideWorld()
 	self._line.Visible = false
 	self._bar.Visible = false
 end

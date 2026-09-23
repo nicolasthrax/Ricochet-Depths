@@ -2,18 +2,27 @@
 -- Sends only a direction and a power scalar; the server decides everything else.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local AimConfig = require(ReplicatedStorage:WaitForChild("AimConfig"))
+local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
+local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local AimIndicator = require(script.Parent:WaitForChild("AimIndicator"))
+local AimMath = require(script.Parent:WaitForChild("AimMath"))
+
+local RENDER_STEP = "RicochetAim"
+-- Same plane the server flies projectiles on, so the world line matches the real shot.
+local PLANE_Y = RoomConfig.FloorY + ProjectileConfig.PlaneHeight
 
 local player = Players.LocalPlayer
 local fireProjectile = Remotes.Get("FireProjectile")
 local indicator = AimIndicator.new(player:WaitForChild("PlayerGui"))
 
 local dragOrigin = nil
+local dragCurrent = nil
 local activeInput = nil
 local lastFireAt = -math.huge
 
@@ -36,38 +45,48 @@ local function canAim()
 	return player:GetAttribute("RunState") == RunConfig.States.Combat
 end
 
--- Screen drag maps onto the camera's flattened basis: +x is camera-right, screen-up is forward.
-local function screenToWorldDirection(aimScreen)
+local function worldDirectionFor(aimScreen)
 	local camera = workspace.CurrentCamera
 	if not camera then
 		return nil
 	end
-
-	local cameraFrame = camera.CFrame
-	local forward = Vector3.new(cameraFrame.LookVector.X, 0, cameraFrame.LookVector.Z)
-	local right = Vector3.new(cameraFrame.RightVector.X, 0, cameraFrame.RightVector.Z)
-	if forward.Magnitude < 1e-3 then
-		-- Near top-down camera: LookVector is almost vertical, so use UpVector as the forward hint.
-		forward = Vector3.new(cameraFrame.UpVector.X, 0, cameraFrame.UpVector.Z)
-	end
-	if forward.Magnitude < 1e-3 or right.Magnitude < 1e-3 then
-		return nil
-	end
-
-	local world = right.Unit * aimScreen.X + forward.Unit * (-aimScreen.Y)
-	if world.Magnitude < 1e-3 then
-		return nil
-	end
-	return world.Unit
+	return AimMath.ScreenToWorldDirection(camera.CFrame, aimScreen)
 end
 
--- Returns the screen-space aim direction and power for the current drag, or nil inside the deadzone.
-local function readDrag(input)
-	local pull = Vector2.new(input.Position.X - dragOrigin.X, input.Position.Y - dragOrigin.Y)
-	if pull.Magnitude < AimConfig.DeadzonePixels then
-		return nil, 0
+local function muzzlePosition()
+	local character = player.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return nil
 	end
-	return -pull.Unit, math.clamp(pull.Magnitude / AimConfig.MaxDragPixels, 0, 1)
+	return Vector3.new(rootPart.Position.X, PLANE_Y, rootPart.Position.Z)
+end
+
+local function endDrag()
+	RunService:UnbindFromRenderStep(RENDER_STEP)
+	activeInput = nil
+	dragOrigin = nil
+	dragCurrent = nil
+	indicator:Hide()
+end
+
+-- Redrawn every frame, not only on input, so the line follows the character and camera
+-- while the pointer is held still.
+local function renderAim()
+	if not activeInput then
+		return
+	end
+	if not canAim() then
+		-- The run moved on mid-drag; drop the gesture rather than firing into a cleared room.
+		endDrag()
+		return
+	end
+	local aimScreen, power = AimMath.ReadDrag(dragOrigin, dragCurrent, AimConfig)
+	if not aimScreen then
+		indicator:Hide()
+		return
+	end
+	indicator:Show(dragOrigin, aimScreen, power, isReady(), muzzlePosition(), worldDirectionFor(aimScreen))
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -76,37 +95,29 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 	activeInput = input
 	dragOrigin = Vector2.new(input.Position.X, input.Position.Y)
+	dragCurrent = dragOrigin
+	RunService:BindToRenderStep(RENDER_STEP, Enum.RenderPriority.Camera.Value + 1, renderAim)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input ~= activeInput then
+	if not AimMath.IsSameGesture(activeInput, input) then
 		return
 	end
-	if not canAim() then
-		-- The run moved on mid-drag; drop the gesture rather than firing into a cleared room.
-		activeInput = nil
-		dragOrigin = nil
-		indicator:Hide()
-		return
-	end
-	local aimScreen, power = readDrag(input)
-	if aimScreen then
-		indicator:Show(dragOrigin, aimScreen, power, isReady())
-	else
-		indicator:Hide()
-	end
+	dragCurrent = Vector2.new(input.Position.X, input.Position.Y)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input ~= activeInput then
+	if not activeInput or input.UserInputType ~= activeInput.UserInputType then
+		return
+	end
+	if not AimMath.IsSameGesture(activeInput, input) then
 		return
 	end
 
-	local aimScreen, power = readDrag(input)
-	activeInput = nil
-	dragOrigin = nil
-	indicator:Hide()
+	local origin = dragOrigin
+	endDrag()
 
+	local aimScreen, power = AimMath.ReadDrag(origin, Vector2.new(input.Position.X, input.Position.Y), AimConfig)
 	if not aimScreen or not canAim() then
 		return
 	end
@@ -115,7 +126,7 @@ UserInputService.InputEnded:Connect(function(input)
 		return -- the server would refuse it; do not spend bandwidth on the attempt
 	end
 
-	local worldDirection = screenToWorldDirection(aimScreen)
+	local worldDirection = worldDirectionFor(aimScreen)
 	if worldDirection then
 		lastFireAt = os.clock()
 		fireProjectile:FireServer(worldDirection, power)

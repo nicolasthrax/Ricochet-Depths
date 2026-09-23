@@ -8,6 +8,7 @@ local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local Leaderstats = require(script.Parent.Leaderstats)
+local MonetizationService = require(script.Parent.MonetizationService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
 local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
@@ -79,11 +80,27 @@ function GameBootstrap.Start()
 		return public
 	end
 
+	-- Assigned just below; pushProfile only runs once players are about.
+	local monetization
+
 	local function pushProfile(player)
 		local public = refreshLeaderstats(player)
 		if public then
+			public.Passes = monetization and monetization:OwnedList(player) or {}
 			profileSync:FireClient(player, public)
 		end
+	end
+
+	monetization = MonetizationService.new({
+		marketplace = game:GetService("MarketplaceService"),
+		persistence = persistence,
+		getPlayer = function(userId)
+			return Players:GetPlayerByUserId(userId)
+		end,
+		onChanged = pushProfile,
+	})
+	if FeatureFlags.Monetization then
+		monetization:Bind()
 	end
 
 	-- The shop is open to anyone in the lobby; `director` is assigned just below, before any
@@ -92,6 +109,9 @@ function GameBootstrap.Start()
 	local shop = ShopService.new(persistence, {
 		canShop = function(player)
 			return director ~= nil and director:MatchFor(player) == nil
+		end,
+		ownsPass = function(player, passKey)
+			return monetization:OwnsPass(player, passKey)
 		end,
 		onChanged = pushProfile,
 	})
@@ -113,10 +133,14 @@ function GameBootstrap.Start()
 			world = WorldAdapter,
 			persistence = persistence,
 			runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
-			-- Shop bonuses are read as each run starts; with the shop off, nobody has any.
-			metaProvider = FeatureFlags.SalvageShop and function(player)
-				return shop:GetRunBonuses(player)
-			end or nil,
+			-- Shop and pass bonuses are read as each run starts.
+			metaProvider = function(player)
+				local meta = FeatureFlags.SalvageShop and shop:GetRunBonuses(player) or { stats = {} }
+				for stat, delta in monetization:GetRunBonuses(player) do
+					meta.stats[stat] = (meta.stats[stat] or 0) + delta
+				end
+				return meta
+			end,
 		},
 	})
 
@@ -244,6 +268,9 @@ function GameBootstrap.Start()
 				warn(("[data] profile load failed for %s, session is read-only: %s"):format(player.Name, err))
 				telemetry:LogError("ProfileLoadFailed", err, os.clock())
 			end
+			if FeatureFlags.Monetization then
+				monetization:RefreshOwnership(player)
+			end
 			pushProfile(player)
 		end)
 	end
@@ -255,6 +282,7 @@ function GameBootstrap.Start()
 	Players.PlayerRemoving:Connect(function(player)
 		director:RemovePlayer(player, os.clock())
 		router:ClearPlayer(player)
+		monetization:ClearPlayer(player)
 		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
@@ -307,6 +335,7 @@ function GameBootstrap.Start()
 		persistence = persistence,
 		shop = shop,
 		gates = gates,
+		monetization = monetization,
 	}
 end
 

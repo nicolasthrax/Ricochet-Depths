@@ -62,6 +62,17 @@ function HudView.new(playerGui)
 	bossTrack.Size = UDim2.new(1, 0, 0, 12)
 	self.bossFill = bossFill
 
+	-- The Store button, shown in the lobby only.
+	local store = UiTheme.button("StoreButton", self.gui, "STORE")
+	store.Position = UDim2.new(0, 16, 0, 12)
+	store.Size = UDim2.fromOffset(110, UiConfig.MinTouchTarget)
+	store.Activated:Connect(function()
+		if self._onStore then
+			self._onStore()
+		end
+	end)
+	self.storeButton = store
+
 	local upgrades = UiTheme.panel("UpgradePanel", self.gui)
 	upgrades.Position = UDim2.new(1, -16, 0, 12)
 	upgrades.AnchorPoint = Vector2.new(1, 0)
@@ -216,6 +227,10 @@ function HudView:SetLobbyReady(snapshot)
 	if snapshot.Active then
 		self:_renderLobbyObjective()
 	end
+end
+
+function HudView:SetStoreHandler(callback)
+	self._onStore = callback
 end
 
 function HudView:Flash(message, color)

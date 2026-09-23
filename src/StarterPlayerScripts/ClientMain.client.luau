@@ -39,10 +39,18 @@ local settingsView = SettingsView.new(playerGui, function(settings)
 end)
 settingsView:SetVersion("Build " .. RunConfig.Version)
 local onboarding = OnboardingView.new(playerGui)
+local MarketplaceService = game:GetService("MarketplaceService")
 local shopView = ShopView.new(playerGui, function(itemId)
 	purchaseShopItem:FireServer(itemId)
 end, function(itemId)
 	equipShopItem:FireServer(itemId)
+end, function(kind, id)
+	-- Robux purchases go straight to Roblox; the server grants them from the receipt.
+	if kind == "Pass" then
+		MarketplaceService:PromptGamePassPurchase(player, id)
+	else
+		MarketplaceService:PromptProductPurchase(player, id)
+	end
 end)
 local sounds = SoundPlayer.Shared()
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
@@ -119,8 +127,11 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	publishSettings(settingsView:GetSettings())
 end)
 
-Remotes.Get("ShopOpen").OnClientEvent:Connect(function()
-	shopView:Open()
+Remotes.Get("ShopOpen").OnClientEvent:Connect(function(tab)
+	shopView:Open(tab)
+end)
+hud:SetStoreHandler(function()
+	shopView:Open("Store")
 end)
 
 Remotes.Get("ShopResult").OnClientEvent:Connect(function(payload)

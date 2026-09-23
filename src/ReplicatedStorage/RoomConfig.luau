@@ -6,9 +6,25 @@ RoomConfig.WallHeight = 14
 RoomConfig.WallThickness = 2
 RoomConfig.FloorThickness = 2
 
-RoomConfig.FloorColor = Color3.fromRGB(46, 50, 62)
+-- Dark floor, lighter walls: bounce planes must read against the ground at a glance.
+RoomConfig.FloorColor = Color3.fromRGB(26, 28, 36)
+RoomConfig.FloorMaterial = Enum.Material.Slate
 RoomConfig.WallColor = Color3.fromRGB(88, 96, 118)
+RoomConfig.WallMaterial = Enum.Material.Concrete
 RoomConfig.ObstacleColor = Color3.fromRGB(70, 78, 98)
+
+-- Decor is cosmetic only: non-colliding, non-queryable, and kept off the projectile plane.
+RoomConfig.Decor = {
+	GridSpacing = 8,
+	GridLineWidth = 0.25,
+	GridColor = Color3.fromRGB(44, 50, 66),
+	-- Neon strips capping every wall and pillar, and a glow line where walls meet the floor.
+	TrimColor = Color3.fromRGB(190, 210, 255),
+	TopTrimHeight = 0.5,
+	BaseTrimHeight = 0.35,
+	-- How far trims stand proud of the surface they outline, so they are not z-fighting.
+	TrimInset = 0.05,
+}
 
 RoomConfig.SpawnPadSize = Vector3.new(8, 1, 8)
 
@@ -18,6 +34,7 @@ RoomConfig.Layouts = {
 	-- Open and forgiving: long sightlines so a first ricochet is easy to land.
 	Atrium = {
 		DisplayName = "Collapsed Atrium",
+		TrimColor = Color3.fromRGB(190, 210, 255),
 		InteriorSize = Vector2.new(120, 120),
 		AccentColor = Color3.fromRGB(96, 104, 128),
 		Obstacles = {
@@ -35,6 +52,7 @@ RoomConfig.Layouts = {
 	-- Tighter, with a central spine that rewards banking shots around cover.
 	Gallery = {
 		DisplayName = "Shattered Gallery",
+		TrimColor = Color3.fromRGB(222, 196, 255),
 		InteriorSize = Vector2.new(104, 132),
 		AccentColor = Color3.fromRGB(110, 92, 128),
 		Obstacles = {
@@ -55,6 +73,7 @@ RoomConfig.Layouts = {
 	-- Diagonal cover: almost every safe angle here is a bank shot.
 	Crossing = {
 		DisplayName = "Fractured Crossing",
+		TrimColor = Color3.fromRGB(255, 214, 176),
 		InteriorSize = Vector2.new(132, 112),
 		AccentColor = Color3.fromRGB(128, 100, 84),
 		Obstacles = {
@@ -76,6 +95,7 @@ RoomConfig.Layouts = {
 	-- Boss arena: wide, few pillars, so the fight is about angles rather than cover.
 	WardenVault = {
 		DisplayName = "Warden Vault",
+		TrimColor = Color3.fromRGB(206, 186, 255),
 		InteriorSize = Vector2.new(140, 140),
 		AccentColor = Color3.fromRGB(122, 96, 160),
 		Obstacles = {

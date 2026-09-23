@@ -91,3 +91,32 @@ describe("AimIndicator world line", function()
 		expect(line.Transparency).toBe(1)
 	end)
 end)
+
+describe("AimIndicator ground cues", function()
+	it("projects the line onto the floor and marks the landing point", function()
+		local world = Instance.new("Folder")
+		local indicator = AimIndicator.new(Instance.new("Folder"), world, 0)
+		local folder = world:FindFirstChild("AimWorldVisual")
+		local groundLine = folder:FindFirstChild("AimGroundLine")
+		local drop = folder:FindFirstChild("AimDropLine")
+		local reticle = folder:FindFirstChild("AimReticle")
+
+		indicator:Show(Vector2.new(0, 0), Vector2.new(0, -1), 0, true, Vector3.new(0, 3, 0), Vector3.new(0, 0, -1))
+		local tipZ = -AimConfig.WorldLineMinLength
+
+		expect(reticle.Transparency).toBe(AimConfig.ReticleTransparency)
+		expect(reticle.CFrame.Position.Z).toBeCloseTo(tipZ)
+		expect(reticle.CFrame.Position.Y).toBeLessThan(0.1)
+		expect(groundLine.CFrame.Position.Z).toBeCloseTo(tipZ / 2)
+		expect(groundLine.Size.Z).toBeCloseTo(AimConfig.WorldLineMinLength)
+		-- The drop line spans the gap between the floor and the aim tip on the projectile plane.
+		expect(drop.Size.Y + AimConfig.GroundLift / 2).toBeCloseTo(3)
+		expect(drop.CFrame.Position.Z).toBeCloseTo(tipZ)
+
+		indicator:Hide()
+		for _, part in folder:GetChildren() do
+			expect(part.Transparency).toBe(1)
+			expect(part.CanQuery).toBe(false)
+		end
+	end)
+end)

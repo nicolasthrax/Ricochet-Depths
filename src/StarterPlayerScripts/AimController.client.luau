@@ -19,7 +19,7 @@ local PLANE_Y = RoomConfig.FloorY + ProjectileConfig.PlaneHeight
 
 local player = Players.LocalPlayer
 local fireProjectile = Remotes.Get("FireProjectile")
-local indicator = AimIndicator.new(player:WaitForChild("PlayerGui"))
+local indicator = AimIndicator.new(player:WaitForChild("PlayerGui"), workspace, RoomConfig.FloorY)
 
 local dragOrigin = nil
 local dragCurrent = nil
@@ -53,13 +53,16 @@ local function worldDirectionFor(aimScreen)
 	return AimMath.ScreenToWorldDirection(camera.CFrame, aimScreen)
 end
 
-local function muzzlePosition()
+-- Where the server spawns the shot: MuzzleOffset ahead of the character on the projectile
+-- plane, so the line starts clear of the body instead of running through the torso.
+local function muzzlePosition(worldDirection)
 	local character = player.Character
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
+	if not rootPart or not worldDirection then
 		return nil
 	end
-	return Vector3.new(rootPart.Position.X, PLANE_Y, rootPart.Position.Z)
+	local base = Vector3.new(rootPart.Position.X, PLANE_Y, rootPart.Position.Z)
+	return base + worldDirection * ProjectileConfig.MuzzleOffset
 end
 
 local function endDrag()
@@ -86,7 +89,8 @@ local function renderAim()
 		indicator:Hide()
 		return
 	end
-	indicator:Show(dragOrigin, aimScreen, power, isReady(), muzzlePosition(), worldDirectionFor(aimScreen))
+	local worldDirection = worldDirectionFor(aimScreen)
+	indicator:Show(dragOrigin, aimScreen, power, isReady(), muzzlePosition(worldDirection), worldDirection)
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)

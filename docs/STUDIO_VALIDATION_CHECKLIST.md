@@ -52,9 +52,9 @@ client-side in `ClientMain`.
 |---|---|---|
 | 2.1 | Walk to the pedestal. | A prompt appears reading **Begin Descent / Ricochet Depths**. |
 | 2.2 | Hold the prompt key (E on desktop) for about a third of a second. | Banner reads `Descending...`. Output shows `[telemetry …] RunStart {Players=1 RunId=1}`. |
-| 2.3 | Wait 3 seconds. | You are teleported into a large walled room with three pillars. HUD reads `Room 1 / 4 - Collapsed Atrium` and `6 targets left`. Output shows `RoomStart {Room=1 RoomId=Atrium …}`. |
+| 2.3 | Wait 3 seconds. | You are teleported into a large walled room with three pillars, and the camera switches to a fixed high-angle view that follows you (mouse wheel zooms). The floor is dark with a faint grid; every wall and pillar has a glowing cap and base strip. HUD reads `Room 1 / 4 - Collapsed Atrium` and `6 targets left`. Output shows `RoomStart {Room=1 RoomId=Atrium …}`. |
 | 2.4 | Confirm you are **not** stuck inside a pillar. | You can walk freely in all four directions. *(Two layouts had cover on the spawn point; this was fixed headlessly and V2.4 is the engine-side confirmation.)* |
-| 2.5 | Press and drag the mouse **away** from a target, then release. | A cyan line pivots at the press point while dragging, a power bar fills at the bottom, and on release a glowing ball leaves your character travelling flat. |
+| 2.5 | Press and drag the mouse **away** from a target, then release. | A cyan line pivots at the press point while dragging, and a neon aim line starts just ahead of your character (not through the torso) with a faint floor shadow, a drop line and a diamond reticle on the floor at its tip. A power bar fills at the bottom, and on release a glowing ball leaves from the start of the aim line, travelling flat. |
 | 2.6 | Watch the ball reach a wall. | It reflects off the wall at a mirrored angle and a small white burst appears at the contact point. |
 | 2.7 | Hit a pink Drifter. | It vanishes immediately. The `targets left` count drops by one. |
 | 2.8 | Drag less than about 15 pixels and release. | Nothing fires. This is the deadzone, not a bug. |

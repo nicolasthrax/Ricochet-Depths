@@ -8,6 +8,49 @@
       "$className": "StarterPlayer",
       "StarterPlayerScripts": { "$className": "StarterPlayerScripts", "$path": "src/StarterPlayerScripts" },
       "StarterCharacterScripts": { "$className": "StarterCharacterScripts", "$path": "src/StarterCharacterScripts" }
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Technology": "ShadowMap",
+        "GlobalShadows": true,
+        "ShadowSoftness": 0.15,
+        "Brightness": 2.4,
+        "ClockTime": 14.2,
+        "GeographicLatitude": 35,
+        "Ambient": [0.13, 0.14, 0.18],
+        "OutdoorAmbient": [0.36, 0.38, 0.46],
+        "EnvironmentDiffuseScale": 0.6,
+        "EnvironmentSpecularScale": 0.4,
+        "ExposureCompensation": 0.1
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.28,
+          "Offset": 0.1,
+          "Color": [0.62, 0.66, 0.78],
+          "Decay": [0.28, 0.3, 0.4],
+          "Glare": 0,
+          "Haze": 1.2
+        }
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.6,
+          "Size": 22,
+          "Threshold": 1.4
+        }
+      },
+      "ColorCorrection": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Contrast": 0.12,
+          "Saturation": 0.08,
+          "Brightness": 0
+        }
+      }
     }
   }
 }

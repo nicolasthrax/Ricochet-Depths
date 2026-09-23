@@ -17,6 +17,14 @@ RunConfig.States = {
 RunConfig.BaseHealth = 100
 -- Roblox's default Humanoid walk speed; the salvage shop's Stride adds to it for a run.
 RunConfig.BaseWalkSpeed = 16
+-- Out-of-combat healing during a run: once Delay seconds pass without taking damage, a live
+-- player heals PerSecond (plus the Armory's Mending) until full.
+RunConfig.Regen = {
+	Delay = 4,
+	PerSecond = 1.5,
+	-- How often a healing player's HUD is updated.
+	PushInterval = 0.5,
+}
 -- Brief grace after spawning or respawning so a player cannot be chain-hit.
 RunConfig.SpawnInvulnerability = 2.5
 RunConfig.StartCountdown = 3

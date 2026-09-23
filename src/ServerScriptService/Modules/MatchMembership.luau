@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MatchCombat = require(script.Parent.MatchCombat)
 local PlayerState = require(script.Parent.PlayerState)
+local RewardService = require(script.Parent.RewardService)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
 local States = RunConfig.States
@@ -54,6 +55,15 @@ function Membership.methods:GetParticipants()
 end
 
 function Membership.methods:UnregisterPlayer(player, now)
+	-- Leaving mid-run still pays for the coins already picked up. The profile is still loaded
+	-- here (the server releases it after this), and the key makes a repeat pay nothing.
+	local state = self._states[player]
+	if state and self:IsRunActive() and table.find(self._participants, player) and state.coins > 0 and self._persistence then
+		local amount = RewardService.Multiply(state, state.coins)
+		local runKey = string.format("%s-%d-left", self._runKeyPrefix, self._runId)
+		self._persistence:GrantReward(player, runKey, amount)
+		state.coins = 0
+	end
 	removeFrom(self._participants, player)
 	removeFrom(self._pendingJoins, player)
 	self._upgrades:Clear(player)

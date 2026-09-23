@@ -4,6 +4,7 @@
 -- and reused when their run ends.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CoinDrops = require(script.Parent.CoinDrops)
 local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
 local EnemyService = require(script.Parent.EnemyService)
 local MatchService = require(script.Parent.MatchService)
@@ -68,6 +69,7 @@ function ArenaDirector:_createSlot(index)
 	deps.projectiles = projectiles
 	deps.upgrades = UpgradeService.new(seed)
 	deps.rewards = RewardService.new()
+	deps.coins = CoinDrops.new(arena, Random.new(seed))
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs
 	-- would share a payout key and the profile ledger would refuse the second.
 	deps.runKeyPrefix = string.format("%s-a%d", self._shared.runKeyPrefix or "local", index)

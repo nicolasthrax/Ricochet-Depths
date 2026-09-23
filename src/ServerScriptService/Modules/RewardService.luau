@@ -11,20 +11,26 @@ function RewardService.new()
 	return setmetatable({ _granted = {} }, RewardService)
 end
 
--- Only "Extracted" pays in full; every other outcome (Defeated, TimedOut, Abandoned, Aborted)
--- pays the defeat fraction.
+-- Coins collected, plus the clear bonus, times the player's multipliers (Fortune and cards via
+-- RewardMultiplier, the 2x Coins pass via CoinMultiplier). Only "Extracted" earns the whole
+-- bonus; every other outcome keeps the coins and a share of the bonus.
 function RewardService.Compute(playerState, outcome, eliteCleared)
-	local base = playerState.roomsCleared * RewardConfig.PerRoomCleared + playerState.kills * RewardConfig.PerKill
+	local bonus = playerState.roomsCleared * RewardConfig.PerRoomCleared
 	if eliteCleared then
-		base += RewardConfig.EliteBonus
+		bonus += RewardConfig.EliteBonus
 	end
 	if outcome == "Extracted" then
-		base += RewardConfig.ExtractionBonus
+		bonus += RewardConfig.ExtractionBonus
 	else
-		base *= RewardConfig.DefeatMultiplier
+		bonus = math.floor(bonus * RewardConfig.DefeatMultiplier)
 	end
+	return RewardService.Multiply(playerState, (playerState.coins or 0) + bonus)
+end
 
-	local total = math.floor(base * (playerState.stats.RewardMultiplier or 1))
+-- `amount` after the player's multipliers, floored and capped.
+function RewardService.Multiply(playerState, amount)
+	local stats = playerState.stats
+	local total = math.floor(amount * (stats.RewardMultiplier or 1) * (stats.CoinMultiplier or 1))
 	return math.clamp(total, 0, RewardConfig.MaxPerRun)
 end
 

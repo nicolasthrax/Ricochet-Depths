@@ -54,6 +54,9 @@ function PlayerState:ResetRun()
 	self.bestChain = 0
 	self.damageTaken = 0
 	self.roomsCleared = 0
+	-- Coins picked up this run; paid out at the end (or when the player leaves mid-run).
+	self.coins = 0
+	self.lastDamagedAt = -math.huge
 	-- The room this player entered the run at. 1 for everyone who starts together; a late
 	-- joiner's is set when they are admitted at a room boundary.
 	self.joinedAtRoom = 1
@@ -128,6 +131,7 @@ function PlayerState:ApplyDamage(amount, now)
 	local applied = math.min(amount, self.health)
 	self.health -= applied
 	self.damageTaken += applied
+	self.lastDamagedAt = now
 	if self.health <= 0 then
 		self.health = 0
 		self.alive = false
@@ -173,6 +177,7 @@ function PlayerState:ToSnapshot()
 		Alive = self.alive,
 		Kills = self.kills,
 		RoomsCleared = self.roomsCleared,
+		Coins = self.coins,
 		BestChain = self.bestChain,
 		-- Sent so the client can predict its own cooldown and give instant feedback on a
 		-- shot that would be refused, without an extra remote for rejections.

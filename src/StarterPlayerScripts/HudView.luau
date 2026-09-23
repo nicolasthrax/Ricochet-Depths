@@ -25,6 +25,14 @@ function HudView.new(playerGui)
 	track.Size = UDim2.new(1, 0, 0, 14)
 	self.healthFill = fill
 
+	-- Coins picked up this run, with a brief "+N" as they come in.
+	self.coinLabel = UiTheme.label("CoinLabel", health, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
+	self.coinLabel.AnchorPoint = Vector2.new(1, 0)
+	self.coinLabel.Position = UDim2.new(1, 0, 0, 0)
+	self.coinLabel.Size = UDim2.new(0.5, 0, 0, 20)
+	self.coinLabel.TextXAlignment = Enum.TextXAlignment.Right
+	self._coins = 0
+
 	local progress = UiTheme.panel("ProgressPanel", self.gui)
 	progress.Position = UDim2.new(0.5, 0, 0, 12)
 	progress.AnchorPoint = Vector2.new(0.5, 0)
@@ -94,6 +102,22 @@ function HudView:UpdatePlayer(snapshot)
 
 	if not snapshot.Alive then
 		self.healthLabel.Text = "DOWN"
+	end
+
+	local coins = type(snapshot.Coins) == "number" and snapshot.Coins or 0
+	local gained = coins - self._coins
+	self._coins = coins
+	if gained > 0 then
+		self.coinLabel.Text = string.format("+%d  Coins %d", gained, coins)
+		self._coinToken = (self._coinToken or 0) + 1
+		local token = self._coinToken
+		task.delay(1.2, function()
+			if self._coinToken == token then
+				self.coinLabel.Text = string.format("Coins %d", self._coins)
+			end
+		end)
+	else
+		self.coinLabel.Text = string.format("Coins %d", coins)
 	end
 
 	self:_renderUpgrades(snapshot.Upgrades or {})

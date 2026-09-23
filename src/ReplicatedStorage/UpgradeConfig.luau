@@ -15,7 +15,7 @@ UpgradeConfig.Categories = {
 	Projectile = { Id = "Projectile", DisplayName = "Projectile", Color = Color3.fromRGB(120, 235, 255) },
 	Power = { Id = "Power", DisplayName = "Power", Color = Color3.fromRGB(255, 176, 102) },
 	Survival = { Id = "Survival", DisplayName = "Survival", Color = Color3.fromRGB(140, 236, 168) },
-	Economy = { Id = "Economy", DisplayName = "Salvage", Color = Color3.fromRGB(226, 196, 120) },
+	Economy = { Id = "Economy", DisplayName = "Coins", Color = Color3.fromRGB(226, 196, 120) },
 }
 
 UpgradeConfig.Rarities = {
@@ -37,8 +37,14 @@ UpgradeConfig.BaseStats = {
 	MaxHealthBonus = 0,
 	RoomClearHeal = 0,
 	RewardMultiplier = 1,
-	-- Studs per second added to walk speed. Only the salvage shop moves this today.
+	-- Studs per second added to walk speed. Only the Armory moves this today.
 	MoveSpeedBonus = 0,
+	-- Health per second added to the out-of-combat regen (Armory: Mending).
+	RegenBonus = 0,
+	-- Studs added to the coin magnet's reach (Armory: Coin Magnet).
+	MagnetBonus = 0,
+	-- Multiplies the whole payout; the 2x Coins pass sets it to 2.
+	CoinMultiplier = 1,
 }
 
 UpgradeConfig.Cards = {
@@ -137,7 +143,7 @@ UpgradeConfig.Cards = {
 	{
 		Id = "Scavenger",
 		Title = "Scavenger",
-		Description = "Earn 25% more salvage from this run.",
+		Description = "Earn 25% more coins from this run.",
 		Category = "Economy",
 		Rarity = "Common",
 		MaxStacks = 3,
@@ -146,7 +152,7 @@ UpgradeConfig.Cards = {
 	{
 		Id = "Reclaim",
 		Title = "Reclaim",
-		Description = "A steady trickle of extra salvage. Always available.",
+		Description = "A steady trickle of extra coins. Always available.",
 		Category = "Economy",
 		Rarity = "Common",
 		MaxStacks = UpgradeConfig.UnlimitedStacks,

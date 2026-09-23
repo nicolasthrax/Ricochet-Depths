@@ -40,6 +40,8 @@ function MatchService.new(deps)
 	-- player -> salvage-shop bonuses for a run starting now. Optional: without it every player
 	-- starts from the base stats.
 	self._metaProvider = deps.metaProvider
+	-- Coin pickups for this arena (CoinDrops). Optional: without it kills drop nothing.
+	self._coins = deps.coins
 	-- runId -> the rooms for that run. Defaults to a fresh random draw from the zone pools;
 	-- tests and tools pass a fixed plan.
 	self._planRun = deps.planRun or function()
@@ -74,6 +76,7 @@ function MatchService.new(deps)
 		end
 	end
 	self._hazardNextAt = {}
+	self._regenPushAt = {}
 	-- Lets a projectile that an enemy moved over still register, rather than passing through.
 	self._projectiles.OverlapQuery = function(position, margin)
 		return self._enemies:FindEnclosingMover(position, margin)
@@ -199,6 +202,8 @@ function MatchService:Step(deltaTime, now)
 	elseif state == States.Combat then
 		self._rooms:Step(deltaTime, now)
 		self:_applyHazards(now)
+		self:_collectCoins(deltaTime, now)
+		self:_applyRegen(deltaTime, now)
 		if self:_allDown() then
 			self:_finish("Defeated", now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then
@@ -207,6 +212,7 @@ function MatchService:Step(deltaTime, now)
 			self:_onRoomCleared(now)
 		end
 	elseif state == States.UpgradeChoice then
+		self:_applyRegen(deltaTime, now)
 		for _, resolution in self._upgrades:ResolveExpired(now, function(key)
 			return self._states[key]
 		end) do
@@ -217,6 +223,7 @@ function MatchService:Step(deltaTime, now)
 			self:_setState(States.Transition, now)
 		end
 	elseif state == States.Transition then
+		self:_applyRegen(deltaTime, now)
 		if now - self._stateEnteredAt >= RunConfig.TransitionDuration then
 			self:_beginRoom(self._roomIndex + 1, now)
 		end

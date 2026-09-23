@@ -7,6 +7,7 @@ local ArenaDirector = require(script.Parent.ArenaDirector)
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local Leaderstats = require(script.Parent.Leaderstats)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
 local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
@@ -70,8 +71,16 @@ function GameBootstrap.Start()
 	end
 
 	local profileSync = Remotes.Get("ProfileSync")
-	local function pushProfile(player)
+	local function refreshLeaderstats(player)
 		local public = persistence:GetPublicProfile(player)
+		if public then
+			Leaderstats.Update(player, public.Salvage or 0, public.Stats and public.Stats.BestRoomsCleared or 0)
+		end
+		return public
+	end
+
+	local function pushProfile(player)
+		local public = refreshLeaderstats(player)
 		if public then
 			profileSync:FireClient(player, public)
 		end
@@ -89,6 +98,12 @@ function GameBootstrap.Start()
 
 	director = ArenaDirector.new({
 		parent = arenas,
+		-- A finished run paid out: show the new balance straight away.
+		onReleased = function(players)
+			for _, player in players do
+				pushProfile(player)
+			end
+		end,
 		planeY = planeY,
 		seed = seed,
 		effectsRemote = Remotes.Get("ProjectileImpact"),
@@ -277,6 +292,7 @@ function GameBootstrap.Start()
 			nextDebugPush = now + DebugConfig.OverlayUpdateInterval
 			reportRefusedPurchases()
 			for _, player in Players:GetPlayers() do
+				refreshLeaderstats(player)
 				if DebugConfig.IsDebugUser(player) then
 					debugStats:FireClient(player, GameBootstrap._debugSnapshot(director, player, telemetry, persistence))
 				end

@@ -86,6 +86,7 @@ function Flow.methods:HandleCharacterAdded(player)
 end
 
 function Flow.methods:_onRoomCleared(now)
+	self:_sweepCoins()
 	local definition = self._plan[self._roomIndex]
 	if definition and definition.Kind == "Elite" then
 		self._eliteCleared = true
@@ -130,6 +131,9 @@ end
 
 function Flow.methods:_finish(outcome, now)
 	self._projectiles:Clear()
+	if self._coins then
+		self._coins:Clear() -- whatever is still on the floor of a lost room is gone
+	end
 	self._rooms:Unload()
 	self._upgrades:ClearAll()
 

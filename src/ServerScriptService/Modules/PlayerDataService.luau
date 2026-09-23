@@ -248,6 +248,20 @@ function PlayerDataService:RecordRunEnd(player, summary)
 	end)
 end
 
+-- Starts a save without blocking the caller. The run loop calls this from inside Heartbeat,
+-- where a yield would let the next frame's Step run while this one is suspended part-way
+-- through its work. A failed save leaves the session dirty, so leave, autosave or shutdown
+-- still get another chance at it.
+function PlayerDataService:SaveInBackground(player, now)
+	if not self:IsLoaded(player) then
+		return false
+	end
+	task.spawn(function()
+		self:Save(player, now)
+	end)
+	return true
+end
+
 function PlayerDataService:Release(player, now)
 	local ok, err = self:Save(player, now)
 	self._sessions[player] = nil

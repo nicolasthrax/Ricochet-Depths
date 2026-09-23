@@ -131,6 +131,9 @@ function Flow.methods:_finish(outcome, now)
 			if summary.Reward > 0 and self._persistence then
 				summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
 				self._persistence:RecordRunEnd(player, summary)
+				-- Written now, not left for autosave or leave: a payout is the one change whose
+				-- loss really hurts, and this single write carries it with the run's stats.
+				self._persistence:SaveInBackground(player, now)
 			end
 			summary.RunKey = runKey
 

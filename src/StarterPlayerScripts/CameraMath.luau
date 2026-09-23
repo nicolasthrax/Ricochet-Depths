@@ -20,4 +20,10 @@ function CameraMath.ClampZoom(distance, config)
 	return math.clamp(distance, config.MinDistance, config.MaxDistance)
 end
 
+-- Turns the view by (yawDelta, pitchDelta) degrees. Yaw is free and wrapped into [0, 360);
+-- pitch is held between the config limits so the view never goes flat or straight down.
+function CameraMath.ApplyRotate(yaw, pitch, yawDelta, pitchDelta, config)
+	return (yaw + yawDelta) % 360, math.clamp(pitch + pitchDelta, config.MinPitch, config.MaxPitch)
+end
+
 return CameraMath

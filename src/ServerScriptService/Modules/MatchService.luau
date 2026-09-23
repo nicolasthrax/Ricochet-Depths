@@ -7,6 +7,7 @@ local MatchCombat = require(script.Parent.MatchCombat)
 local MatchFlow = require(script.Parent.MatchFlow)
 local MatchMembership = require(script.Parent.MatchMembership)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
 
 local States = RunConfig.States
 
@@ -39,6 +40,12 @@ function MatchService.new(deps)
 	-- player -> salvage-shop bonuses for a run starting now. Optional: without it every player
 	-- starts from the base stats.
 	self._metaProvider = deps.metaProvider
+	-- runId -> the rooms for that run. Defaults to a fresh random draw from the zone pools;
+	-- tests and tools pass a fixed plan.
+	self._planRun = deps.planRun or function()
+		return RunPlanner.Plan(Random.new())
+	end
+	self._plan = {}
 
 	self._states = {}
 	self._participants = {}
@@ -59,6 +66,14 @@ function MatchService.new(deps)
 	self._enemies.OnPlayerContact = function(player, damage, enemy, now)
 		self:HandlePlayerContact(player, damage, enemy, now or self._now)
 	end
+	-- Room mechanics see every shot's travel (amp pads).
+	self._projectiles.SegmentHook = function(entry, from, to)
+		local mechanics = self._rooms:GetMechanics()
+		if mechanics then
+			mechanics:ApplySegment(entry, from, to)
+		end
+	end
+	self._hazardNextAt = {}
 	-- Lets a projectile that an enemy moved over still register, rather than passing through.
 	self._projectiles.OverlapQuery = function(position, margin)
 		return self._enemies:FindEnclosingMover(position, margin)
@@ -103,11 +118,12 @@ function MatchService:RequestStart(player, now)
 	table.clear(self._pendingJoins)
 
 	self._runId += 1
+	self._plan = self._planRun(self._runId)
 	self._runStartedAt = now
 	self._roomIndex = 0
 	self._eliteCleared = false
 	self:_setState(States.Starting, now)
-	self:_log("RunStart", { RunId = self._runId, Players = #self._participants }, now)
+	self:_log("RunStart", { RunId = self._runId, Players = #self._participants, Rooms = #self._plan }, now)
 	return true
 end
 
@@ -182,6 +198,7 @@ function MatchService:Step(deltaTime, now)
 		end
 	elseif state == States.Combat then
 		self._rooms:Step(deltaTime, now)
+		self:_applyHazards(now)
 		if self:_allDown() then
 			self:_finish("Defeated", now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then

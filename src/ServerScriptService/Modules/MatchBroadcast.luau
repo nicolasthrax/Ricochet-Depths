@@ -13,11 +13,27 @@ function Broadcast.methods:GetRunSnapshot()
 		State = self._state,
 		RunId = self._runId,
 		RoomIndex = self._roomIndex,
-		RoomCount = RunConfig.RoomCount(),
+		RoomCount = #self._plan > 0 and #self._plan or RunConfig.RoomCount(),
 		RoomName = definition and definition.DisplayName or "",
+		Zone = definition and definition.Zone or "",
 		RoomKind = definition and definition.Kind or "",
 		EnemiesRemaining = self._rooms:GetRemaining(),
 		Players = #self._participants,
+		Boss = self:_bossSnapshot(current),
+	}
+end
+
+-- The boss bar's data while a boss is alive in the current room; nil otherwise.
+function Broadcast.methods:_bossSnapshot(current)
+	local boss = current and current.boss
+	if not boss or boss.dead then
+		return nil
+	end
+	return {
+		Name = boss.archetype.DisplayName,
+		Health = math.max(boss.health, 0),
+		MaxHealth = boss.maxHealth,
+		Phase = self._enemies.BossPhase(boss),
 	}
 end
 

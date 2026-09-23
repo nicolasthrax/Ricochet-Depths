@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RoomBuilder = require(script.Parent.RoomBuilder)
+local RoomMechanics = require(script.Parent.RoomMechanics)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RoomGeometry = require(ReplicatedStorage:WaitForChild("RoomGeometry"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -23,6 +24,11 @@ end
 
 function RoomService:GetCurrent()
 	return self._current
+end
+
+-- The loaded room's mechanics, or nil between rooms.
+function RoomService:GetMechanics()
+	return self._current and self._current.mechanics
 end
 
 function RoomService:Unload()
@@ -76,9 +82,10 @@ function RoomService:Load(roomDefinition, now)
 
 	self._room = room
 	self._enemies:SetBounds(bounds.center, bounds.half, bounds.diagonal)
+	self._enemies:SetObstacles(RoomGeometry.Footprints(layout, RoomConfig))
 
 	local spawned, failed = 0, 0
-	local elite = nil
+	local elite, boss = nil, nil
 	for _, assignment in RoomService.AssignSpawns(roomDefinition, layout) do
 		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker))
 		if enemy then
@@ -86,18 +93,23 @@ function RoomService:Load(roomDefinition, now)
 			if enemy.archetype.IsElite then
 				elite = enemy
 			end
+			if enemy.archetype.IsBoss then
+				boss = enemy
+			end
 		else
 			failed += 1
 		end
 	end
 
 	self._current = {
+		mechanics = RoomMechanics.new(room, layout),
 		definition = roomDefinition,
 		bounds = bounds,
 		layout = layout,
 		spawned = spawned,
 		failed = failed,
 		elite = elite,
+		boss = boss,
 		startedAt = now,
 		escortNextAt = now + ((roomDefinition.EscortRespawn and roomDefinition.EscortRespawn.Delay) or math.huge),
 		forcedClear = false,
@@ -134,11 +146,12 @@ function RoomService:IsCleared(now)
 end
 
 -- Elite rooms keep a small escort alive while the core lives, so the fight keeps pressure on.
-function RoomService:Step(_deltaTime, now)
+function RoomService:Step(deltaTime, now)
 	local current = self._current
 	if not current then
 		return
 	end
+	current.mechanics:Step(deltaTime, now)
 
 	local respawn = current.definition.EscortRespawn
 	if not respawn or not current.elite or current.elite.dead then

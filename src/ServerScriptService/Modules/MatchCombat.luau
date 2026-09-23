@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FireValidator = require(script.Parent.FireValidator)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
+local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 
 local Combat = { methods = {} }
 
@@ -77,6 +78,19 @@ local function impactKind(hit)
 end
 
 function Combat.methods:HandleImpact(result, entry, now)
+	-- Breakable cover takes the hit first; the shot still ricochets off it.
+	local mechanics = self._rooms:GetMechanics()
+	local struck = mechanics and mechanics:HandleImpact(result.Instance)
+	if struck then
+		if self._effects then
+			self._effects:Queue(result.Position, result.Normal, struck == "Broken" and "Kill" or "Hit", entry.contacts, 0)
+		end
+		if struck == "Broken" then
+			self:_log("CoverBroken", { RunId = self._runId, Room = self._roomIndex }, now)
+		end
+		return false
+	end
+
 	local hit = self._enemies:ApplyHit(
 		result.Instance,
 		entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0),
@@ -123,6 +137,26 @@ function Combat.methods:HandlePlayerContact(player, damage, _enemy, now)
 
 	if fatal then
 		self:_log("PlayerDown", { RunId = self._runId, Room = self._roomIndex }, now)
+	end
+end
+
+-- Laser gates and other hazards: each live participant standing in one is burned, at most
+-- once per GateTick, through the same damage path as enemy contact.
+function Combat.methods:_applyHazards(now)
+	local mechanics = self._rooms:GetMechanics()
+	if not mechanics or not self._world or not self._world.GetPosition then
+		return
+	end
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state and state.alive and now >= (self._hazardNextAt[player] or 0) then
+			local position = self._world.GetPosition(player)
+			local damage = position and mechanics:HazardAt(position, now) or 0
+			if damage > 0 then
+				self._hazardNextAt[player] = now + RoomConfig.Mechanics.GateTick
+				self:HandlePlayerContact(player, damage, nil, now)
+			end
+		end
 	end
 end
 

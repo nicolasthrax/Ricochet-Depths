@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RoomGeometry = require(ReplicatedStorage:WaitForChild("RoomGeometry"))
+local RoomDressing = require(script.Parent.RoomDressing)
 
 local RoomBuilder = {}
 
@@ -41,14 +42,15 @@ local function makeDecor(name, size, position, color, material, parent)
 	return part
 end
 
--- Floor layers, bottom to top, each a hair above the last so nothing z-fights.
-local LAYER = 0.02
+-- Floor layers, bottom to top. Each sits a clear step above the last: at the tactical camera's
+-- range, layers a few hundredths of a stud apart z-fight and shimmer as the camera moves.
+local LAYER = RoomConfig.Decor.LayerStep
 local function layerY(floorY, level)
 	return floorY + LAYER * (level - 0.5)
 end
 
 -- Two-tone checker across the interior; edge tiles are trimmed to fit.
-local function buildFloorTiles(decor, interior, floorY)
+local function buildFloorTiles(decor, interior, floorY, style)
 	local config = RoomConfig.Decor
 	local size = config.TileSize
 	local halfX, halfZ = interior.X / 2, interior.Y / 2
@@ -59,7 +61,7 @@ local function buildFloorTiles(decor, interior, floorY)
 		for row = 0, math.ceil(interior.Y / size) - 1 do
 			local z0 = -halfZ + row * size
 			local z1 = math.min(z0 + size, halfZ)
-			local color = config.TileColors[(column + row) % 2 + 1]
+			local color = style.TileColors[(column + row) % 2 + 1]
 			makeDecor(
 				("Tile_%d_%d"):format(column, row),
 				Vector3.new(x1 - x0, LAYER, z1 - z0),
@@ -72,7 +74,7 @@ local function buildFloorTiles(decor, interior, floorY)
 	end
 end
 
-local function buildFloorGrid(decor, interior, floorY)
+local function buildFloorGrid(decor, interior, floorY, style)
 	local config = RoomConfig.Decor
 	local width = config.GridLineWidth
 	local y = layerY(floorY, 2)
@@ -81,12 +83,12 @@ local function buildFloorGrid(decor, interior, floorY)
 	for index = -columns, columns do
 		local x = index * config.GridSpacing
 		local size = Vector3.new(width, LAYER, interior.Y)
-		makeDecor("GridX" .. index, size, Vector3.new(x, y, 0), config.GridColor, Enum.Material.SmoothPlastic, decor)
+		makeDecor("GridX" .. index, size, Vector3.new(x, y, 0), style.GridColor, Enum.Material.SmoothPlastic, decor)
 	end
 	for index = -rows, rows do
 		local z = index * config.GridSpacing
 		local size = Vector3.new(interior.X, LAYER, width)
-		makeDecor("GridZ" .. index, size, Vector3.new(0, y, z), config.GridColor, Enum.Material.SmoothPlastic, decor)
+		makeDecor("GridZ" .. index, size, Vector3.new(0, y, z), style.GridColor, Enum.Material.SmoothPlastic, decor)
 	end
 end
 
@@ -112,7 +114,12 @@ end
 local function outlineSolid(decor, solid, floorY, height, color)
 	local config = RoomConfig.Decor
 	local inset = config.TrimInset
-	local capHeight = config.TopTrimHeight
+	-- Bank-shot trims stand a step taller than wall trims: where a bevel meets a wall their
+	-- trims overlap, and at equal heights the two colours would z-fight.
+	local lift = if solid.Kind == "Bevel" or solid.Kind == "Reflector" or solid.Kind == "Sweeper"
+		then config.HazardTrimLift
+		else 0
+	local capHeight = config.TopTrimHeight + lift
 	local cap = makeDecor(
 		solid.Name .. "Cap",
 		Vector3.new(solid.Size.X + inset * 2, capHeight, solid.Size.Y + inset * 2),
@@ -123,7 +130,7 @@ local function outlineSolid(decor, solid, floorY, height, color)
 	)
 	orient(cap, Vector3.new(solid.Center.X, floorY + height + capHeight / 2, solid.Center.Y), solid.Yaw)
 
-	local baseHeight = config.BaseTrimHeight
+	local baseHeight = config.BaseTrimHeight + lift
 	local base = makeDecor(
 		solid.Name .. "Base",
 		Vector3.new(solid.Size.X + inset * 4, baseHeight, solid.Size.Y + inset * 4),
@@ -135,6 +142,65 @@ local function outlineSolid(decor, solid, floorY, height, color)
 	orient(base, Vector3.new(solid.Center.X, floorY + baseHeight / 2, solid.Center.Y), solid.Yaw)
 end
 
+-- A low plinth with a glowing ring inset on top. It casts no shadow: the character standing on
+-- it would otherwise throw a shadow that shimmers across its face as the camera follows.
+local function buildSpawnPad(room, decor, floorY, color, ringColor)
+	local size = RoomConfig.SpawnPadSize
+	local pad = makePart("PlayerSpawn", size, Vector3.new(0, floorY + size.Y / 2, 0), color, room)
+	pad.Material = Enum.Material.SmoothPlastic
+	pad.CastShadow = false
+
+	local config = RoomConfig.Decor
+	local width, height = config.SpawnRingWidth, config.SpawnRingHeight
+	local reach = size.X / 2 - config.SpawnRingInset
+	local y = floorY + size.Y + height / 2
+	local strips = {
+		{ "SpawnRingNorth", Vector3.new(reach * 2, height, width), Vector3.new(0, y, reach - width / 2) },
+		{ "SpawnRingSouth", Vector3.new(reach * 2, height, width), Vector3.new(0, y, -reach + width / 2) },
+		{ "SpawnRingEast", Vector3.new(width, height, reach * 2 - width * 2), Vector3.new(reach - width / 2, y, 0) },
+		{ "SpawnRingWest", Vector3.new(width, height, reach * 2 - width * 2), Vector3.new(-reach + width / 2, y, 0) },
+	}
+	for _, strip in strips do
+		makeDecor(strip[1], strip[2], strip[3], ringColor, Enum.Material.Neon, decor)
+	end
+	return pad
+end
+
+-- Mechanics that are not solids: laser gate beams (burn players, never block shots) and amp
+-- pads on the floor. Both opt out of raycasts; RoomMechanics drives them.
+local function buildFloorMechanics(room, layout, floorY)
+	local config = RoomConfig.Mechanics
+	local gates, pads = 0, 0
+	for _, mechanic in layout.Mechanics or {} do
+		if mechanic.Kind == "LaserGate" then
+			gates += 1
+			local from, to = mechanic.From, mechanic.To
+			local length = (to - from).Magnitude
+			local position = Vector3.new((from.X + to.X) / 2, floorY + config.GateHeight / 2, (from.Y + to.Y) / 2)
+			local beam = makeDecor(
+				"Gate" .. gates,
+				Vector3.new(config.GateWidth, config.GateHeight, length),
+				position,
+				config.GateOffColor,
+				Enum.Material.Neon,
+				room
+			)
+			beam.CFrame = CFrame.lookAt(position, Vector3.new(to.X, position.Y, to.Y))
+			beam.Transparency = config.GateOffTransparency
+		elseif mechanic.Kind == "AmpPad" then
+			pads += 1
+			makeDecor(
+				"AmpPad" .. pads,
+				Vector3.new(mechanic.Size.X, config.AmpPadThickness, mechanic.Size.Y),
+				Vector3.new(mechanic.Offset.X, floorY + config.AmpPadY, mechanic.Offset.Y),
+				config.AmpColor,
+				Enum.Material.Neon,
+				room
+			)
+		end
+	end
+end
+
 -- Colour and trim for each kind of solid. Bank-shot pieces wear hazard trim so they read as
 -- surfaces to play off rather than as cover.
 local function styleFor(kind, layout)
@@ -143,6 +209,8 @@ local function styleFor(kind, layout)
 		return layout.AccentColor or RoomConfig.WallColor, trim
 	elseif kind == "Obstacle" then
 		return RoomConfig.ObstacleColor, trim
+	elseif kind == "Breakable" then
+		return RoomConfig.Mechanics.BreakableColor, trim
 	end
 	return RoomConfig.BumperColor, RoomConfig.Decor.HazardColor
 end
@@ -158,27 +226,29 @@ function RoomBuilder.Build(parent, layoutId)
 	local thickness = RoomConfig.WallThickness
 	local height = RoomConfig.WallHeight
 	local floorY = RoomConfig.FloorY
+	local style = RoomConfig.ZoneStyle(layout)
 
 	local room = Instance.new("Folder")
 	room.Name = "Room"
 	room:SetAttribute("LayoutId", layoutId)
+	room:SetAttribute("Zone", layout.Zone or "Ruins")
 	room.Parent = parent
 
 	local floor = makePart(
 		"Floor",
 		Vector3.new(interior.X + thickness * 2, RoomConfig.FloorThickness, interior.Y + thickness * 2),
 		Vector3.new(0, floorY - RoomConfig.FloorThickness / 2, 0),
-		RoomConfig.FloorColor,
+		style.FloorColor,
 		room
 	)
-	floor.Material = RoomConfig.FloorMaterial
+	floor.Material = style.FloorMaterial
 
 	local decor = Instance.new("Folder")
 	decor.Name = "Decor"
 	decor.Parent = room
 	local trimColor = layout.TrimColor or RoomConfig.Decor.TrimColor
-	buildFloorTiles(decor, interior, floorY)
-	buildFloorGrid(decor, interior, floorY)
+	buildFloorTiles(decor, interior, floorY, style)
+	buildFloorGrid(decor, interior, floorY, style)
 	buildBorder(decor, interior, floorY, trimColor)
 
 	local wallY = floorY + height / 2
@@ -186,15 +256,17 @@ function RoomBuilder.Build(parent, layoutId)
 		local color, trim = styleFor(solid.Kind, layout)
 		local part = makePart(solid.Name, Vector3.new(solid.Size.X, height, solid.Size.Y), Vector3.zero, color, room)
 		local isCover = solid.Kind == "Wall" or solid.Kind == "Obstacle"
-		part.Material = if isCover then RoomConfig.WallMaterial else RoomConfig.BumperMaterial
+		part.Material = if isCover then style.WallMaterial else RoomConfig.BumperMaterial
+		if solid.Kind == "Breakable" then
+			part.Material = RoomConfig.Mechanics.BreakableMaterial
+		end
 		orient(part, Vector3.new(solid.Center.X, wallY, solid.Center.Y), solid.Yaw)
 		outlineSolid(decor, solid, floorY, height, trim)
 	end
 
-	local padSize = RoomConfig.SpawnPadSize
-	local wallColor = layout.AccentColor or RoomConfig.WallColor
-	local spawnPad = makePart("PlayerSpawn", padSize, Vector3.new(0, floorY + padSize.Y / 2, 0), wallColor, room)
-	spawnPad.CanCollide = true
+	buildSpawnPad(room, decor, floorY, layout.AccentColor or RoomConfig.WallColor, trimColor)
+	buildFloorMechanics(room, layout, floorY)
+	RoomDressing.Build(room, layoutId, layout)
 
 	local bounds = {
 		center = Vector3.new(0, floorY, 0),

@@ -1,6 +1,7 @@
--- Tactical camera: while a run is active the default orbit camera is replaced by a fixed
--- high-angle view that follows the character, so walls and the aim line are never hidden
--- behind the avatar. The default camera is handed back in the lobby.
+-- Tactical camera: while a run is active the default orbit camera is replaced by a high-angle
+-- view that follows the character, so walls and the aim line are never hidden behind the
+-- avatar. Players turn it with right-mouse drag or Q/E (twist on touch) and zoom with the wheel
+-- (pinch on touch); pitch stays inside limits. The default camera is handed back in the lobby.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -26,6 +27,14 @@ local active = false
 local focus = nil
 local distance = CameraConfig.DefaultDistance
 local targetDistance = CameraConfig.DefaultDistance
+local yaw, pitch = CameraConfig.Yaw, CameraConfig.Pitch
+local rotating = false -- right mouse held
+local pinchStartDistance = nil
+local lastTwist = nil
+
+local function rotate(yawDelta, pitchDelta)
+	yaw, pitch = CameraMath.ApplyRotate(yaw, pitch, yawDelta, pitchDelta, CameraConfig)
+end
 local savedFieldOfView = nil
 
 local function characterFocus()
@@ -48,9 +57,15 @@ local function update(deltaTime)
 	end
 	distance += (targetDistance - distance) * CameraMath.SmoothAlpha(CameraConfig.ZoomRate, deltaTime)
 
+	local keyTurn = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0)
+		- (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+	if keyTurn ~= 0 and not UserInputService:GetFocusedTextBox() then
+		rotate(keyTurn * CameraConfig.KeyRotateSpeed * deltaTime, 0)
+	end
+
 	camera.CameraType = Enum.CameraType.Scriptable
 	-- Shake moves the camera, never the focus, so aiming maths is unaffected by it.
-	local frame = CameraMath.ComputeFrame(focus, CameraConfig.Pitch, CameraConfig.Yaw, distance)
+	local frame = CameraMath.ComputeFrame(focus, pitch, yaw, distance)
 	camera.CFrame = frame + shake:Sample(os.clock(), shakeScale())
 end
 
@@ -75,6 +90,8 @@ local function deactivate()
 	end
 	active = false
 	RunService:UnbindFromRenderStep(RENDER_STEP)
+	rotating = false
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera.CameraType = Enum.CameraType.Custom
@@ -102,10 +119,63 @@ end
 player:GetAttributeChangedSignal("RunState"):Connect(onRunStateChanged)
 onRunStateChanged()
 
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if active and not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
+		rotating = true
+		-- Pin the pointer while turning, as Roblox's own camera does.
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 and rotating then
+		rotating = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
+end)
+
 UserInputService.InputChanged:Connect(function(input, gameProcessed)
-	if not active or gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseWheel then
+	if not active then
+		return
+	end
+	if rotating and input.UserInputType == Enum.UserInputType.MouseMovement then
+		-- Drag right turns the view right; drag down tilts it towards straight down.
+		rotate(-input.Delta.X * CameraConfig.RotateSensitivity, input.Delta.Y * CameraConfig.RotateSensitivity)
+		return
+	end
+	if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseWheel then
 		return
 	end
 	-- Wheel up (positive Z) zooms in.
 	targetDistance = CameraMath.ClampZoom(targetDistance - input.Position.Z * CameraConfig.ZoomStep, CameraConfig)
+end)
+
+-- Touch: twist two fingers to turn, pinch to zoom. AimController drops any aim drag when
+-- either gesture starts, so a second finger never fires a shot.
+UserInputService.TouchRotate:Connect(function(_, rotation, _, state, gameProcessed)
+	if not active or gameProcessed then
+		return
+	end
+	if state == Enum.UserInputState.Begin or lastTwist == nil then
+		lastTwist = rotation
+	end
+	rotate(-(rotation - lastTwist), 0)
+	lastTwist = rotation
+	if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+		lastTwist = nil
+	end
+end)
+
+UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
+	if not active or gameProcessed then
+		return
+	end
+	if state == Enum.UserInputState.Begin or pinchStartDistance == nil then
+		pinchStartDistance = targetDistance
+	end
+	-- Fingers apart (scale > 1) zooms in.
+	targetDistance = CameraMath.ClampZoom(pinchStartDistance / math.max(scale, 0.05), CameraConfig)
+	if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+		pinchStartDistance = nil
+	end
 end)

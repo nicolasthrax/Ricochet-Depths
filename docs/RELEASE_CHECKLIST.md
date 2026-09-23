@@ -3,18 +3,20 @@
 Gate for putting a build in front of invited testers. Nothing here is a formality: an unchecked
 box that is not explicitly waived blocks the playtest.
 
-**Build:** `0.6.0-dev` · **Status:** not releasable. The core loop has run once in Studio (Play
-Solo); everything added in 0.6.0-dev is headless-only. The ordered procedure for section 2 is
+**Build:** `0.7.0-dev` · **Status:** not releasable. The core loop has run in Studio (Play Solo,
+twice). Everything added in 0.6.0-dev and 0.7.0-dev is headless-only. The ordered procedure for section 2 is
 `docs/STUDIO_VALIDATION_CHECKLIST.md`.
 
 ## 1. Build status
 
 | Check | State | Notes |
 |---|---|---|
-| `luau-compile` on all sources | PASS | 59 modules + 22 test files |
+| `luau-compile` on all sources | PASS | 73 sources + 27 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` |
 | `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 385 tests, 0 failures |
+| Headless test suite | PASS | 448 tests, 0 failures |
+| No z-fighting | PASS | no two overlapping visible top faces within 0.05 studs, in any layout |
+| Room mechanics and dressing | PASS | gates clear of spawn and markers; blocking mechanics count as cover; dressing inert and outside the play space |
 | Geometry integrity | PASS | every layout: bevels and reflectors at 45°, inside the walls, clear of the spawn pad and every enemy marker; room 3 flank and spawn sightlines |
 | Shop purchases | PASS | including cross-server double-charge and overspend |
 | No binary files in git | PASS | rooms, lobby, kiosk and pads are all built at runtime from config |
@@ -47,6 +49,12 @@ else is still unverified.
 - [ ] Damage numbers and camera shake appear; Screen shake Off removes the shake (V7.3–7.4)
 - [ ] Ready pads light and start a run after the countdown (V7.7)
 - [ ] Shop: an unaffordable purchase is refused; a bought upgrade applies to the next run; a trail shows on shots (V7.8–7.10)
+- [ ] Camera turns, tilts and zooms; aiming still matches after turning (V8.1–8.2)
+- [ ] No cursor line; no flicker at the spawn pad or under the aim cues (V8.3–8.4)
+- [ ] Enemy models render and flash on telegraph (V8.5)
+- [ ] Runs vary and zone lighting changes (V8.6)
+- [ ] Gates, breakables, sweepers and amp pads behave as described (V8.7–8.10)
+- [ ] New enemies and the Warden Prime's three phases (V8.11–8.12)
 
 ## 3. Multiplayer validation — **NOT STARTED**
 
@@ -90,13 +98,14 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 2 | Audio hooks exist but every sound id is a placeholder and `FeatureFlags.Audio` is off: the game is silent. | Medium | Upload original sounds, fill `SoundConfig`, flip the flag. |
 | 3 | Enemies do not path around pillars. | Low | Revisit only if playtests flag it. |
 | 4 | Telemetry only prints to the Studio output; no transport. | Medium | Wire once an analytics destination is chosen. |
-| 5 | Impact bursts are placeholder parts; no particles. Damage numbers and camera shake exist. | Low | Post-playtest polish. |
+| 5 | Impact bursts are placeholder parts; no particles. Damage numbers, camera shake and enemy models exist. | Low | Post-playtest polish. |
 | 6 | Balance numbers are first-pass guesses, never played. | High | Tune from playtest data. |
 | 7 | Run length target of 6–8 minutes is unverified against real play. The dry-run simulator puts the floor well below it, but that is a bot estimate. | High | Measure in the first playtest. |
-| 8 | Room 3 is still where most simulated runs end (27–33 of 40, down from 32–34). Bulwark lunges deal ~100% of the damage there; 0.6.0-dev fields one Bulwark instead of two and opens the flanks. The bots cannot bank, so they understate human play. | Medium | Measure in the first playtest. |
+| 8 | Rooms are drawn at random, so difficulty spikes follow the room drawn, not a slot. Simulated runs mostly end in the second Ruins or second Foundry room, the slots that usually field a Bulwark, whose lunges still deal ~100% of bot damage there. The bots cannot bank, so they understate human play. | Medium | Measure in the first playtest. |
 | 9 | Persistence data-loss races (mid-save changes, cross-server payouts, ledger double-pay, shutdown overrun). | Medium | Fixed and regression-tested headlessly in 0.5.3–0.5.7-dev. Still to confirm against a real DataStore in section 4 before salvage matters in a playtest. |
 | 10 | Rotated geometry (bevels, reflectors) is validated only against the harness's rotated-box model. | Medium | Studio V7.2. |
 | 11 | Shop prices are first guesses against a typical payout of ~35 (early defeat) to ~420 (extraction) salvage. | Low | Tune from playtest data. |
+| 12 | Boss, new enemies and room mechanics are first-pass numbers. | High | Tune from playtest data. |
 
 ## 7. Rollback
 

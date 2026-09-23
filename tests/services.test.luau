@@ -369,7 +369,7 @@ describe("RoomService", function()
 
 	it("replaces elite escorts while the core lives, and stops when it dies", function()
 		local rooms, enemies = build()
-		local vault = RunConfig.Rooms[#RunConfig.Rooms]
+		local vault = RunConfig.GetRoomById("WardenVault")
 		expect(vault.EscortRespawn).toBeTruthy()
 		local current = rooms:Load(vault, 0)
 		expect(current.elite).toBeTruthy()
@@ -393,7 +393,7 @@ describe("RoomService", function()
 
 	it("never caps escorts above the configured maximum", function()
 		local rooms, enemies = build()
-		local vault = RunConfig.Rooms[#RunConfig.Rooms]
+		local vault = RunConfig.GetRoomById("WardenVault")
 		rooms:Load(vault, 0)
 		for step = 1, 40 do
 			rooms:Step(1, step * vault.EscortRespawn.Delay)

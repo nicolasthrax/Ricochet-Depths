@@ -8,6 +8,7 @@ local RoomConfig = __require("RoomConfig")
 local RoomGeometry = __require("RoomGeometry")
 local RoomService = __require("RoomService")
 local RunConfig = __require("RunConfig")
+local AimConfig = __require("AimConfig")
 
 local PLANE_Y = 3
 local DT = 1 / 60
@@ -233,8 +234,55 @@ describe("angled geometry in the collision model", function()
 	end)
 end)
 
+describe("every shielded enemy can be flanked", function()
+	-- Rooms fielding shielded enemies (a Shield in EnemyConfig): their posts must leave most
+	-- approach angles open and sit well away from the spawn, so a flanking ricochet exists.
+	local function shieldedPosts(definition, layout)
+		local markers = {}
+		for _, assignment in RoomService.AssignSpawns(definition, layout) do
+			local archetype = EnemyConfig.Get(assignment.archetype)
+			if archetype and archetype.Shield and not archetype.IsElite then
+				table.insert(markers, layout.EnemySpawns[assignment.marker])
+			end
+		end
+		return markers
+	end
+
+	it("leaves at least half the approach angles open around every post", function()
+		for _, definition in RunConfig.Rooms do
+			local layout = RoomConfig.GetLayout(definition.Layout)
+			local footprints = RoomGeometry.Footprints(layout, RoomConfig)
+			local halfX, halfZ = layout.InteriorSize.X / 2 - 4, layout.InteriorSize.Y / 2 - 4
+			for _, marker in shieldedPosts(definition, layout) do
+				local open = 0
+				for step = 0, 15 do
+					local angle = step * 2 * math.pi / 16
+					local point = Vector2.new(marker.X + math.cos(angle) * 16, marker.Y + math.sin(angle) * 16)
+					local inside = math.abs(point.X) <= halfX and math.abs(point.Y) <= halfZ
+					if inside and not RoomGeometry.SegmentBlocked(footprints, point, marker) then
+						open += 1
+					end
+				end
+				if open < 8 then
+					error(("%s: shielded post (%d, %d) has only %d/16 open approaches"):format(
+						definition.Id, marker.X, marker.Y, open))
+				end
+			end
+		end
+	end)
+
+	it("posts shielded enemies at least 36 studs from the spawn", function()
+		for _, definition in RunConfig.Rooms do
+			local layout = RoomConfig.GetLayout(definition.Layout)
+			for _, marker in shieldedPosts(definition, layout) do
+				expect(marker.Magnitude).toBeGreaterThan(36)
+			end
+		end
+	end)
+end)
+
 describe("room 3 flanking sightlines", function()
-	local crossing = RunConfig.Rooms[3]
+	local crossing = RunConfig.GetRoomById("Crossing")
 	local layout = RoomConfig.GetLayout(crossing.Layout)
 
 	-- The markers the room's Bulwarks actually take, from the same assignment RoomService uses.
@@ -309,5 +357,100 @@ describe("room 3 flanking sightlines", function()
 			end
 		end
 		expect(open).toBeGreaterThanOrEqual(6)
+	end)
+end)
+
+-- Flicker guard. Two visible faces at (almost) the same height over the same floor area
+-- z-fight in the engine: at the tactical camera's 60-100 stud range they shimmer as the
+-- camera follows the player. Only top faces matter; everything is seen from above.
+local Z_FIGHT_GAP = 0.05
+
+local function footprint(part)
+	local cframe = part.CFrame
+	local right, up, look = cframe.RightVector, cframe.UpVector, cframe.LookVector
+	local size = part.Size
+	local function extent(axis)
+		return math.abs(right[axis]) * size.X / 2 + math.abs(up[axis]) * size.Y / 2 + math.abs(look[axis]) * size.Z / 2
+	end
+	local position = part.Position
+	local hx, hy, hz = extent("X"), extent("Y"), extent("Z")
+	return {
+		minX = position.X - hx, maxX = position.X + hx,
+		minZ = position.Z - hz, maxZ = position.Z + hz,
+		top = position.Y + hy,
+		rotated = math.abs(look.X) > 1e-3 and math.abs(look.Z) > 1e-3,
+	}
+end
+
+local function overlapArea(a, b)
+	local x = math.min(a.maxX, b.maxX) - math.max(a.minX, b.minX)
+	local z = math.min(a.maxZ, b.maxZ) - math.max(a.minZ, b.minZ)
+	return math.max(x, 0) * math.max(z, 0)
+end
+
+local function visibleParts(root)
+	local out = {}
+	local names = {}
+	for _, part in root:GetDescendants() do
+		names[part.Name] = true
+	end
+	for _, part in root:GetDescendants() do
+		-- A solid's top face is hidden under its neon cap, which is what is actually seen.
+		local capped = names[part.Name .. "Cap"] == true
+		if part:IsA("BasePart") and part.Transparency < 1 and not capped then
+			table.insert(out, { part = part, box = footprint(part) })
+		end
+	end
+	return out
+end
+
+describe("floor layers never z-fight", function()
+	it("keeps every pair of overlapping visible top faces apart in every layout", function()
+		for layoutId in RoomConfig.Layouts do
+			local parts = visibleParts(RoomBuilder.Build(Instance.new("Folder"), layoutId))
+			for i = 1, #parts do
+				for j = i + 1, #parts do
+					local a, b = parts[i], parts[j]
+					-- Rotated boxes are bounded loosely; a real overlap needs some area.
+					local minArea = (a.box.rotated or b.box.rotated) and 1 or 0.01
+					-- Coincident faces of the same colour and material render identically either way.
+					local lookAlike = a.part.Color == b.part.Color and a.part.Material == b.part.Material
+					if not lookAlike and overlapArea(a.box, b.box) > minArea and math.abs(a.box.top - b.box.top) < Z_FIGHT_GAP then
+						error(("%s: %s and %s share a top face at y=%.3f"):format(
+							layoutId, a.part.Name, b.part.Name, a.box.top))
+					end
+				end
+			end
+		end
+	end)
+
+	it("floats the aim ground cues clear of every floor layer and the spawn pad", function()
+		local cueBottom = AimConfig.GroundCueHeight - AimConfig.GroundCueThickness / 2
+		for layoutId in RoomConfig.Layouts do
+			local room = RoomBuilder.Build(Instance.new("Folder"), layoutId)
+			for _, entry in visibleParts(room) do
+				local top = entry.box.top
+				-- Floor-level decor (tiles, grid, border, foot trims, the spawn pad) sits below.
+				-- Dressing is left out: it stays outside the play space (see RoomDressing).
+				if top < 1 and entry.part.Parent.Name ~= "Dressing" then
+					expect(cueBottom - top).toBeGreaterThanOrEqual(Z_FIGHT_GAP)
+				end
+			end
+		end
+	end)
+
+	it("builds the spawn pad as a low plinth with a glowing ring that casts no shadow", function()
+		local room = RoomBuilder.Build(Instance.new("Folder"), "Atrium")
+		local pad = room:FindFirstChild("PlayerSpawn")
+		expect(pad.Size.Y).toBeLessThan(0.6)
+		expect(pad.CastShadow).toBe(false)
+		local rings = 0
+		for _, part in room:FindFirstChild("Decor"):GetChildren() do
+			if part.Name:find("^SpawnRing") then
+				rings += 1
+				expect(part.Material).toBe(Enum.Material.Neon)
+			end
+		end
+		expect(rings).toBe(4)
 	end)
 end)

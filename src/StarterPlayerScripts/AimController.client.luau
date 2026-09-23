@@ -92,7 +92,7 @@ local function renderAim()
 		return
 	end
 	local worldDirection = worldDirectionFor(aimScreen)
-	indicator:Show(dragOrigin, aimScreen, power, isReady(), muzzlePosition(worldDirection), worldDirection)
+	indicator:Show(power, isReady(), muzzlePosition(worldDirection), worldDirection)
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -119,6 +119,15 @@ UserInputService.WindowFocusReleased:Connect(function()
 		endDrag()
 	end
 end)
+
+-- A second finger means a camera twist or pinch, not a shot.
+local function dropForCameraGesture(_, _, _, state)
+	if activeInput and state == Enum.UserInputState.Begin then
+		endDrag()
+	end
+end
+UserInputService.TouchRotate:Connect(dropForCameraGesture)
+UserInputService.TouchPinch:Connect(dropForCameraGesture)
 
 UserInputService.InputChanged:Connect(function(input)
 	if not AimMath.IsSameGesture(activeInput, input) then

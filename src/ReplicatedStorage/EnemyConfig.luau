@@ -14,6 +14,15 @@ EnemyConfig.DefaultContactCooldown = 1
 -- Idle pool parts are parked here, invisible, so they cost nothing.
 EnemyConfig.StoragePosition = Vector3.new(0, -500, 0)
 
+-- Enemy orbs (Sentinel shots, the boss's rings): slow, glowing and dodgeable. They fly on the
+-- travel plane, burn the first player they reach, and die on cover and walls. Player shots
+-- pass straight through them.
+EnemyConfig.OrbPoolSize = 48
+EnemyConfig.OrbSize = 1.4
+EnemyConfig.OrbHitRadius = 2.2 -- orb radius plus a character's
+EnemyConfig.OrbLifetime = 6
+EnemyConfig.OrbColor = Color3.fromRGB(255, 96, 120)
+
 EnemyConfig.Archetypes = {
 	Drifter = {
 		Id = "Drifter",
@@ -107,6 +116,129 @@ EnemyConfig.Archetypes = {
 			Duration = 0.7,
 			SpeedMultiplier = 5,
 		},
+	},
+}
+
+-- Foundry: splits into two fast Shards when it dies.
+EnemyConfig.Archetypes.Splitter = {
+	Id = "Splitter",
+	DisplayName = "Splitter",
+	Behaviour = "Chaser",
+	Health = 2,
+	Size = Vector3.new(3.2, EnemyConfig.BodyHeight, 3.2),
+	Color = Color3.fromRGB(116, 214, 150),
+	Material = Enum.Material.SmoothPlastic,
+	MoveSpeed = 8,
+	StandoffDistance = 3.5,
+	ContactDamage = 10,
+	ContactRange = 5,
+	ContactCooldown = 1,
+	SplitInto = { Archetype = "Shard", Count = 2, Spread = 2.5 },
+}
+
+EnemyConfig.Archetypes.Shard = {
+	Id = "Shard",
+	DisplayName = "Shard",
+	Behaviour = "Chaser",
+	Health = 1,
+	Size = Vector3.new(1.8, EnemyConfig.BodyHeight, 1.8),
+	Color = Color3.fromRGB(170, 255, 196),
+	Material = Enum.Material.SmoothPlastic,
+	MoveSpeed = 15,
+	StandoffDistance = 3,
+	ContactDamage = 6,
+	ContactRange = 4,
+	ContactCooldown = 0.8,
+}
+
+-- Foundry and Abyss: a stationary turret. It turns to face the nearest player, flashes, then
+-- fires a slow orb at where they stand.
+EnemyConfig.Archetypes.Sentinel = {
+	Id = "Sentinel",
+	DisplayName = "Sentinel",
+	Behaviour = "Turret",
+	Health = 3,
+	Size = Vector3.new(3.4, EnemyConfig.BodyHeight, 3.4),
+	Color = Color3.fromRGB(232, 84, 96),
+	Material = Enum.Material.SmoothPlastic,
+	MoveSpeed = 0,
+	ContactDamage = 0,
+	ReplicateFacing = true,
+	Fire = {
+		Interval = 2.6,
+		TelegraphTime = 0.6,
+		TelegraphColor = Color3.fromRGB(255, 220, 150),
+		Speed = 22,
+		Damage = 10,
+	},
+}
+
+-- Abyss: closes like a Chaser, but every few seconds flickers out and reappears beside a
+-- player. Untouchable while blinking, so the answer is to shoot it before it goes.
+EnemyConfig.Archetypes.Phaser = {
+	Id = "Phaser",
+	DisplayName = "Phaser",
+	Behaviour = "Phaser",
+	Health = 2,
+	Size = Vector3.new(2.6, EnemyConfig.BodyHeight, 2.6),
+	Color = Color3.fromRGB(120, 200, 255),
+	Material = Enum.Material.SmoothPlastic,
+	MoveSpeed = 9,
+	StandoffDistance = 4,
+	ContactDamage = 12,
+	ContactRange = 5,
+	ContactCooldown = 1.1,
+	Blink = {
+		Interval = 3.5,
+		TelegraphTime = 0.5,
+		TelegraphColor = Color3.fromRGB(230, 240, 255),
+		Duration = 0.4,
+		MinRadius = 10,
+		MaxRadius = 18,
+	},
+}
+
+-- The final boss. Three phases by remaining health:
+--   1. its shield spins on its own, so the player times shots through the gap or banks them
+--   2. the shield tracks the player; it summons Shards and fires rings of orbs
+--   3. the shield breaks; it moves faster and fires denser, spiralling rings
+EnemyConfig.Archetypes.WardenPrime = {
+	Id = "WardenPrime",
+	DisplayName = "Warden Prime",
+	Behaviour = "Boss",
+	IsBoss = true,
+	-- Dry run: 36 fell in ~6s even to the bots, so it was a speed bump, not a finale.
+	Health = 80,
+	Size = Vector3.new(9, EnemyConfig.BodyHeight, 9),
+	Color = Color3.fromRGB(200, 120, 255),
+	Material = Enum.Material.Neon,
+	MoveSpeed = 4,
+	StandoffDistance = 9,
+	ContactDamage = 20,
+	ContactRange = 10,
+	ContactCooldown = 1.2,
+	Shield = {
+		HalfAngleDegrees = 80,
+		DamageMultiplier = 0,
+		Color = Color3.fromRGB(240, 226, 255),
+		Thickness = 1,
+		Offset = 5.6,
+	},
+	Orb = { Speed = 18, Damage = 8 },
+	Phases = {
+		{ Below = 1.01, Shield = "Spin", SpinSpeed = 90, MoveSpeedMultiplier = 1 },
+		{
+			Below = 0.6,
+			Shield = "Track",
+			MoveSpeedMultiplier = 1,
+			Summon = "Shard",
+			SummonCount = 2,
+			SummonInterval = 6,
+			SummonMax = 4,
+			RingInterval = 4,
+			RingCount = 8,
+		},
+		{ Below = 0.25, Shield = "None", MoveSpeedMultiplier = 1.6, RingInterval = 2.5, RingCount = 12, RingTwist = 15 },
 	},
 }
 

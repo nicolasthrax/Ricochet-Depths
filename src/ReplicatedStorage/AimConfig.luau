@@ -10,11 +10,7 @@ return {
 	-- to the movement thumbstick, touches starting right of it aim. The mouse is never zoned.
 	TouchAimZoneStart = 0.4,
 
-	LineMinLength = 40,
-	LineMaxLength = 170,
-	LineThickness = 5,
 	LineColor = Color3.fromRGB(120, 235, 255),
-	LineTransparency = 0,
 	-- Shown while the shot would be refused for cooldown.
 	CooldownColor = Color3.fromRGB(150, 158, 178),
 
@@ -34,8 +30,10 @@ return {
 	ReticleSize = 3.2,
 	ReticleTransparency = 0.35,
 	ReticleCoreSize = 1.1,
-	-- Lift above the floor so ground cues never z-fight with it or the grid.
-	GroundLift = 0.06,
+	-- Ground cues float at this height (centre) above the floor, clear of every floor decor
+	-- layer and the spawn pad ring, so they never z-fight with them.
+	GroundCueHeight = 0.62,
+	GroundCueThickness = 0.06,
 
 	PowerBarSize = Vector2.new(180, 10),
 	PowerBarOffsetY = -60,

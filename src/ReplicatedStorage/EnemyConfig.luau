@@ -107,18 +107,20 @@ EnemyConfig.Archetypes = {
 		Material = Enum.Material.Neon,
 		MoveSpeed = 6,
 		StandoffDistance = 9,
-		ContactDamage = 22,
+		-- Dry run: once the Bulwark eased off, this was where runs ended (~100 damage each).
+		ContactDamage = 16,
 		ContactRange = 9,
 		ContactCooldown = 1.2,
 		Shield = {
-			HalfAngleDegrees = 88,
+			HalfAngleDegrees = 80,
+			SpinSpeed = 50,
 			DamageMultiplier = 0,
 			Color = Color3.fromRGB(236, 220, 255),
 			Thickness = 0.8,
 			Offset = 4.2,
 		},
 		Lunge = {
-			Interval = 2.6,
+			Interval = 3.4,
 			TelegraphTime = 0.85,
 			TelegraphColor = Color3.fromRGB(255, 226, 140),
 			Duration = 0.7,
@@ -220,16 +222,17 @@ EnemyConfig.Archetypes.WardenPrime = {
 		Coins = 80, -- dropped as pickups when it dies
 	Behaviour = "Boss",
 	IsBoss = true,
-	-- Dry run: 36 fell in ~6s even to the bots, so it was a speed bump, not a finale.
-	Health = 80,
+	-- Dry run history: 36 fell in ~6s; at 80 no bot out-lasted its contact hits. 60 is a first
+	-- guess for humans, who kite far better than the bots (it moves at 4, a player at 16).
+	Health = 60,
 	Size = Vector3.new(9, EnemyConfig.BodyHeight, 9),
 	Color = Color3.fromRGB(200, 120, 255),
 	Material = Enum.Material.Neon,
 	MoveSpeed = 4,
 	StandoffDistance = 9,
-	ContactDamage = 20,
+	ContactDamage = 16,
 	ContactRange = 10,
-	ContactCooldown = 1.2,
+	ContactCooldown = 1.6,
 	Shield = {
 		HalfAngleDegrees = 80,
 		DamageMultiplier = 0,
@@ -237,7 +240,8 @@ EnemyConfig.Archetypes.WardenPrime = {
 		Thickness = 1,
 		Offset = 5.6,
 	},
-	Orb = { Speed = 18, Damage = 8 },
+	-- Dry run: bots (which never dodge) took ~120 damage here. Humans dodge; still eased.
+	Orb = { Speed = 18, Damage = 6 },
 	Phases = {
 		{ Below = 1.01, Shield = "Spin", SpinSpeed = 90, MoveSpeedMultiplier = 1 },
 		{
@@ -251,7 +255,7 @@ EnemyConfig.Archetypes.WardenPrime = {
 			RingInterval = 4,
 			RingCount = 8,
 		},
-		{ Below = 0.25, Shield = "None", MoveSpeedMultiplier = 1.6, RingInterval = 2.5, RingCount = 12, RingTwist = 15 },
+		{ Below = 0.25, Shield = "None", MoveSpeedMultiplier = 1.6, RingInterval = 3.2, RingCount = 12, RingTwist = 15 },
 	},
 }
 

@@ -99,6 +99,9 @@ function Flow.methods:_onRoomCleared(now)
 			if state.alive and state.stats.RoomClearHeal > 0 then
 				state:Heal(state.stats.RoomClearHeal)
 			end
+			if state.alive and definition and definition.HealOnClear then
+				state:Heal(state.maxHealth * definition.HealOnClear)
+			end
 			self:_pushPlayerState(player)
 		end
 	end

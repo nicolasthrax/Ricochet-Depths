@@ -245,3 +245,16 @@ describe("the run ends on the boss", function()
 		end
 	end)
 end)
+
+describe("the road to the boss", function()
+	it("softens the Warden core: its shield turns and its lunges are gentler", function()
+		local core = EnemyConfig.Archetypes.WardenCore
+		expect(core.Shield.SpinSpeed).toBeGreaterThan(0)
+		expect(core.ContactDamage).toBeLessThanOrEqual(16)
+		expect(core.Lunge.Interval).toBeGreaterThanOrEqual(3)
+	end)
+
+	it("heals everyone fully when the Warden Vault falls, before the Throne", function()
+		expect(RunConfig.GetRoomById("WardenVault").HealOnClear).toBe(1)
+	end)
+end)

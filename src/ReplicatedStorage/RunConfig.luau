@@ -247,6 +247,8 @@ RunConfig.Rooms = {
 		},
 		-- While the core lives, escorts return on this delay to keep pressure on.
 		EscortRespawn = { Archetype = "Chaser", Delay = 7, MaxAlive = 3 },
+		-- Everyone walks into the Throne at full health.
+		HealOnClear = 1,
 	},
 	{
 		Id = "Throne",

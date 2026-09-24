@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 7
+PlayerDataConfig.SchemaVersion = 8
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -46,6 +46,13 @@ function PlayerDataConfig.DefaultProfile()
 			BestChain = 0,
 			BestRoomsCleared = 0,
 			CoinsEarned = 0,
+			ChampionsDefeated = 0,
+			BossesDefeated = 0,
+			Revives = 0,
+			-- The highest Depth Pact Heat this player has extracted at.
+			BestHeat = 0,
+			-- rig id -> true, for every rig this player has extracted with.
+			RigsExtracted = {},
 		},
 		GrantedRuns = {},
 		-- Permanent salvage-shop purchases: item id -> level owned. Store-owned, like currency:
@@ -63,6 +70,14 @@ function PlayerDataConfig.DefaultProfile()
 		Quests = { Day = 0, Progress = {}, Claimed = {} },
 		-- Promo codes this account has redeemed: code -> true.
 		RedeemedCodes = {},
+		-- The rig this player descends with (RigConfig). A preference.
+		SelectedRig = "Striker",
+		-- Depth Pact condition id -> rank (PactConfig). A preference, sanitised on every write.
+		Pact = {},
+		-- Achievement id -> true once its reward has been claimed.
+		Achievements = {},
+		-- What this player has found: card id -> true, and enemy id -> lifetime kills.
+		Codex = { Cards = {}, Enemies = {} },
 		Settings = PlayerDataConfig.DefaultSettings(),
 		LastSaved = 0,
 	}
@@ -160,6 +175,19 @@ PlayerDataConfig.Migrations = {
 		profile.Quests = type(profile.Quests) == "table" and profile.Quests or { Day = 0, Progress = {}, Claimed = {} }
 		profile.RedeemedCodes = type(profile.RedeemedCodes) == "table" and profile.RedeemedCodes or {}
 		profile.Settings = PlayerDataConfig.SanitiseSettings(profile.Settings, profile.Settings)
+		return profile
+	end,
+	-- v7 -> v8: rigs, the Depth Pact, achievements and the Codex. Everyone starts as a Striker
+	-- with no Pact and nothing claimed; the new lifetime stats start at zero.
+	[7] = function(profile)
+		profile.SelectedRig = type(profile.SelectedRig) == "string" and profile.SelectedRig or "Striker"
+		profile.Pact = type(profile.Pact) == "table" and profile.Pact or {}
+		profile.Achievements = type(profile.Achievements) == "table" and profile.Achievements or {}
+		local codex = type(profile.Codex) == "table" and profile.Codex or {}
+		profile.Codex = {
+			Cards = type(codex.Cards) == "table" and codex.Cards or {},
+			Enemies = type(codex.Enemies) == "table" and codex.Enemies or {},
+		}
 		return profile
 	end,
 }

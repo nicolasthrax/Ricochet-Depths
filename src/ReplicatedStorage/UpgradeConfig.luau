@@ -16,6 +16,8 @@ UpgradeConfig.Categories = {
 	Power = { Id = "Power", DisplayName = "Power", Color = Color3.fromRGB(255, 176, 102) },
 	Survival = { Id = "Survival", DisplayName = "Survival", Color = Color3.fromRGB(140, 236, 168) },
 	Economy = { Id = "Economy", DisplayName = "Coins", Color = Color3.fromRGB(226, 196, 120) },
+	-- On-hit and on-kill behaviour: burning, arcing, exploding, chilling, critting.
+	Element = { Id = "Element", DisplayName = "Element", Color = Color3.fromRGB(255, 120, 200) },
 }
 
 UpgradeConfig.Rarities = {
@@ -45,6 +47,31 @@ UpgradeConfig.BaseStats = {
 	MagnetBonus = 0,
 	-- Multiplies the whole payout; the 2x Coins pass sets it to 2.
 	CoinMultiplier = 1,
+
+	-- Shot effects (CombatEffects). All start at 0, which means "off".
+	-- Chance (0..1) that a hit is a critical, dealing CritMultiplier times the damage.
+	CritChance = 0,
+	CritMultiplier = 2,
+	-- A shot that has ricocheted at least this many times always crits. 0 is off.
+	TrickShotContacts = 0,
+	-- Damage per second a hit sets burning for CombatEffects.BurnDuration seconds.
+	BurnDamage = 0,
+	-- How many other enemies a damaging hit arcs to, and the share of the hit each arc deals.
+	ChainArcs = 0,
+	ArcDamageFraction = 0.5,
+	-- Damage dealt to every enemy near a kill. 0 is off.
+	ExplosionDamage = 0,
+	-- 1: explosions also set what they hit burning (Wildfire).
+	ExplosionIgnites = 0,
+	-- Seconds a hit slows its target, and extra damage slowed targets take (0.5 = +50%).
+	ChillSeconds = 0,
+	ChillDamageBonus = 0,
+	-- Health restored to the shooter per kill.
+	HealOnKill = 0,
+	-- Extra damage against elites, champions and the boss (0.5 = +50%).
+	HunterBonus = 0,
+	-- Times per run a fatal blow leaves you standing at half health instead.
+	ExtraLives = 0,
 }
 
 UpgradeConfig.Cards = {
@@ -185,6 +212,150 @@ UpgradeConfig.Cards = {
 		Effects = {
 			{ Stat = "BounceBudget", Op = "Add", Value = 3 },
 			{ Stat = "DamagePerBounce", Op = "Add", Value = 1 },
+		},
+	},
+	{
+		Id = "KeenEdge",
+		Title = "Keen Edge",
+		Description = "12% chance for a hit to crit for double damage.",
+		Category = "Power",
+		Rarity = "Common",
+		MaxStacks = 3,
+		Effects = { { Stat = "CritChance", Op = "Add", Value = 0.12 } },
+	},
+	{
+		Id = "TrickShot",
+		Title = "Trick Shot",
+		Description = "Shots that have ricocheted twice always crit.",
+		Category = "Power",
+		Rarity = "Rare",
+		MaxStacks = 1,
+		-- Stored as contacts: the first contact is the hit itself, so two ricochets make three.
+		Effects = { { Stat = "TrickShotContacts", Op = "Add", Value = 3 } },
+	},
+	{
+		Id = "Ignite",
+		Title = "Ignite",
+		Description = "Hits set enemies burning: 1 damage a second for 3s.",
+		Category = "Element",
+		Rarity = "Common",
+		MaxStacks = 3,
+		Effects = { { Stat = "BurnDamage", Op = "Add", Value = 1 } },
+	},
+	{
+		Id = "ChainArc",
+		Title = "Chain Arc",
+		Description = "Hits arc to one more nearby enemy for half damage.",
+		Category = "Element",
+		Rarity = "Rare",
+		MaxStacks = 3,
+		Effects = { { Stat = "ChainArcs", Op = "Add", Value = 1 } },
+	},
+	{
+		Id = "Volatile",
+		Title = "Volatile",
+		Description = "Kills explode, dealing 2 damage to everything close by.",
+		Category = "Element",
+		Rarity = "Rare",
+		MaxStacks = 2,
+		Effects = { { Stat = "ExplosionDamage", Op = "Add", Value = 2 } },
+	},
+	{
+		Id = "Frostbite",
+		Title = "Frostbite",
+		Description = "Hits slow enemies by 40% for 2s.",
+		Category = "Element",
+		Rarity = "Common",
+		MaxStacks = 1,
+		Effects = { { Stat = "ChillSeconds", Op = "Add", Value = 2 } },
+	},
+	{
+		Id = "Siphon",
+		Title = "Siphon",
+		Description = "Each kill restores 3 health.",
+		Category = "Survival",
+		Rarity = "Common",
+		MaxStacks = 3,
+		Effects = { { Stat = "HealOnKill", Op = "Add", Value = 3 } },
+	},
+	{
+		Id = "Hunter",
+		Title = "Hunter",
+		Description = "Deal 50% more damage to elites, champions and bosses.",
+		Category = "Power",
+		Rarity = "Rare",
+		MaxStacks = 2,
+		Effects = { { Stat = "HunterBonus", Op = "Add", Value = 0.5 } },
+	},
+	{
+		Id = "SecondWind",
+		Title = "Second Wind",
+		Description = "Once this run, a fatal blow leaves you at half health.",
+		Category = "Survival",
+		Rarity = "Rare",
+		MaxStacks = 1,
+		Effects = { { Stat = "ExtraLives", Op = "Add", Value = 1 } },
+	},
+	{
+		Id = "FleetFoot",
+		Title = "Fleet Foot",
+		Description = "Move 12% faster.",
+		Category = "Survival",
+		Rarity = "Common",
+		MaxStacks = 2,
+		Effects = { { Stat = "MoveSpeedBonus", Op = "Add", Value = 2 } },
+	},
+	-- Evolutions: each needs two different cards, so builds grow toward them.
+	{
+		Id = "StormConduit",
+		Title = "Storm Conduit",
+		Description = "Arcs jump to two more enemies and deal full damage.",
+		Category = "Element",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { ChainArc = 2, RicochetCharge = 1 } },
+		Effects = {
+			{ Stat = "ChainArcs", Op = "Add", Value = 2 },
+			{ Stat = "ArcDamageFraction", Op = "Add", Value = 0.5 },
+		},
+	},
+	{
+		Id = "Wildfire",
+		Title = "Wildfire",
+		Description = "Burns hit harder, and explosions set everything alight.",
+		Category = "Element",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { Ignite = 2, Volatile = 1 } },
+		Effects = {
+			{ Stat = "BurnDamage", Op = "Add", Value = 2 },
+			{ Stat = "ExplosionIgnites", Op = "Add", Value = 1 },
+		},
+	},
+	{
+		Id = "AbsoluteZero",
+		Title = "Absolute Zero",
+		Description = "Slowed enemies take 60% more damage, and stay slowed longer.",
+		Category = "Element",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { Frostbite = 1, SharpEdge = 2 } },
+		Effects = {
+			{ Stat = "ChillDamageBonus", Op = "Add", Value = 0.6 },
+			{ Stat = "ChillSeconds", Op = "Add", Value = 1.5 },
+		},
+	},
+	{
+		Id = "Deadeye",
+		Title = "Deadeye",
+		Description = "Crits deal triple damage, and 15% more hits crit.",
+		Category = "Power",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { KeenEdge = 2, TrickShot = 1 } },
+		Effects = {
+			{ Stat = "CritMultiplier", Op = "Add", Value = 1 },
+			{ Stat = "CritChance", Op = "Add", Value = 0.15 },
 		},
 	},
 	{

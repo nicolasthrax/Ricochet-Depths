@@ -75,6 +75,10 @@ function EnemyPool:Release(part)
 	part.CanQuery = false
 	part:SetAttribute("Phasing", nil)
 	part:SetAttribute("Facing", nil)
+	-- Champion affix and status effects are per life, never carried into the next spawn.
+	part:SetAttribute("Champion", nil)
+	part:SetAttribute("Burning", nil)
+	part:SetAttribute("Chilled", nil)
 	part.Position = EnemyConfig.StoragePosition
 	local shield = part:FindFirstChild("Shield")
 	if shield then

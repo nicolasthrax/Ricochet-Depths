@@ -16,6 +16,9 @@ local KIND_COLORS = {
 	Quest = UiConfig.Colors.Health,
 	Info = UiConfig.Colors.Accent,
 	Error = UiConfig.Colors.Danger,
+	-- In-run moments: a spent Second Wind, a teammate picked back up.
+	SecondWind = UiConfig.Colors.Health,
+	Revive = UiConfig.Colors.Health,
 }
 
 function NotificationView.new(playerGui)

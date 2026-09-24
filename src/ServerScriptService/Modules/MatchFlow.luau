@@ -140,7 +140,7 @@ function Flow.methods:_openUpgradeChoice(now)
 	for _, player in self._participants do
 		local state = self._states[player]
 		if state then
-			local offer = self._upgrades:BuildOffer(player, state, now)
+			local offer = self._upgrades:BuildOffer(player, state, now, self._pactEffects.OfferCount)
 			self:_fireClient("UpgradeOffer", player, self._upgrades.ToClientPayload(offer, now))
 			offered += 1
 			self:_log("CardOffered", { RunId = self._runId, Room = self._roomIndex }, now)
@@ -173,6 +173,8 @@ function Flow.methods:_finish(outcome, now)
 		duration = now - self._runStartedAt,
 		roomCount = #self._plan,
 		eliteCleared = self._eliteCleared,
+		heat = self._pactEffects.Heat,
+		rewardMultiplier = self._pactEffects.RewardMultiplier,
 	}
 
 	local runKey = string.format("%s-%d", self._runKeyPrefix, self._runId)
@@ -243,6 +245,7 @@ function Flow.methods:_cleanup(now)
 	table.clear(self._participants)
 	table.clear(self._pendingJoins)
 	self._roomIndex = 0
+	self:_applyPact({})
 	self:_setState(States.Lobby, now)
 end
 

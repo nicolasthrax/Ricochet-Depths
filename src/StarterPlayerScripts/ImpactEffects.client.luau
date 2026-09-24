@@ -49,7 +49,7 @@ for index = 1, EffectConfig.PoolSize do
 	free[index] = part
 end
 
-local function spawnBurst(position, normal)
+local function spawnBurst(position, normal, kind)
 	local intensity = effectIntensity()
 	if intensity <= 0 then
 		return true -- effects disabled by the player; keep draining the batch
@@ -63,10 +63,12 @@ local function spawnBurst(position, normal)
 	local part = free[count]
 	free[count] = nil
 
-	part.Size = EffectConfig.StartSize
+	local scale = kind == "Blast" and EffectConfig.BlastScale or 1
+	part.Size = EffectConfig.StartSize * scale
+	part.Color = EffectConfig.KindColors[kind] or EffectConfig.Color
 	part.Transparency = 1 - intensity
 	part.CFrame = CFrame.lookAlong(position + normal * 0.1, normal)
-	table.insert(active, { part = part, startedAt = os.clock(), intensity = intensity })
+	table.insert(active, { part = part, startedAt = os.clock(), intensity = intensity, scale = scale })
 	return true
 end
 
@@ -80,7 +82,9 @@ local function volumeAt(position)
 	return SoundConfig.VolumeForDistance((position - root.Position).Magnitude)
 end
 
-local CUE_FOR_KIND = { Wall = "WallBounce", Hit = "EnemyHit", Block = "ShieldBlock" }
+local CUE_FOR_KIND = { Wall = "WallBounce", Hit = "EnemyHit", Block = "ShieldBlock", Crit = "EnemyHit", Arc = "EnemyHit", Blast = "EnemyShatter" }
+-- Crits ring higher; burn ticks are silent so a burning room does not buzz.
+local PITCH_FOR_KIND = { Crit = 1.35, Arc = 1.6, Blast = 0.8 }
 
 -- The server batches contacts, so one remote carries many impacts. details is optional so an
 -- older server's two-argument batch still draws its bursts.
@@ -99,9 +103,9 @@ projectileImpact.OnClientEvent:Connect(function(positions, normals, details)
 		if typeof(position) ~= "Vector3" or typeof(normal) ~= "Vector3" then
 			continue
 		end
-		spawnBurst(position, normal)
-
 		local kind = kinds[index] or "Wall"
+		spawnBurst(position, normal, kind)
+
 		shake:Impulse(EffectConfig.ShakeImpulses[kind] or 0, now)
 
 		if kind ~= "Wall" and type(damage[index]) == "number" then
@@ -111,7 +115,7 @@ projectileImpact.OnClientEvent:Connect(function(positions, normals, details)
 		-- Kills get their shatter from EnemyDefeated; everything else speaks here, up to a cap.
 		local cue = CUE_FOR_KIND[kind]
 		if cue and voiced < SoundConfig.MaxSoundsPerBatch then
-			local pitch = kind == "Wall" and SoundConfig.BouncePitch(contacts[index]) or 1
+			local pitch = kind == "Wall" and SoundConfig.BouncePitch(contacts[index]) or PITCH_FOR_KIND[kind] or 1
 			if sounds:Play(cue, { pitch = pitch, volume = volumeAt(position) }) then
 				voiced += 1
 			end
@@ -151,7 +155,7 @@ RunService.RenderStepped:Connect(function()
 			free[#free + 1] = entry.part
 			table.remove(active, index)
 		else
-			entry.part.Size = EffectConfig.StartSize:Lerp(EffectConfig.EndSize, alpha)
+			entry.part.Size = EffectConfig.StartSize:Lerp(EffectConfig.EndSize, alpha) * entry.scale
 			entry.part.Transparency = 1 - entry.intensity * (1 - alpha)
 		end
 	end

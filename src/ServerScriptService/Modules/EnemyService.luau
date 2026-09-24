@@ -2,6 +2,7 @@
 -- Enemy positions are integrated directly on anchored parts, so the server is the only writer.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local EnemyBehaviour = require(script.Parent.EnemyBehaviour)
 local EnemyConfig = require(ReplicatedStorage:WaitForChild("EnemyConfig"))
 local EnemyPool = require(script.Parent.EnemyPool)
@@ -47,10 +48,17 @@ function EnemyService.new(parent, planeY, seed)
 	-- Enemies that actually moved on the last step. Only these can have slid over a
 	-- projectile, so only these are worth testing for enclosure.
 	self._movers = {}
+	-- Run-wide difficulty (the Depth Pact): multipliers on health, movement and damage dealt.
+	self._modifiers = { Health = 1, Speed = 1, Damage = 1 }
+	-- The clock of the last Step, for work that happens between steps (a death ring on a kill).
+	self._now = 0
 
 	-- Set by the encounter layer.
 	self.OnDeath = nil -- (enemy, shooter)
 	self.OnPlayerContact = nil -- (player, damage, enemy, now)
+	-- (enemy, damage, shooter, now): a burn tick landed. The encounter layer applies it through
+	-- its own damage path, so a burn kill counts, pays and explodes like any other.
+	self.OnStatusDamage = nil
 
 	return self
 end
@@ -65,6 +73,20 @@ end
 -- to keep enemies out of the sealed space behind each bevel, where no shot could reach them.
 function EnemyService:SetBounds(center, halfExtents, diagonal)
 	self._bounds = { center = center, half = halfExtents, diagonal = diagonal }
+end
+
+-- Run-wide multipliers from the Depth Pact. Missing fields stay at 1.
+function EnemyService:SetModifiers(modifiers)
+	modifiers = type(modifiers) == "table" and modifiers or {}
+	self._modifiers = {
+		Health = tonumber(modifiers.Health) or 1,
+		Speed = tonumber(modifiers.Speed) or 1,
+		Damage = tonumber(modifiers.Damage) or 1,
+	}
+end
+
+function EnemyService:GetModifiers()
+	return table.clone(self._modifiers)
 end
 
 -- The room's cover, as RoomGeometry footprints. Orbs die on it.
@@ -109,7 +131,7 @@ function EnemyService:_fireOrb(source, direction, speed, damage, now)
 		part = part,
 		position = start,
 		velocity = direction * speed,
-		damage = damage,
+		damage = damage * self._modifiers.Damage,
 		source = source,
 		expiresAt = now + EnemyConfig.OrbLifetime,
 	}
@@ -188,11 +210,13 @@ function EnemyService:_serviceRequests(enemy, now)
 	end
 end
 
-function EnemyService:Spawn(archetypeId, position)
+-- options.champion, when given, is a CombatConfig.Champions id: a tougher version with one affix.
+function EnemyService:Spawn(archetypeId, position, options)
 	local archetype = EnemyConfig.Get(archetypeId)
 	if not archetype then
 		return nil, "unknown archetype"
 	end
+	local champion = options and options.champion and CombatConfig.Champions[options.champion] or nil
 	if #self._enemies >= EnemyConfig.MaxActive then
 		return nil, "enemy cap reached"
 	end
@@ -204,13 +228,19 @@ function EnemyService:Spawn(archetypeId, position)
 	end
 
 	self._nextId += 1
+	local health = math.max(math.ceil(archetype.Health * self._modifiers.Health
+		* (champion and champion.HealthMultiplier or 1) - 1e-6), 1)
 	local enemy = {
 		id = self._nextId,
 		archetypeId = archetypeId,
 		archetype = archetype,
+		champion = champion,
+		-- Coins dropped on death; champions pay more.
+		coins = (archetype.Coins or 0) * (champion and CombatConfig.ChampionCoinMultiplier or 1),
+		speedScale = champion and champion.SpeedMultiplier or 1,
 		part = part,
-		health = archetype.Health,
-		maxHealth = archetype.Health,
+		health = health,
+		maxHealth = health,
 		position = spawnPosition,
 		anchor = spawnPosition,
 		facing = Vector3.new(0, 0, 1),
@@ -222,7 +252,71 @@ function EnemyService:Spawn(archetypeId, position)
 
 	self._byPart[part] = enemy
 	table.insert(self._enemies, enemy)
+	if champion then
+		part:SetAttribute("Champion", champion.Id)
+		if champion.Regen then
+			enemy.regenAt = self._now + champion.Regen.Interval
+		end
+	end
 	return enemy
+end
+
+-- Sets a hit enemy burning and/or chilled. A new burn replaces a weaker one and refreshes the
+-- timer; chill only ever extends.
+function EnemyService:ApplyStatus(enemy, burnDamage, chillSeconds, shooter, now)
+	if not enemy or enemy.dead then
+		return
+	end
+	now = now or self._now
+	if (burnDamage or 0) > 0 then
+		local burn = enemy.burn
+		if not burn or burnDamage >= burn.dps or now >= burn.untilAt then
+			enemy.burn = {
+				dps = burnDamage,
+				untilAt = now + CombatConfig.BurnDuration,
+				nextTick = burn and burn.nextTick > now and burn.nextTick or now + CombatConfig.BurnTick,
+				shooter = shooter,
+			}
+		else
+			burn.untilAt = now + CombatConfig.BurnDuration
+		end
+	end
+	if (chillSeconds or 0) > 0 then
+		enemy.chillUntil = math.max(enemy.chillUntil or 0, now + chillSeconds)
+	end
+end
+
+function EnemyService.IsChilled(enemy, now)
+	return (enemy.chillUntil or 0) > now
+end
+
+-- Live enemies within `radius` of `position` on the travel plane, nearest first, never
+-- `exclude`. At most `limit` of them when a limit is given.
+function EnemyService:FindNear(position, radius, exclude, limit)
+	local found = {}
+	for _, enemy in self._enemies do
+		if enemy ~= exclude and not enemy.dead and enemy.phase ~= "Blinking" then
+			local offset = Vector3.new(enemy.position.X - position.X, 0, enemy.position.Z - position.Z)
+			local distance = offset.Magnitude
+			if distance <= radius then
+				table.insert(found, { enemy = enemy, distance = distance })
+			end
+		end
+	end
+	table.sort(found, function(a, b)
+		if a.distance == b.distance then
+			return a.enemy.id < b.enemy.id
+		end
+		return a.distance < b.distance
+	end)
+	local result = {}
+	for index, entry in found do
+		if limit and index > limit then
+			break
+		end
+		table.insert(result, entry.enemy)
+	end
+	return result
 end
 
 function EnemyService:GetByPart(part)
@@ -290,6 +384,13 @@ function EnemyService:ApplyHit(part, damage, direction, shooter)
 		self:Despawn(enemy, "killed")
 		if self.OnDeath then
 			self.OnDeath(enemy, shooter)
+		end
+		local ring = enemy.champion and enemy.champion.DeathRing
+		if ring then
+			for step = 1, ring.Count do
+				local angle = (step - 1) * 2 * math.pi / ring.Count
+				self:_fireOrb(enemy, Vector3.new(math.cos(angle), 0, math.sin(angle)), ring.Speed, ring.Damage, self._now)
+			end
 		end
 		local split = enemy.archetype.SplitInto
 		if split then
@@ -409,7 +510,48 @@ function EnemyService:FindEnclosingMover(position, margin)
 	return nil
 end
 
+-- Burn ticks, champion regeneration and the Burning/Chilled attributes clients draw from.
+-- Burn damage is collected first and applied after, because a burn kill can explode and take
+-- other enemies with it, which must not happen mid-iteration.
+function EnemyService:_stepStatuses(now)
+	local ticks = nil
+	for _, enemy in self._enemies do
+		local burn = enemy.burn
+		if burn then
+			-- The tick due at the moment the burn ends still lands, so a 3s burn deals all 3s.
+			if now >= burn.nextTick and burn.nextTick <= burn.untilAt + 1e-6 then
+				burn.nextTick += CombatConfig.BurnTick
+				ticks = ticks or {}
+				table.insert(ticks, { enemy = enemy, damage = burn.dps * CombatConfig.BurnTick, shooter = burn.shooter })
+			end
+			if burn.nextTick > burn.untilAt + 1e-6 then
+				enemy.burn = nil
+			end
+		end
+		local regen = enemy.champion and enemy.champion.Regen
+		if regen and now >= (enemy.regenAt or math.huge) then
+			enemy.regenAt = now + regen.Interval
+			enemy.health = math.min(enemy.maxHealth, enemy.health + regen.Amount)
+		end
+		local burning, chilled = enemy.burn ~= nil, EnemyService.IsChilled(enemy, now)
+		if burning ~= (enemy.shownBurning or false) then
+			enemy.shownBurning = burning
+			enemy.part:SetAttribute("Burning", burning or nil)
+		end
+		if chilled ~= (enemy.shownChilled or false) then
+			enemy.shownChilled = chilled
+			enemy.part:SetAttribute("Chilled", chilled or nil)
+		end
+	end
+	for _, tick in ticks or {} do
+		if not tick.enemy.dead and self.OnStatusDamage then
+			self.OnStatusDamage(tick.enemy, tick.damage, tick.shooter, now)
+		end
+	end
+end
+
 function EnemyService:Step(deltaTime, now)
+	self._now = now
 	local targets = self._targetProvider and self._targetProvider() or {}
 	table.clear(self._movers)
 	local randomSource = function()
@@ -423,9 +565,13 @@ function EnemyService:Step(deltaTime, now)
 		local archetype = enemy.archetype
 		local target = nearestTarget(targets, enemy.position)
 
+		-- The Pact, a Swift champion and chill all scale how far an enemy moves this step. Only
+		-- movement: telegraphs and fire timers run on the clock, so they stay readable.
+		local moveScale = self._modifiers.Speed * (enemy.speedScale or 1)
+			* (EnemyService.IsChilled(enemy, now) and CombatConfig.ChillSpeedFactor or 1)
 		local behaviour = EnemyBehaviour.Get(archetype.Behaviour)
 		if behaviour then
-			behaviour(enemy, archetype, deltaTime, target, now, randomSource)
+			behaviour(enemy, archetype, deltaTime * moveScale, target, now, randomSource)
 		end
 		local spin = archetype.Shield and archetype.Shield.SpinSpeed
 		if spin then
@@ -454,11 +600,13 @@ function EnemyService:Step(deltaTime, now)
 				if self.OnPlayerContact then
 					-- Pass the step's clock through: the handler runs before the run loop's own
 					-- Step, so anything it reads from the match would be a frame stale.
-					self.OnPlayerContact(target.player, archetype.ContactDamage, enemy, now)
+					self.OnPlayerContact(target.player, archetype.ContactDamage * self._modifiers.Damage, enemy, now)
 				end
 			end
 		end
 	end
+
+	self:_stepStatuses(now)
 end
 
 function EnemyService:Clear()

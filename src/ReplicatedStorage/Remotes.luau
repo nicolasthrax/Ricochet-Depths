@@ -16,6 +16,9 @@ local REMOTE_NAMES = {
 	"ClaimQuest", -- quest id
 	"RedeemCode", -- promo code text
 	"RequestMeta", -- ask for a fresh MetaSync (opening the daily or quest panel)
+	"SelectRig", -- rig id; unlock level checked server-side
+	"SetPact", -- { [conditionId] = rank }; sanitised and unlock-checked server-side
+	"ClaimAchievement", -- achievement id
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts

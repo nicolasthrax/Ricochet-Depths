@@ -27,6 +27,10 @@ function RemoteRouter.new(match, persistence, onProfileChanged, shop, options)
 		-- daily rewards, quests and codes. Without them those remotes are never bound.
 		_meta = options and options.meta,
 		_onMetaResult = options and options.onMetaResult,
+		-- options.loadout (LoadoutService) and options.onLoadoutResult(player, kind, result, reason):
+		-- rigs, the Depth Pact and achievements. Without them those remotes are never bound.
+		_loadout = options and options.loadout,
+		_onLoadoutResult = options and options.onLoadoutResult,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
 		_shop = shop,
@@ -104,6 +108,22 @@ function RemoteRouter:Bind()
 		end)
 		self:_connect("RequestMeta", "RequestMeta", function(player)
 			self._onMetaResult(player, "Sync", nil, nil)
+		end)
+	end
+
+	if self._loadout and self._onLoadoutResult then
+		self:_connect("SelectRig", "SelectRig", function(player, _now, rigId)
+			local result, reason = self._loadout:SelectRig(player, type(rigId) == "string" and rigId or nil)
+			self._onLoadoutResult(player, "Rig", result, reason)
+		end)
+		self:_connect("SetPact", "SetPact", function(player, _now, pact)
+			local result, reason = self._loadout:SetPact(player, type(pact) == "table" and pact or nil)
+			self._onLoadoutResult(player, "Pact", result, reason)
+		end)
+		self:_connect("ClaimAchievement", "ClaimAchievement", function(player, _now, achievementId)
+			local id = type(achievementId) == "string" and achievementId or nil
+			local result, reason = self._loadout:ClaimAchievement(player, id)
+			self._onLoadoutResult(player, "Achievement", result, reason)
 		end)
 	end
 

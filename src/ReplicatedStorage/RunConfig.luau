@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "1.2.0"
+RunConfig.Version = "1.3.0"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -17,6 +17,8 @@ RunConfig.States = {
 RunConfig.BaseHealth = 100
 -- Roblox's default Humanoid walk speed; the salvage shop's Stride adds to it for a run.
 RunConfig.BaseWalkSpeed = 16
+-- A downed player crawls at this speed until revived or the room ends.
+RunConfig.DownedWalkSpeed = 6
 -- Out-of-combat healing during a run: once Delay seconds pass without taking damage, a live
 -- player heals PerSecond (plus the Armory's Mending) until full.
 RunConfig.Regen = {
@@ -70,6 +72,9 @@ RunConfig.RemoteRules = {
 	ClaimQuest = { Cooldown = 0.4, Burst = 3 },
 	RedeemCode = { Cooldown = 2, Burst = 3 },
 	RequestMeta = { Cooldown = 0.5, Burst = 4 },
+	SelectRig = { Cooldown = 0.4, Burst = 3 },
+	SetPact = { Cooldown = 0.3, Burst = 4 },
+	ClaimAchievement = { Cooldown = 0.4, Burst = 3 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,

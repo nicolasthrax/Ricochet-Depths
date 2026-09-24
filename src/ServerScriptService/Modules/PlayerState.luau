@@ -2,6 +2,7 @@
 -- never writes to it.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("UpgradeConfig"))
@@ -16,9 +17,10 @@ function PlayerState.new(player)
 	self.name = player and player.Name or "Unknown"
 	self.upgrades = {}
 	self.upgradeOrder = {}
-	-- Permanent salvage-shop bonuses: { stats = { [stat] = delta }, trail = def|nil }. They
-	-- outlive ResetRun and are refreshed from the profile when a run starts.
-	self.meta = { stats = {}, trail = nil }
+	-- Permanent bonuses: { stats = { [stat] = delta }, trail = def|nil, rig = id|nil } from the
+	-- Armory, passes, the chosen rig and the run's Depth Pact. They outlive ResetRun and are
+	-- refreshed from the profile when a run starts.
+	self.meta = { stats = {}, trail = nil, rig = nil }
 	self:ResetRun()
 	return self
 end
@@ -27,6 +29,7 @@ function PlayerState:SetMeta(meta)
 	self.meta = {
 		stats = type(meta) == "table" and type(meta.stats) == "table" and meta.stats or {},
 		trail = type(meta) == "table" and meta.trail or nil,
+		rig = type(meta) == "table" and type(meta.rig) == "string" and meta.rig or nil,
 	}
 end
 
@@ -62,6 +65,15 @@ function PlayerState:ResetRun()
 	self.joinedAtRoom = 1
 	self.lastFireAt = -math.huge
 	self.invulnerableUntil = 0
+	-- Tallies for the results screen, the Codex and achievements.
+	self.championKills = 0
+	self.bossKills = 0
+	self.crits = 0
+	self.revivesGiven = 0
+	self.killsByArchetype = {}
+	-- Second Wind lives spent, and how far a teammate has got reviving this player.
+	self.extraLivesUsed = 0
+	self.reviveProgress = 0
 end
 
 -- Folds every held card over the base stats. Add effects scale linearly with stacks,
@@ -133,8 +145,16 @@ function PlayerState:ApplyDamage(amount, now)
 	self.damageTaken += applied
 	self.lastDamagedAt = now
 	if self.health <= 0 then
+		-- Second Wind: a spare life turns the fatal blow into a narrow escape.
+		if self.extraLivesUsed < math.floor(self.stats.ExtraLives or 0) then
+			self.extraLivesUsed += 1
+			self.health = math.max(math.floor(self.maxHealth * CombatConfig.ExtraLifeHealth), 1)
+			self:GrantInvulnerability(now)
+			return applied, false, true
+		end
 		self.health = 0
 		self.alive = false
+		self.reviveProgress = 0
 		return applied, true
 	end
 	return applied, false
@@ -149,10 +169,28 @@ function PlayerState:Heal(amount)
 	return healed
 end
 
-function PlayerState:Revive(now)
+-- Back on their feet: at full health by default (a new room), or at `fraction` of it when a
+-- teammate picked them up mid-fight.
+function PlayerState:Revive(now, fraction, invulnerability)
 	self.alive = true
-	self.health = self.maxHealth
-	self:GrantInvulnerability(now)
+	self.health = math.max(math.floor(self.maxHealth * (fraction or 1)), 1)
+	self.reviveProgress = 0
+	self:GrantInvulnerability(now, invulnerability)
+end
+
+-- A kill this player scored, for the run's tallies.
+function PlayerState:RecordKill(enemy)
+	self.kills += 1
+	local archetypeId = enemy and enemy.archetypeId
+	if archetypeId then
+		self.killsByArchetype[archetypeId] = (self.killsByArchetype[archetypeId] or 0) + 1
+	end
+	if enemy and enemy.champion then
+		self.championKills += 1
+	end
+	if enemy and enemy.archetype and enemy.archetype.IsBoss then
+		self.bossKills += 1
+	end
 end
 
 -- Read-only view for the HUD. Never send the state table itself.
@@ -183,6 +221,9 @@ function PlayerState:ToSnapshot()
 		-- shot that would be refused, without an extra remote for rejections.
 		FireCooldown = ProjectileConfig.FireCooldown * self.stats.FireCooldownMultiplier,
 		Upgrades = upgrades,
+		Rig = self.meta.rig,
+		ExtraLivesLeft = math.max(math.floor(self.stats.ExtraLives or 0) - self.extraLivesUsed, 0),
+		ReviveProgress = self.reviveProgress,
 	}
 end
 

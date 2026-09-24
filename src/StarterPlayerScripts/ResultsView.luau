@@ -1,6 +1,8 @@
 -- End-of-run summary. Everything shown here was computed and sent by the server.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
+local RigConfig = require(ReplicatedStorage:WaitForChild("RigConfig"))
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
 local UiTheme = require(script.Parent.UiTheme)
 
@@ -97,6 +99,26 @@ function ResultsView:Show(summary)
 	self:_row(7, string.format("%s earned: %d", summary.CurrencyName, summary.Reward), UiConfig.Colors.Accent)
 
 	local index = 7
+	local function extra(text, color)
+		index += 1
+		self:_row(index, text, color)
+	end
+	local rig = type(summary.Rig) == "string" and RigConfig.Get(summary.Rig)
+	local heat = tonumber(summary.Heat) or 0
+	if rig or heat > 0 then
+		extra(string.format("%s%s", rig and ("Rig: " .. rig.Title) or "",
+			heat > 0 and string.format("%sHeat %d (+%d%% rewards)", rig and "   -   " or "", heat,
+				math.floor(heat * PactConfig.RewardPerHeat * 100 + 0.5)) or ""), rig and rig.Color or UiConfig.Colors.Danger)
+	end
+	if (tonumber(summary.ChampionsDefeated) or 0) > 0 then
+		extra(string.format("Champions slain: %d", summary.ChampionsDefeated), UiConfig.Colors.Purple)
+	end
+	if (tonumber(summary.Crits) or 0) > 0 then
+		extra(string.format("Critical hits: %d", summary.Crits))
+	end
+	if (tonumber(summary.RevivesGiven) or 0) > 0 then
+		extra(string.format("Teammates revived: %d", summary.RevivesGiven), UiConfig.Colors.Health)
+	end
 	local xp = type(summary.XpEarned) == "number" and summary.XpEarned or 0
 	local progress = type(summary.Progress) == "table" and summary.Progress or nil
 	if xp > 0 then

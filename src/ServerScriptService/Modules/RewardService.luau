@@ -2,6 +2,7 @@
 -- client sends ever reaches this maths.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
 
@@ -14,8 +15,9 @@ end
 
 -- Coins collected, plus the clear bonus, times the player's multipliers (Fortune and cards via
 -- RewardMultiplier, the 2x Coins pass via CoinMultiplier). Only "Extracted" earns the whole
--- bonus; every other outcome keeps the coins and a share of the bonus.
-function RewardService.Compute(playerState, outcome, eliteCleared)
+-- bonus; every other outcome keeps the coins and a share of the bonus. heatMultiplier is the
+-- Depth Pact's reward multiplier (1 at Heat 0).
+function RewardService.Compute(playerState, outcome, eliteCleared, heatMultiplier)
 	local bonus = playerState.roomsCleared * RewardConfig.PerRoomCleared
 	if eliteCleared then
 		bonus += RewardConfig.EliteBonus
@@ -25,21 +27,22 @@ function RewardService.Compute(playerState, outcome, eliteCleared)
 	else
 		bonus = math.floor(bonus * RewardConfig.DefeatMultiplier)
 	end
-	return RewardService.Multiply(playerState, (playerState.coins or 0) + bonus)
+	return RewardService.Multiply(playerState, ((playerState.coins or 0) + bonus) * (heatMultiplier or 1))
 end
 
 -- Experience for a run. Every outcome keeps what the kills and clears earned; only extracting
--- adds the extraction award. Multipliers never touch experience.
-function RewardService.Experience(playerState, outcome, eliteCleared)
+-- adds the extraction award. Coin multipliers never touch experience; the Pact's Heat does.
+function RewardService.Experience(playerState, outcome, eliteCleared, heatMultiplier)
 	local rates = ProgressionConfig.Xp
 	local xp = (playerState.kills or 0) * rates.PerKill + (playerState.roomsCleared or 0) * rates.PerRoomCleared
+		+ (playerState.championKills or 0) * CombatConfig.ChampionXp
 	if eliteCleared then
 		xp += rates.EliteCleared
 	end
 	if outcome == "Extracted" then
 		xp += rates.Extracted
 	end
-	return math.max(math.floor(xp), 0)
+	return math.max(math.floor(xp * (heatMultiplier or 1)), 0)
 end
 
 -- `amount` after the player's multipliers, floored and capped.

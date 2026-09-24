@@ -49,7 +49,8 @@ function ArenaDirector:_createSlot(index)
 	local seed = self._seed + index * 7919
 	local enemies = EnemyService.new(arena, self._planeY, seed)
 	local projectiles = ProjectileService.new(folder, arena, self._planeY)
-	local rooms = RoomService.new(arena, enemies, self._planeY, Random.new(seed), origin)
+	-- Champion draws get their own stream, seeded per server and slot like everything else.
+	local rooms = RoomService.new(arena, enemies, self._planeY, Random.new(seed), origin, Random.new(seed + 17))
 
 	local slot = {
 		index = index,
@@ -69,6 +70,7 @@ function ArenaDirector:_createSlot(index)
 	deps.projectiles = projectiles
 	deps.upgrades = UpgradeService.new(seed)
 	deps.rewards = RewardService.new()
+	deps.seed = seed -- crit rolls
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs
 	-- would share a payout key and the profile ledger would refuse the second.

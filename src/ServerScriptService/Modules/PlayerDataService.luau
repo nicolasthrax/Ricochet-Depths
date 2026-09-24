@@ -732,6 +732,10 @@ function PlayerDataService:GetPublicProfile(player)
 		MetaUpgrades = table.clone(profile.MetaUpgrades),
 		EquippedTrail = profile.EquippedTrail,
 		Progression = ProgressionConfig.Describe(profile.Progression.Xp),
+		SelectedRig = profile.SelectedRig,
+		Pact = table.clone(profile.Pact),
+		Achievements = table.clone(profile.Achievements),
+		Codex = { Cards = table.clone(profile.Codex.Cards), Enemies = table.clone(profile.Codex.Enemies) },
 		ReadOnly = session.failed == true,
 	}
 end
@@ -746,6 +750,26 @@ function PlayerDataService:RecordRunEnd(player, summary)
 		profile.Stats.BestChain = math.max(profile.Stats.BestChain, summary.BestChain)
 		profile.Stats.BestRoomsCleared = math.max(profile.Stats.BestRoomsCleared, summary.RoomsCleared)
 		profile.Stats.CoinsEarned += math.max(tonumber(summary.Reward) or 0, 0)
+		profile.Stats.ChampionsDefeated += math.max(tonumber(summary.ChampionsDefeated) or 0, 0)
+		profile.Stats.BossesDefeated += math.max(tonumber(summary.BossesDefeated) or 0, 0)
+		profile.Stats.Revives += math.max(tonumber(summary.RevivesGiven) or 0, 0)
+		if summary.Outcome == "Extracted" then
+			profile.Stats.BestHeat = math.max(profile.Stats.BestHeat, tonumber(summary.Heat) or 0)
+			if type(summary.Rig) == "string" then
+				profile.Stats.RigsExtracted[summary.Rig] = true
+			end
+		end
+		-- The Codex: every card taken and every enemy defeated, ever.
+		for _, upgrade in type(summary.Upgrades) == "table" and summary.Upgrades or {} do
+			if type(upgrade.Id) == "string" then
+				profile.Codex.Cards[upgrade.Id] = true
+			end
+		end
+		for archetypeId, kills in type(summary.KillsByArchetype) == "table" and summary.KillsByArchetype or {} do
+			if type(archetypeId) == "string" and type(kills) == "number" and kills > 0 then
+				profile.Codex.Enemies[archetypeId] = (profile.Codex.Enemies[archetypeId] or 0) + math.floor(kills)
+			end
+		end
 		-- Finishing a run, win or lose, counts as having been onboarded.
 		profile.Flags.OnboardingSeen = true
 	end)

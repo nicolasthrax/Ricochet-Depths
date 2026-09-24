@@ -56,6 +56,8 @@ function EnemyService.new(parent, planeY, seed)
 	-- Set by the encounter layer.
 	self.OnDeath = nil -- (enemy, shooter)
 	self.OnPlayerContact = nil -- (player, damage, enemy, now)
+	-- Magnet enemies alive after the last step, for steering shots.
+	self._magnets = {}
 	-- (enemy, damage, shooter, now): a burn tick landed. The encounter layer applies it through
 	-- its own damage path, so a burn kill counts, pays and explodes like any other.
 	self.OnStatusDamage = nil
@@ -183,8 +185,28 @@ function EnemyService:_stepOrbs(dt, now, targets)
 	end
 end
 
--- Carries out what a behaviour asked for this step: orbs to fire and allies to summon.
-function EnemyService:_serviceRequests(enemy, now)
+-- Health for clients' health bars, written only when it changes.
+function EnemyService._publishHealth(enemy)
+	local shown = math.max(math.ceil(enemy.health - 1e-6), 0)
+	if enemy.shownHealth ~= shown then
+		enemy.shownHealth = shown
+		enemy.part:SetAttribute("Health", shown)
+	end
+end
+
+-- Carries out what a behaviour asked for this step: orbs to fire, allies to summon, and a slam
+-- that hits every player within its radius.
+function EnemyService:_serviceRequests(enemy, now, targets)
+	local slam = enemy.slamRequest
+	if slam then
+		enemy.slamRequest = nil
+		for _, target in targets or {} do
+			local offset = Vector3.new(target.position.X - enemy.position.X, 0, target.position.Z - enemy.position.Z)
+			if offset.Magnitude <= slam.radius and self.OnPlayerContact then
+				self.OnPlayerContact(target.player, slam.damage * self._modifiers.Damage, enemy, now)
+			end
+		end
+	end
 	local requests = enemy.fireRequests
 	if requests then
 		enemy.fireRequests = nil
@@ -238,6 +260,7 @@ function EnemyService:Spawn(archetypeId, position, options)
 		-- Coins dropped on death; champions pay more.
 		coins = (archetype.Coins or 0) * (champion and CombatConfig.ChampionCoinMultiplier or 1),
 		speedScale = champion and champion.SpeedMultiplier or 1,
+		spawnedAt = self._now,
 		part = part,
 		health = health,
 		maxHealth = health,
@@ -252,6 +275,8 @@ function EnemyService:Spawn(archetypeId, position, options)
 
 	self._byPart[part] = enemy
 	table.insert(self._enemies, enemy)
+	part:SetAttribute("MaxHealth", health)
+	EnemyService._publishHealth(enemy)
 	if champion then
 		part:SetAttribute("Champion", champion.Id)
 		if champion.Regen then
@@ -327,6 +352,21 @@ function EnemyService:GetActiveCount()
 	return #self._enemies
 end
 
+-- Enemies a room needs dead to clear: everything but Optional ones (the Treasure Runner).
+function EnemyService:GetRequiredCount()
+	local count = 0
+	for _, enemy in self._enemies do
+		if not enemy.archetype.Optional then
+			count += 1
+		end
+	end
+	return count
+end
+
+function EnemyService:GetMagnets()
+	return self._magnets
+end
+
 function EnemyService:GetEnemies()
 	return table.clone(self._enemies)
 end
@@ -371,6 +411,7 @@ function EnemyService:ApplyHit(part, damage, direction, shooter)
 
 	local applied = math.max(damage * multiplier, 0)
 	enemy.health -= applied
+	EnemyService._publishHealth(enemy)
 
 	local result = {
 		enemy = enemy,
@@ -440,9 +481,17 @@ end
 function EnemyService:_applyVisuals(enemy)
 	local archetype = enemy.archetype
 	local wanted = archetype.Color
-	local telegraph = archetype.Lunge or archetype.Fire or archetype.Blink
+	local telegraph = archetype.Lunge or archetype.Fire or archetype.Blink or archetype.Stomp or archetype.Slam
 	if enemy.phase == "Telegraph" and telegraph then
 		wanted = telegraph.TelegraphColor
+	end
+	-- A press about to slam marks the floor it will hit, so clients can draw the warning.
+	if archetype.Slam then
+		local slamming = enemy.phase == "Telegraph"
+		if slamming ~= (enemy.shownSlamming or false) then
+			enemy.shownSlamming = slamming
+			enemy.part:SetAttribute("SlamRadius", slamming and archetype.Slam.Radius or nil)
+		end
 	end
 	-- Blinking: see-through and out of reach of every raycast until it lands.
 	local blinking = enemy.phase == "Blinking"
@@ -532,6 +581,7 @@ function EnemyService:_stepStatuses(now)
 		if regen and now >= (enemy.regenAt or math.huge) then
 			enemy.regenAt = now + regen.Interval
 			enemy.health = math.min(enemy.maxHealth, enemy.health + regen.Amount)
+			EnemyService._publishHealth(enemy)
 		end
 		local burning, chilled = enemy.burn ~= nil, EnemyService.IsChilled(enemy, now)
 		if burning ~= (enemy.shownBurning or false) then
@@ -554,6 +604,7 @@ function EnemyService:Step(deltaTime, now)
 	self._now = now
 	local targets = self._targetProvider and self._targetProvider() or {}
 	table.clear(self._movers)
+	table.clear(self._magnets)
 	local randomSource = function()
 		return self._random:NextNumber()
 	end
@@ -591,7 +642,10 @@ function EnemyService:Step(deltaTime, now)
 			table.insert(self._movers, enemy)
 		end
 		self:_applyVisuals(enemy)
-		self:_serviceRequests(enemy, now)
+		self:_serviceRequests(enemy, now, targets)
+		if archetype.Magnet then
+			table.insert(self._magnets, enemy)
+		end
 
 		if target and (archetype.ContactDamage or 0) > 0 and now >= enemy.contactReadyAt then
 			local offset = Vector3.new(target.position.X - enemy.position.X, 0, target.position.Z - enemy.position.Z)
@@ -607,6 +661,18 @@ function EnemyService:Step(deltaTime, now)
 	end
 
 	self:_stepStatuses(now)
+
+	-- A runner that has not been caught gets away with its loot.
+	for index = #self._enemies, 1, -1 do
+		local enemy = self._enemies[index]
+		local escape = enemy and enemy.archetype.EscapeAfter
+		if escape and now - enemy.spawnedAt >= escape then
+			self:Despawn(enemy, "escaped")
+			if self.OnEscape then
+				self.OnEscape(enemy)
+			end
+		end
+	end
 end
 
 function EnemyService:Clear()

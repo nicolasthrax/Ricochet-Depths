@@ -191,6 +191,96 @@ function EnemyBehaviour.Boss(enemy, archetype, dt, target, now, _random)
 	return enemy.position
 end
 
+-- A ring of `count` orbs, evenly spaced, starting at `twist` radians.
+local function ring(count, speed, damage, twist)
+	local requests = table.create(count)
+	for step = 1, count do
+		local angle = (twist or 0) + (step - 1) * 2 * math.pi / count
+		requests[step] = { direction = Vector3.new(math.cos(angle), 0, math.sin(angle)), speed = speed, damage = damage }
+	end
+	return requests
+end
+EnemyBehaviour.Ring = ring
+
+-- Flees the nearest player, drifting sideways so it never simply pins itself in a corner.
+function EnemyBehaviour.Runner(enemy, archetype, dt, target, now, random)
+	if not target then
+		return EnemyBehaviour.Sentry(enemy, { WanderRadius = 10, WanderInterval = 1.5, MoveSpeed = archetype.MoveSpeed }, dt, nil, now, random)
+	end
+	local away = flatten(enemy.position - target.position)
+	if away.Magnitude < 1e-3 then
+		away = Vector3.new(1, 0, 0)
+	end
+	if now >= (enemy.jinkUntil or 0) then
+		enemy.jink = (random() < 0.5) and -1 or 1
+		enemy.jinkUntil = now + 0.8 + random()
+	end
+	local side = Vector3.new(-away.Z, 0, away.X).Unit * (enemy.jink or 1)
+	local heading = (away.Unit + side * 0.7).Unit
+	enemy.facing = heading
+	enemy.position += heading * archetype.MoveSpeed * dt
+	return enemy.position
+end
+
+-- A slow chase that stops to telegraph, then stomps out a ring of orbs. Once hurt, each stomp
+-- also asks for a few Mites.
+function EnemyBehaviour.Colossus(enemy, archetype, dt, target, now, _random)
+	local stomp = archetype.Stomp
+	enemy.stompAt = enemy.stompAt or (now + stomp.Interval)
+	if target then
+		enemy.facing = flatten(target.position - enemy.position)
+	end
+	if enemy.phase == "Telegraph" then
+		if now >= enemy.phaseUntil then
+			enemy.phase = "Approach"
+			enemy.stompAt = now + stomp.Interval
+			enemy.stompTwist = (enemy.stompTwist or 0) + math.pi / stomp.RingCount
+			enemy.fireRequests = ring(stomp.RingCount, stomp.Speed, stomp.Damage, enemy.stompTwist)
+			if enemy.health / enemy.maxHealth < stomp.SummonBelow then
+				enemy.summonRequest = { archetype = stomp.Summon, count = stomp.SummonCount, max = stomp.SummonMax }
+			end
+		end
+		return enemy.position
+	elseif now >= enemy.stompAt then
+		enemy.phase = "Telegraph"
+		enemy.phaseUntil = now + stomp.TelegraphTime
+		return enemy.position
+	end
+	if target then
+		local _, distance = towards(enemy.position, target.position, 0)
+		if distance > archetype.StandoffDistance then
+			enemy.position = towards(enemy.position, target.position, archetype.MoveSpeed * dt)
+		end
+	end
+	return enemy.position
+end
+
+-- Glides over the nearest player, roots and flashes, then slams: everyone under it is hit, and a
+-- ring of sparks flies out.
+function EnemyBehaviour.Press(enemy, archetype, dt, target, now, _random)
+	local slam = archetype.Slam
+	enemy.slamAt = enemy.slamAt or (now + slam.Interval)
+	if enemy.phase == "Telegraph" then
+		if now >= enemy.phaseUntil then
+			enemy.phase = "Approach"
+			enemy.slamAt = now + slam.Interval
+			enemy.slamRequest = { radius = slam.Radius, damage = slam.Damage }
+			enemy.slamTwist = (enemy.slamTwist or 0) + math.pi / slam.RingCount
+			enemy.fireRequests = ring(slam.RingCount, slam.Speed, slam.OrbDamage, enemy.slamTwist)
+		end
+		return enemy.position
+	elseif now >= enemy.slamAt then
+		enemy.phase = "Telegraph"
+		enemy.phaseUntil = now + slam.TelegraphTime
+		return enemy.position
+	end
+	if target then
+		enemy.facing = flatten(target.position - enemy.position)
+		enemy.position = towards(enemy.position, target.position, archetype.MoveSpeed * dt)
+	end
+	return enemy.position
+end
+
 function EnemyBehaviour.Get(name)
 	return EnemyBehaviour[name]
 end

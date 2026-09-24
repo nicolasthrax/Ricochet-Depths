@@ -123,12 +123,113 @@ projectileImpact.OnClientEvent:Connect(function(positions, normals, details)
 	end
 end)
 
-Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(position)
+-- Shatter: a kill bursts into shards of the enemy's colour that tumble outwards and fall. A
+-- fixed pool, animated here; when every shard is in flight the next burst is simply smaller.
+local EnemyConfig = require(ReplicatedStorage:WaitForChild("EnemyConfig"))
+local SHARD_POOL, SHARDS_PER_KILL, SHARD_LIFE, GRAVITY = 72, 7, 0.7, 60
+local shardFree, shardsLive = {}, {}
+for index = 1, SHARD_POOL do
+	local part = Instance.new("Part")
+	part.Name = "Shard"
+	part.Size = Vector3.new(0.6, 0.6, 0.6)
+	part.Material = Enum.Material.Neon
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Position = EffectConfig.StoragePosition
+	part.Parent = folder
+	shardFree[index] = part
+end
+local shardRandom = Random.new()
+
+local function shatter(position, color, champion)
+	local intensity = effectIntensity()
+	if intensity <= 0 then
+		return
+	end
+	local count = math.floor((champion and SHARDS_PER_KILL * 2 or SHARDS_PER_KILL) * intensity + 0.5)
+	for _ = 1, count do
+		local part = table.remove(shardFree)
+		if not part then
+			return
+		end
+		local angle = shardRandom:NextNumber() * math.pi * 2
+		local speed = 10 + shardRandom:NextNumber() * 14
+		part.Color = color
+		part.Size = Vector3.one * (0.35 + shardRandom:NextNumber() * 0.55)
+		part.Transparency = 0
+		part.Position = position
+		table.insert(shardsLive, {
+			part = part,
+			origin = position,
+			velocity = Vector3.new(math.cos(angle) * speed, 12 + shardRandom:NextNumber() * 12, math.sin(angle) * speed),
+			spin = shardRandom:NextNumber() * 10,
+			startedAt = os.clock(),
+		})
+	end
+end
+
+local function stepShards(now)
+	for index = #shardsLive, 1, -1 do
+		local shard = shardsLive[index]
+		local t = now - shard.startedAt
+		if t >= SHARD_LIFE then
+			shard.part.Transparency = 1
+			shard.part.Position = EffectConfig.StoragePosition
+			table.insert(shardFree, shard.part)
+			table.remove(shardsLive, index)
+		else
+			local position = shard.origin + shard.velocity * t + Vector3.new(0, -0.5 * GRAVITY * t * t, 0)
+			shard.part.CFrame = CFrame.new(position) * CFrame.Angles(t * shard.spin, t * shard.spin * 0.7, 0)
+			shard.part.Transparency = (t / SHARD_LIFE) ^ 2
+		end
+	end
+end
+
+Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(position, archetypeId, _shooterId, _contacts, champion)
 	if typeof(position) ~= "Vector3" then
 		return
 	end
 	sounds:Play("EnemyShatter", { volume = volumeAt(position) })
+	local archetype = type(archetypeId) == "string" and EnemyConfig.Get(archetypeId)
+	shatter(position, archetype and archetype.Color or EffectConfig.Color, type(champion) == "string")
+	if archetype and (archetype.IsBoss or archetype.IsMiniBoss or archetype.IsElite) then
+		shake:Impulse(EffectConfig.ShakeImpulses.Blast, os.clock())
+	end
 end)
+
+-- Floor orbs: yours glow and bob, teammates' are dimmed so you can tell whose is whose. The
+-- circles announcing a wave pulse. Both are server parts; this only changes how they look here.
+local function eachArenaPool(poolName, visit)
+	local arenas = workspace:FindFirstChild("Arenas")
+	for _, slot in arenas and arenas:GetChildren() or {} do
+		local arena = slot:FindFirstChild("Arena")
+		local pool = arena and arena:FindFirstChild(poolName)
+		if pool then
+			for _, part in pool:GetChildren() do
+				visit(part)
+			end
+		end
+	end
+end
+
+local function stepArenaCues(now)
+	local pulse = 0.5 + 0.5 * math.sin(now * 10)
+	eachArenaPool("OrbDropPool", function(orb)
+		if orb.Transparency < 1 then
+			local mine = orb:GetAttribute("Owner") == player.UserId
+			orb.LocalTransparencyModifier = mine and 0 or 0.65
+		end
+	end)
+	eachArenaPool("WaveMarkers", function(marker)
+		if marker.Transparency < 1 then
+			marker.LocalTransparencyModifier = 0.5 * pulse
+		end
+	end)
+end
 
 -- Taking a hit shakes the camera hardest of all, so damage is felt even mid-aim.
 local lastHealth = nil
@@ -145,6 +246,8 @@ end)
 RunService.RenderStepped:Connect(function()
 	local now = os.clock()
 	popups:Step(now)
+	stepShards(now)
+	stepArenaCues(now)
 	for index = #active, 1, -1 do
 		local entry = active[index]
 		local alpha = (now - entry.startedAt) / EffectConfig.Duration

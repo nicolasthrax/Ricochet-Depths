@@ -261,7 +261,8 @@ describe("impact payload detail", function()
 		})
 
 		local wall = Instance.new("Part")
-		local chaser = enemies:Spawn("Chaser", Vector3.new(10, PLANE_Y, 0))
+		-- Two health: the first hit lands, the second kills.
+		local chaser = enemies:Spawn("Drifter", Vector3.new(10, PLANE_Y, 0))
 		local entry = { damage = 1, damagePerBounce = 0, contacts = 1, direction = Vector3.new(1, 0, 0), shooter = nil }
 
 		match:HandleImpact({ Instance = wall, Position = Vector3.zero, Normal = Vector3.new(1, 0, 0) }, entry, 0)

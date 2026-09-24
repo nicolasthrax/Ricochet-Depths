@@ -69,18 +69,43 @@ Clear medium-term goals ("reach level 50") and prominently shown long rewards he
 - **Feel:** colour-coded bursts, crit popups with "!", element-coloured damage numbers, bigger
   explosion bursts, pitch-shifted sounds, and a "CHAMPION SLAIN" callout.
 
-## Still missing (ranked by expected impact)
+## 2.0: the redesign of the fighting rooms
 
-1. **Music.** The game has no music. A lobby loop and a combat loop are the cheapest large gain in
-   atmosphere. Needs original uploaded audio.
-2. **Endless mode / a second boss.** After the Throne there is only the Pact. An endless descent with
-   a depth leaderboard would give the best players a goal with no ceiling.
-3. **Room choice.** Hades lets you pick between doors by their reward. A choice between two next
-   rooms (rare card, heal, coin cache) would add routing decisions.
-4. **Daily seeded challenge.** The same seed and Pact for everyone that day, with its own board.
-5. **Pact leaderboard.** Highest Heat extracted on the lobby wall (a new board needs lobby geometry).
-6. **Onboarding for the new systems.** Contextual hints for Rigs, the Pact and revives, matching the
-   existing hint system.
+After 1.3.0 the owner's verdict was that the rooms "just lack something". The numbers agreed:
+shots were free, enemies died in one or two hits, every room was one wave of the same job, and
+the player had one verb. 2.0 took every recommendation that followed:
+
+| Idea | Delivered as |
+|---|---|
+| Make every shot count | Orbs: 3, dropped where they stop, picked up or rolled home; trick-shot refunds |
+| Bounces power up every shot | +50% damage and +8% speed per bounce, growing and heating the shot |
+| A combo meter | Tiers x1.5 to x4 on coins and kill experience, called out, halved by a hit |
+| A dash | 15 studs, 0.35s invulnerable, with Blink Strike, Quick Step, Recall and Phantom |
+| Waves and swarms | 2–3 waves per room announced on the floor; Mite packs |
+| XP gems mid-room | The Surge meter and its non-blocking perk strip (a meter rather than pickups, so the floor stays readable with orbs and coins on it) |
+| Rooms with different jobs | Crystal Hunt, Hold the Beacon, Treasure Runners, the Trick Shot Gallery |
+| Things that react to shots | Barrels that chain, boost pads, portals, loot crates |
+| Enemies that react to ricochets | Mirror, Sponge, Magnet, Splitter King, and health bars |
+| Choose the next door | Two doors after every room, with six kinds of promise, voted on as a group |
+| A mini-boss per zone | The Colossus (Ruins) and the Forge Press (Foundry); the Warden Vault remains the Abyss's |
+| Optional challenges | Trials: Trick shots only, Untouchable, Swift, Frenzy |
+| More impact | Shatter shards, the room-clear flash and stamp, camera kicks, pulsing cues |
+
+Not delivered, and why: **slow motion on the last kill** (the server owns time; a client-only
+slow-down would desync what players see from where things are), **music tied to the combo**
+(there is no music to layer yet), **an Abyss twin mini-boss** (the Warden Vault already fills
+the slot), and **a shop door** (the Armoury and Surge Well doors cover "spend something here").
+
+## Still missing (ranked by expected impact, as of 2.0)
+
+1. **Music.** The game has no music. A lobby loop and a combat loop with a layer per combo tier
+   would be the cheapest large gain in atmosphere. Needs original uploaded audio.
+2. **Endless mode.** After the Throne there is only the Pact. An endless descent with a depth
+   leaderboard would give the best players a goal with no ceiling.
+3. **Daily seeded run.** The same seed, doors and Pact for everyone that day, with its own board.
+4. **Pact and combo leaderboards.** Highest Heat and best combo on the lobby wall (new boards
+   need lobby geometry).
+5. **Onboarding for Rigs, the Pact and revives**, matching the 2.0 hints.
 
 All of it still needs the Studio and live-server validation in `RELEASE_CHECKLIST.md`.
 

@@ -80,7 +80,73 @@ local function buildMarkers(model)
 	label.TextScaled = true
 	label.TextStrokeTransparency = 0.2
 	label.Parent = tag
-	return highlight, tag, label
+
+	-- A health bar for anything tougher than fodder, shown once it has been hurt.
+	local bar = Instance.new("BillboardGui")
+	bar.Name = "HealthBar"
+	bar.Size = UDim2.fromOffset(64, 7)
+	bar.StudsOffset = Vector3.new(0, 4.2, 0)
+	bar.AlwaysOnTop = true
+	bar.LightInfluence = 0
+	bar.Enabled = false
+	bar.Adornee = anchor
+	bar.Parent = model
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.Size = UDim2.fromScale(1, 1)
+	track.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+	track.BorderSizePixel = 0
+	track.Parent = bar
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(240, 90, 90)
+	fill.BorderSizePixel = 0
+	fill.Parent = track
+	return highlight, tag, label, bar, fill
+end
+
+-- The red floor ring a Forge Press shows before it slams. One part per model, kept outside the
+-- model so the status glow never outlines it.
+local function buildSlamRing()
+	local ring = Instance.new("Part")
+	ring.Name = "SlamRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = Color3.fromRGB(255, 60, 40)
+	ring.Transparency = 1
+	ring.Size = Vector3.new(0.2, 1, 1)
+	ring.Parent = folder
+	return ring
+end
+
+local function updateHealth(entry, body, shown)
+	local health, maxHealth = body:GetAttribute("Health"), body:GetAttribute("MaxHealth")
+	local wanted = shown and type(health) == "number" and type(maxHealth) == "number" and maxHealth >= 3 and health < maxHealth
+	entry.healthBar.Enabled = wanted == true
+	if wanted then
+		entry.healthFill.Size = UDim2.fromScale(math.clamp(health / maxHealth, 0, 1), 1)
+	end
+end
+
+local function updateSlam(entry, body, shown)
+	local radius = shown and body:GetAttribute("SlamRadius")
+	if type(radius) == "number" then
+		entry.slamRing = entry.slamRing or buildSlamRing()
+		local ring = entry.slamRing
+		ring.Size = Vector3.new(0.2, radius * 2, radius * 2)
+		ring.CFrame = CFrame.new(body.Position.X, body.Position.Y - body.Size.Y / 2 + 0.35, body.Position.Z)
+			* CFrame.Angles(0, 0, math.pi / 2)
+		-- Pulses faster as the slam nears.
+		ring.Transparency = 0.35 + 0.25 * math.sin(os.clock() * 18)
+	elseif entry.slamRing then
+		entry.slamRing.Transparency = 1
+	end
 end
 
 -- Chill shows over burning, and either over a champion's own glow.
@@ -115,14 +181,26 @@ local function entryFor(body)
 	end
 	if entry then
 		entry.model:Destroy()
+		if entry.slamRing then
+			entry.slamRing:Destroy()
+		end
 	end
 	if not EnemyVisualConfig.Archetypes[body.Name] then
 		entries[body] = nil
 		return nil
 	end
+	-- The first sighting of an enemy with a rule of its own, for a one-off hint (ClientMain).
+	if body.Name == "Mirror" or body.Name == "Magnet" or body.Name == "Sponge" or body.Name == "TreasureRunner" then
+		local player = game:GetService("Players").LocalPlayer
+		if player and not player:GetAttribute("Saw" .. body.Name) then
+			player:SetAttribute("Saw" .. body.Name, true)
+		end
+	end
 	local model = EnemyModels.Build(body.Name, folder)
-	local highlight, tag, tagLabel = buildMarkers(model)
+	local highlight, tag, tagLabel, healthBar, healthFill = buildMarkers(model)
 	entry = {
+		healthBar = healthBar,
+		healthFill = healthFill,
 		highlight = highlight,
 		tag = tag,
 		tagLabel = tagLabel,
@@ -188,8 +266,12 @@ local function updatePool(pool, now, dt, moveParts, moveFrames)
 				if EnemyModels.IsParked(body.Position) or (body.Transparency >= 1 and not phasing) then
 					setVisible(entry, false)
 					updateMarkers(entry, body, false)
+					updateHealth(entry, body, false)
+					updateSlam(entry, body, false)
 				else
 					updateMarkers(entry, body, not phasing)
+					updateHealth(entry, body, not phasing)
+					updateSlam(entry, body, true)
 					body.LocalTransparencyModifier = 1
 					entry.facing = facingFor(body, entry, dt)
 					applyColor(entry, body.Color)

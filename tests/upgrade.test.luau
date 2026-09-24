@@ -55,16 +55,18 @@ describe("UpgradeConfig", function()
 		end
 	end)
 
-	it("exposes exactly one unlimited-stack fallback card", function()
-		local fallbacks = 0
+	it("exposes exactly one unlimited-stack fallback card per pool", function()
+		local fallbacks = {}
 		for _, card in UpgradeConfig.Cards do
 			if card.IsFallback then
-				fallbacks += 1
+				local pool = card.Pool or "Main"
+				fallbacks[pool] = (fallbacks[pool] or 0) + 1
 				expect(card.MaxStacks).toBe(UpgradeConfig.UnlimitedStacks)
 				expect(card.Requires).toBeNil()
 			end
 		end
-		expect(fallbacks).toBe(1)
+		expect(fallbacks.Main).toBe(1)
+		expect(fallbacks.Minor).toBe(1)
 	end)
 end)
 

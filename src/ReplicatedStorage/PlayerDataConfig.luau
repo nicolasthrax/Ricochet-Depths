@@ -53,6 +53,9 @@ function PlayerDataConfig.DefaultProfile()
 			BestHeat = 0,
 			-- rig id -> true, for every rig this player has extracted with.
 			RigsExtracted = {},
+			-- 2.0: the longest combo ever, and kills that sent an orb straight home.
+			BestCombo = 0,
+			TrickShots = 0,
 		},
 		GrantedRuns = {},
 		-- Permanent salvage-shop purchases: item id -> level owned. Store-owned, like currency:

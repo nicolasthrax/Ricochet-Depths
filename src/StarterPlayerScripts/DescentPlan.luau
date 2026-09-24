@@ -43,7 +43,11 @@ function DescentPlan.For(previous, snapshot)
 			Text = "DESCENDING  ·  " .. zoneName(zone):upper(),
 		}
 	elseif state == States.Transition then
-		local zone = zoneOfSlot(RunConfig.RunShape[(snapshot.RoomIndex or 0) + 1]) or snapshot.Zone
+		-- The server says where the next room is; the run shape is only a fallback, since a
+		-- bonus room can shift everything after it by one.
+		local zone = (type(snapshot.NextZone) == "string" and snapshot.NextZone ~= "" and snapshot.NextZone)
+			or zoneOfSlot(RunConfig.RunShape[(snapshot.RoomIndex or 0) + 1])
+			or snapshot.Zone
 		return {
 			Kind = "Plunge",
 			Zone = zone,

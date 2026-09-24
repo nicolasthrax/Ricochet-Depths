@@ -2,6 +2,7 @@
 -- never writes to it.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
 local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -74,6 +75,89 @@ function PlayerState:ResetRun()
 	-- Second Wind lives spent, and how far a teammate has got reviving this player.
 	self.extraLivesUsed = 0
 	self.reviveProgress = 0
+	-- The arsenal: orbs in hand, the combo meter and the Surge meter, and the last dash.
+	self.orbsHeld = self:OrbCapacity()
+	self.combo = 0
+	self.comboExpiresAt = 0
+	self.bestCombo = 0
+	self.comboXp = 0
+	self.surge = 0
+	self.surgeLevel = 1
+	self.lastDashAt = -math.huge
+	self.trickShots = 0
+end
+
+function PlayerState:OrbCapacity()
+	return math.max(math.floor(self.stats.OrbCount or 1), 1)
+end
+
+-- Every orb back in hand, e.g. at the start of a room.
+function PlayerState:RefillOrbs()
+	self.orbsHeld = self:OrbCapacity()
+end
+
+function PlayerState:TakeOrb()
+	if self.orbsHeld < 1 then
+		return false
+	end
+	self.orbsHeld -= 1
+	return true
+end
+
+function PlayerState:ReturnOrb()
+	self.orbsHeld = math.min(self.orbsHeld + 1, self:OrbCapacity())
+end
+
+-- A kill joins the combo. Returns the tier index before and after, so a tier-up can be shown.
+function PlayerState:AddCombo(amount, now)
+	local _, before = ArsenalConfig.ComboTier(self.combo)
+	if now >= self.comboExpiresAt then
+		self.combo = 0
+	end
+	self.combo += amount
+	self.comboExpiresAt = now + ArsenalConfig.Combo.Window
+	self.bestCombo = math.max(self.bestCombo, self.combo)
+	local _, after = ArsenalConfig.ComboTier(self.combo)
+	return before, after
+end
+
+-- Taking a hit keeps only part of the combo. Returns true if it changed.
+function PlayerState:DamageCombo()
+	if self.combo <= 0 then
+		return false
+	end
+	self.combo = math.floor(self.combo * ArsenalConfig.Combo.HitKeeps)
+	return true
+end
+
+-- Runs the combo out once its window passes. Returns true if it just ended.
+function PlayerState:ExpireCombo(now)
+	if self.combo > 0 and now >= self.comboExpiresAt then
+		self.combo = 0
+		return true
+	end
+	return false
+end
+
+function PlayerState:ComboMultiplier()
+	return (ArsenalConfig.ComboTier(self.combo)).Multiplier
+end
+
+-- Adds Surge points. Returns true once the meter is full.
+function PlayerState:AddSurge(points)
+	self.surge += points * (self.stats.SurgeGain or 1)
+	return self.surge >= ArsenalConfig.SurgeNeeded(self.surgeLevel)
+end
+
+-- Spends a full meter for one Surge level. Returns false if it was not full.
+function PlayerState:SpendSurge()
+	local needed = ArsenalConfig.SurgeNeeded(self.surgeLevel)
+	if self.surge < needed then
+		return false
+	end
+	self.surge -= needed
+	self.surgeLevel += 1
+	return true
 end
 
 -- Folds every held card over the base stats. Add effects scale linearly with stacks,
@@ -123,7 +207,10 @@ function PlayerState:AddUpgrade(card)
 
 	self.upgrades[card.Id] = stacks + 1
 	table.insert(self.upgradeOrder, card.Id)
+	local capacity = self:OrbCapacity()
 	self:RecomputeStats()
+	-- A new orb arrives in hand.
+	self.orbsHeld = math.min(self.orbsHeld + math.max(self:OrbCapacity() - capacity, 0), self:OrbCapacity())
 	return true
 end
 
@@ -198,6 +285,9 @@ function PlayerState:ToSnapshot()
 	local upgrades = {}
 	for cardId, stacks in self.upgrades do
 		local card = UpgradeConfig.Get(cardId)
+		if UpgradeConfig.IsMinor(card) then
+			continue -- Surge perks show as the Surge level, not as a list
+		end
 		table.insert(upgrades, {
 			Id = cardId,
 			Title = card and card.Title or cardId,
@@ -224,6 +314,14 @@ function PlayerState:ToSnapshot()
 		Rig = self.meta.rig,
 		ExtraLivesLeft = math.max(math.floor(self.stats.ExtraLives or 0) - self.extraLivesUsed, 0),
 		ReviveProgress = self.reviveProgress,
+		Orbs = self.orbsHeld,
+		OrbsMax = self:OrbCapacity(),
+		Combo = self.combo,
+		ComboWindow = ArsenalConfig.Combo.Window,
+		Surge = self.surge,
+		SurgeNeeded = ArsenalConfig.SurgeNeeded(self.surgeLevel),
+		SurgeLevel = self.surgeLevel,
+		DashCooldown = ArsenalConfig.Dash.Cooldown * (self.stats.DashCooldownMultiplier or 1),
 	}
 end
 

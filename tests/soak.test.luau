@@ -178,16 +178,18 @@ describe("repeated runs", function()
 			step(RunConfig.StartCountdown + DT)
 
 			for roomIndex = 1, RunConfig.RoomCount() do
-				local guard = 0
-				while enemies:GetActiveCount() > 0 and guard < 600 do
-					guard += 1
-					local enemy = enemies:GetEnemies()[1]
-					match:HandleImpact(
-						{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
-						{ direction = Vector3.new(0, 0, 1), damage = 99, damagePerBounce = 0, contacts = 1, shooter = subject },
-						clock
-					)
-				end
+				__clearRoom(match._rooms, function()
+					local guard = 0
+					while enemies:GetActiveCount() > 0 and guard < 600 do
+						guard += 1
+						local enemy = enemies:GetEnemies()[1]
+						match:HandleImpact(
+							{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
+							{ direction = Vector3.new(0, 0, 1), damage = 99, damagePerBounce = 0, contacts = 1, wallBounces = 1, shooter = subject },
+							clock
+						)
+					end
+				end, step)
 				step(DT)
 				if roomIndex < RunConfig.RoomCount() then
 					local offer = upgrades:GetOffer(subject)

@@ -71,6 +71,9 @@ function Membership.methods:UnregisterPlayer(player, now)
 	removeFrom(self._participants, player)
 	removeFrom(self._pendingJoins, player)
 	self._upgrades:Clear(player)
+	if self._surges then
+		self._surges:Clear(player)
+	end
 	self._states[player] = nil
 	MatchCombat.ClearPlayer(player)
 

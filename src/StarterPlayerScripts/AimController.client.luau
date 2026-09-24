@@ -28,8 +28,13 @@ local activeInput = nil
 local activeDeadzone = AimConfig.DeadzonePixels
 local lastFireAt = -math.huge
 
--- Mirrors the server's cooldown so a refused shot is visible before it is sent.
+-- Mirrors the server's cooldown and orb count so a refused shot is visible before it is sent.
+-- Orbs is published by ClientMain from the player's state; nil (orbs off) never blocks.
 local function isReady()
+	local orbs = player:GetAttribute("Orbs")
+	if type(orbs) == "number" and orbs < 1 then
+		return false
+	end
 	local cooldown = player:GetAttribute("FireCooldown")
 	if type(cooldown) ~= "number" then
 		return true
@@ -154,14 +159,98 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 
 	if not isReady() then
+		if type(player:GetAttribute("Orbs")) == "number" and player:GetAttribute("Orbs") < 1 then
+			SoundPlayer.Shared():Play("ShieldBlock", { volume = 0.4 })
+		end
 		return -- the server would refuse it; do not spend bandwidth on the attempt
 	end
 
 	local worldDirection = worldDirectionFor(aimScreen)
 	if worldDirection then
 		lastFireAt = os.clock()
+		-- Spent at once on this client, so a quick second tap is not wasted on an empty hand;
+		-- the server's count arrives a moment later and replaces this guess.
+		local orbs = player:GetAttribute("Orbs")
+		if type(orbs) == "number" then
+			player:SetAttribute("Orbs", math.max(orbs - 1, 0))
+		end
 		fireProjectile:FireServer(worldDirection, power)
 		-- Heard the instant the shot is sent: waiting for the server would make it feel laggy.
 		SoundPlayer.Shared():Play("Fire")
 	end
+end)
+
+--// dash ---------------------------------------------------------------------------
+-- Q, Left Shift or the gamepad's B. The client moves its own character (it owns its physics)
+-- with a short burst of velocity; the server keeps the cooldown and grants the i-frames.
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
+local dashRemote = Remotes.Get("Dash")
+local DASH_KEYS = { [Enum.KeyCode.Q] = true, [Enum.KeyCode.LeftShift] = true, [Enum.KeyCode.ButtonB] = true }
+local lastDashAt = -math.huge
+
+local function dashHeading(rootPart, humanoid)
+	local moving = humanoid and humanoid.MoveDirection
+	if moving and moving.Magnitude > 0.1 then
+		return Vector3.new(moving.X, 0, moving.Z).Unit
+	end
+	local look = rootPart.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	return flat.Magnitude > 1e-3 and flat.Unit or Vector3.new(0, 0, -1)
+end
+
+local function dash()
+	if not FeatureFlags.IsEnabled("Dash") or not canAim() then
+		return
+	end
+	local cooldown = player:GetAttribute("DashCooldown")
+	cooldown = type(cooldown) == "number" and cooldown or ArsenalConfig.Dash.Cooldown
+	if os.clock() - lastDashAt < cooldown then
+		return
+	end
+	local character = player.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not rootPart or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+	lastDashAt = os.clock()
+	player:SetAttribute("DashReadyAt", lastDashAt + cooldown)
+	local heading = dashHeading(rootPart, humanoid)
+	local config = ArsenalConfig.Dash
+
+	local attachment = rootPart:FindFirstChild("DashAttachment") or Instance.new("Attachment")
+	attachment.Name = "DashAttachment"
+	attachment.Parent = rootPart
+	local push = rootPart:FindFirstChild("DashVelocity") or Instance.new("LinearVelocity")
+	push.Name = "DashVelocity"
+	push.Attachment0 = attachment
+	push.MaxForce = math.huge
+	push.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	push.PrimaryTangentAxis = Vector3.new(1, 0, 0)
+	push.SecondaryTangentAxis = Vector3.new(0, 0, 1)
+	push.RelativeTo = Enum.ActuatorRelativeTo.World
+	local speed = config.Distance / config.Duration
+	push.PlaneVelocity = Vector2.new(heading.X * speed, heading.Z * speed)
+	push.Parent = rootPart
+	push.Enabled = true
+	dashRemote:FireServer(heading)
+	SoundPlayer.Shared():Play("WallBounce", { pitch = 0.7 })
+	task.delay(config.Duration, function()
+		push.Enabled = false
+	end)
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+	if DASH_KEYS[input.KeyCode] then
+		dash()
+	end
+end)
+
+-- The HUD's DASH button (touch) asks through this attribute's signal.
+player:GetAttributeChangedSignal("DashRequest"):Connect(function()
+	dash()
 end)

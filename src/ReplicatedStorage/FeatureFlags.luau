@@ -28,6 +28,21 @@ FeatureFlags.Leaderboards = true
 -- Off hides the lobby buttons and unbinds the remotes; runs then use the Striker at Heat 0.
 FeatureFlags.Loadouts = true
 
+-- 2.0, the redesign. Each can be switched off on its own and the game plays as 1.3 did there.
+-- Orbs: a limited number of shots that drop where they stop and must be picked up.
+FeatureFlags.Orbs = true
+-- The Surge meter and its mid-fight perks.
+FeatureFlags.Surge = true
+-- Combo multipliers on coins and experience (the combo count is always shown).
+FeatureFlags.Combo = true
+-- The dash (and its cards).
+FeatureFlags.Dash = true
+-- Doors after every room, and room challenges.
+FeatureFlags.Doors = true
+FeatureFlags.Challenges = true
+-- Random room events (Treasure Runners).
+FeatureFlags.RoomEvents = true
+
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false
 FeatureFlags.BaseBuilding = false

@@ -116,6 +116,15 @@ function ResultsView:Show(summary)
 	if (tonumber(summary.Crits) or 0) > 0 then
 		extra(string.format("Critical hits: %d", summary.Crits))
 	end
+	if (tonumber(summary.BestCombo) or 0) >= 2 then
+		extra(string.format("Best combo: %d", summary.BestCombo), UiConfig.Colors.Gold)
+	end
+	if (tonumber(summary.TrickShots) or 0) > 0 then
+		extra(string.format("Trick shots: %d", summary.TrickShots), UiConfig.Colors.Accent)
+	end
+	if (tonumber(summary.SurgeLevel) or 0) > 0 then
+		extra(string.format("Surge perks: %d", summary.SurgeLevel), Color3.fromRGB(255, 120, 200))
+	end
 	if (tonumber(summary.RevivesGiven) or 0) > 0 then
 		extra(string.format("Teammates revived: %d", summary.RevivesGiven), UiConfig.Colors.Health)
 	end

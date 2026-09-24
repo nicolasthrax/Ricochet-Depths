@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local FireValidator = require(script.Parent.FireValidator)
+local MatchArsenal = require(script.Parent.MatchArsenal)
 local MatchEffects = require(script.Parent.MatchEffects)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
@@ -45,7 +46,14 @@ function Combat.methods:HandleFire(player, direction, power, now)
 		return false, validDirection
 	end
 
+	-- A throw spends an orb; with none in hand there is nothing to throw.
+	if not self:_takeOrb(player, state) then
+		return false, "no orbs"
+	end
+
 	local count = math.max(1, math.floor(state.stats.ProjectilesPerShot))
+	-- The middle projectile of the fan is the orb itself; the rest are its echoes.
+	local orbIndex = math.ceil(count / 2)
 	local options = {
 		damage = state.stats.Damage,
 		bounces = math.floor(state.stats.BounceBudget),
@@ -57,11 +65,16 @@ function Combat.methods:HandleFire(player, direction, power, now)
 		stats = state.stats,
 	}
 
-	local fired = 0
-	for _, heading in spreadDirections(validDirection, count, state.stats.SpreadDegrees) do
+	local fired, orbFlying = 0, false
+	for index, heading in spreadDirections(validDirection, count, state.stats.SpreadDegrees) do
+		options.carriesOrb = index == orbIndex and self:_orbsOn()
 		if self._projectiles:Fire(player, rootPart.Position, heading, validPower, options) then
 			fired += 1
+			orbFlying = orbFlying or options.carriesOrb
 		end
+	end
+	if self:_orbsOn() and not orbFlying then
+		self:_returnOrb(player) -- the orb never left, so it is still in hand
 	end
 
 	state.shotsFired += 1
@@ -85,23 +98,43 @@ end
 function Combat.methods:HandleImpact(result, entry, now)
 	-- Breakable cover takes the hit first; the shot still ricochets off it.
 	local mechanics = self._rooms:GetMechanics()
-	local struck = mechanics and mechanics:HandleImpact(result.Instance)
+	local struck, detail = nil, nil
+	if mechanics then
+		struck, detail = mechanics:HandleImpact(result.Instance, entry)
+	end
 	if struck then
 		if self._effects then
-			self._effects:Queue(result.Position, result.Normal, struck == "Broken" and "Kill" or "Hit", entry.contacts, 0)
+			self._effects:Queue(result.Position, result.Normal, struck == "Broken" and "Kill" or struck == "Exploded" and "Blast" or "Hit",
+				entry.contacts, 0)
 		end
-		if struck == "Broken" then
-			self:_log("CoverBroken", { RunId = self._runId, Room = self._roomIndex }, now)
+		if struck == "Broken" or struck == "Exploded" then
+			self:_onMechanicBroken(struck, detail, entry.shooter, now)
 		end
+		self:_onBounce(entry)
+		return false
+	end
+	-- Objective pieces (crystals, gallery targets) take the hit next; shots bounce off them too.
+	if self:_objectiveImpact(result, entry, now) then
+		self:_onBounce(entry)
 		return false
 	end
 
 	local stats = entry.stats or self:_statsOf(entry.shooter)
-	local base = entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0)
+	local base = (entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0))
+		* MatchArsenal.BounceMultiplier(stats, entry.wallBounces)
 	local damage, crit = base, false
 	local enemy = self._enemies:GetByPart(result.Instance)
 	if enemy and not enemy.dead then
 		damage, crit = MatchEffects.ShotDamage(stats, base, entry.contacts, enemy, now, self._random)
+		local archetype = enemy.archetype
+		-- Mirrors turn aside anything that has not bounced first.
+		if archetype.RequiresBank and (entry.wallBounces or 0) == 0 then
+			damage, crit = 0, false
+		end
+		-- Sponges soak up whatever bounces a shot had left.
+		if archetype.AbsorbsBounces then
+			entry.bouncesLeft = 0
+		end
 	end
 
 	local hit = self._enemies:ApplyHit(result.Instance, damage, entry.direction, entry.shooter)
@@ -113,6 +146,7 @@ function Combat.methods:HandleImpact(result, entry, now)
 		self._effects:Queue(result.Position, result.Normal, kind, entry.contacts, hit and hit.damage or 0)
 	end
 	if not hit then
+		self:_onBounce(entry)
 		return false -- geometry: let it ricochet
 	end
 
@@ -121,7 +155,10 @@ function Combat.methods:HandleImpact(result, entry, now)
 		if crit and state then
 			state.crits += 1
 		end
-		self:_afterHit(hit, stats, entry.shooter, entry.contacts, hit.damage, "Shot", now)
+		self:_afterHit(hit, stats, entry.shooter, entry.contacts, hit.damage, "Shot", now, entry)
+		if hit.killed then
+			self:_checkTrickShot(entry, now)
+		end
 	end
 
 	-- By default shots ricochet off enemies too, which is what lets a single shot chain kills.
@@ -139,6 +176,8 @@ function Combat.methods:HandlePlayerContact(player, damage, _enemy, now)
 	if applied <= 0 then
 		return
 	end
+	state:DamageCombo()
+	self:_onPlayerHurt(player, now)
 	self:_pushPlayerState(player)
 
 	if savedByExtraLife then

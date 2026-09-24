@@ -172,3 +172,21 @@ function __finishTests()
 		error("test suite failed", 0)
 	end
 end
+
+-- Clears a room completely through the caller's own functions: every wave, and any objective.
+-- killAll() kills whatever is alive; step(seconds) advances the match (so a wave announced on
+-- the floor has time to arrive). Objective rooms are marked done: RoomObjectives has its own
+-- tests, and a run-through test only needs the room behind it.
+function __clearRoom(rooms, killAll, step)
+	for _ = 1, 16 do
+		local objective = rooms.GetObjective and rooms:GetObjective()
+		if objective and not objective:IsComplete() then
+			objective._complete = true
+		end
+		killAll()
+		if not (rooms.HasPendingWaves and rooms:HasPendingWaves()) then
+			return
+		end
+		step(1.6)
+	end
+end

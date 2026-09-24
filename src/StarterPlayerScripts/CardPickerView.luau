@@ -9,9 +9,11 @@ local UiTheme = require(script.Parent.UiTheme)
 local CardPickerView = {}
 CardPickerView.__index = CardPickerView
 
-function CardPickerView.new(playerGui, onChoose)
+-- onVote(doorId), optional: the player chose a door for the next room.
+function CardPickerView.new(playerGui, onChoose, onVote)
 	local self = setmetatable({}, CardPickerView)
 	self._onChoose = onChoose
+	self._onVote = onVote
 	self._cards = {}
 
 	self.gui = UiTheme.screenGui("RicochetCardPicker", playerGui, 20)
@@ -65,6 +67,8 @@ function CardPickerView:_clear()
 end
 
 function CardPickerView:Show(payload)
+	self._stage = "Cards"
+	self.title.Text = "Choose an upgrade"
 	self:_clear()
 	self._offerId = payload.OfferId
 	-- The server sends how long is left, and the deadline is computed against this machine's
@@ -79,8 +83,8 @@ function CardPickerView:Show(payload)
 
 		local button = UiTheme.button("Card" .. index, self.row, "")
 		button.LayoutOrder = index
-		-- Sized in scale so three cards still fit on a narrow phone screen.
-		button.Size = UDim2.new(0.3, 0, 1, 0)
+		-- Sized in scale so three (or an Armoury's four) cards still fit on a narrow phone screen.
+		button.Size = UDim2.new(#payload.Cards > 3 and 0.23 or 0.3, 0, 1, 0)
 		button.BackgroundColor3 = UiConfig.Colors.PanelRaised
 		UiTheme.padding(button, 12)
 
@@ -133,15 +137,111 @@ function CardPickerView:Show(payload)
 end
 
 function CardPickerView:UpdateTimer(now)
-	if not self.gui.Enabled or not self._deadline then
+	if not self.gui.Enabled or not self._deadline or self._stage == "Doors" then
 		return
 	end
 	local remaining = math.max(self._deadline - now, 0)
 	self.timerLabel.Text = string.format("Auto-picks in %.0fs", remaining)
 end
 
+--// doors ------------------------------------------------------------------------
+
+local ZONE_COLORS = {
+	Ruins = Color3.fromRGB(190, 210, 255),
+	Foundry = Color3.fromRGB(255, 176, 96),
+	Abyss = Color3.fromRGB(200, 150, 255),
+}
+
+-- The latest doors from the run snapshot ({ Doors, SecondsLeft }), or nil when there are none.
+-- While the door stage is showing it redraws with the new votes.
+function CardPickerView:SetDoors(doors)
+	self._doors = type(doors) == "table" and type(doors.Doors) == "table" and doors or nil
+	if self._stage == "Doors" and self.gui.Enabled then
+		self:_renderDoors()
+	end
+end
+
+function CardPickerView:HasDoors()
+	return self._doors ~= nil
+end
+
+-- After the card: the doors to the next room. Returns false when there are none to show.
+function CardPickerView:ShowDoors()
+	if not self._doors then
+		return false
+	end
+	self._stage = "Doors"
+	self._voted = nil
+	self:_renderDoors()
+	self.gui.Enabled = true
+	return true
+end
+
+function CardPickerView:_renderDoors()
+	self:_clear()
+	local doors = self._doors
+	self.title.Text = "Choose your path"
+	self.timerLabel.Text = self._voted and string.format("Waiting for the others...  %ds", doors.SecondsLeft or 0)
+		or string.format("The group votes. Closes in %ds", doors.SecondsLeft or 0)
+	for index, door in doors.Doors do
+		local button = UiTheme.button("Door" .. index, self.row, "")
+		button.LayoutOrder = index
+		button.Size = UDim2.new(0.42, 0, 1, 0)
+		button.BackgroundColor3 = UiConfig.Colors.PanelRaised
+		UiTheme.padding(button, 12)
+		local sizeConstraint = Instance.new("UISizeConstraint")
+		sizeConstraint.MaxSize = Vector2.new(280, 300)
+		sizeConstraint.Parent = button
+		local chosen = self._voted == door.Id
+		local edge = button:FindFirstChildOfClass("UIStroke")
+		if edge then
+			edge.Color = chosen and UiConfig.Colors.Gold or (ZONE_COLORS[door.Zone] or UiConfig.Colors.Accent)
+			edge.Thickness = chosen and 3 or 1.5
+			edge.Transparency = chosen and 0 or 0.4
+		end
+
+		local room = UiTheme.label("Room", button, door.RoomName, UiConfig.Text.CardTitle, ZONE_COLORS[door.Zone] or UiConfig.Colors.Text)
+		room.Font = UiConfig.FontDisplay
+		room.Size = UDim2.new(1, 0, 0, 30)
+		room.TextWrapped = true
+		local kind = door.Kind == "MiniBoss" and "MINI-BOSS" or door.Kind == "Boss" and "BOSS"
+			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM" or ""
+		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small, UiConfig.Colors.Danger)
+		sub.Position = UDim2.new(0, 0, 0, 30)
+		sub.Size = UDim2.new(1, 0, 0, 16)
+		local reward = UiTheme.label("Reward", button, door.RewardTitle, UiConfig.Text.Hud, UiConfig.Colors.Gold)
+		reward.Font = UiConfig.FontBold
+		reward.Position = UDim2.new(0, 0, 0, 54)
+		reward.Size = UDim2.new(1, 0, 0, 22)
+		local body = UiTheme.label("Body", button, door.RewardText, UiConfig.Text.CardBody, UiConfig.Colors.TextMuted)
+		body.Position = UDim2.new(0, 0, 0, 78)
+		body.Size = UDim2.new(1, 0, 1, -104)
+		body.TextWrapped = true
+		body.TextYAlignment = Enum.TextYAlignment.Top
+		local votes = UiTheme.label("Votes", button, (door.Votes or 0) > 0 and string.format("%d vote%s", door.Votes,
+			door.Votes == 1 and "" or "s") or "", UiConfig.Text.Small, UiConfig.Colors.Health)
+		votes.AnchorPoint = Vector2.new(0, 1)
+		votes.Position = UDim2.new(0, 0, 1, 0)
+		votes.Size = UDim2.new(1, 0, 0, 18)
+
+		button.Activated:Connect(function()
+			if self._voted == door.Id then
+				return
+			end
+			self._voted = door.Id
+			if self._onVote then
+				self._onVote(door.Id)
+			end
+			self:_renderDoors()
+		end)
+		table.insert(self._cards, button)
+	end
+end
+
 function CardPickerView:Hide()
 	self.gui.Enabled = false
+	self._stage = nil
+	self._voted = nil
 	self:_clear()
 	self._offerId = nil
 	self._deadline = nil

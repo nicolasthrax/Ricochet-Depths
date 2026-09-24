@@ -31,6 +31,24 @@ function RunPlanner.Plan(random)
 	return plan
 end
 
+-- Rooms that could fill `slot` besides those in `used`, shuffled with `random`.
+function RunPlanner.Candidates(slot, used, random)
+	local candidates = {}
+	if slot.Room then
+		return candidates
+	end
+	for _, candidate in RunConfig.Rooms do
+		if candidate.Zone == slot.Zone and candidate.Tier == slot.Tier and not used[candidate.Id] then
+			table.insert(candidates, candidate)
+		end
+	end
+	for index = #candidates, 2, -1 do
+		local swap = random:NextInteger(1, index)
+		candidates[index], candidates[swap] = candidates[swap], candidates[index]
+	end
+	return candidates
+end
+
 -- A plan of named rooms, in order. For tests and tools that need a known sequence.
 function RunPlanner.Fixed(roomIds)
 	local plan = {}

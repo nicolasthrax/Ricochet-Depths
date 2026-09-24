@@ -163,6 +163,135 @@ EnemyVisualConfig.Archetypes = {
 			{ Name = "Spark", Shape = "Ball", Size = Vector3.new(0.7, 0.7, 0.7), Count = 8, Radius = 3.2, Height = 0.6, Speed = -110, Tilt = 30, Role = "Glow" },
 		},
 	},
+
+	--// 2.0 ---------------------------------------------------------------------
+
+	-- Swarm fodder: a skittering tick with a bright back, small enough to read as "one of many".
+	Mite = {
+		Bob = 0.08,
+		BobRate = 7,
+		Parts = {
+			part("Body", "Ball", Vector3.new(1.6, 1.1, 1.8), Vector3.new(0, -2.2, 0), "Body"),
+			part("Back", "Ball", Vector3.new(1.0, 0.6, 1.1), Vector3.new(0, -1.7, 0.1), "Glow"),
+			part("Eye", "Ball", Vector3.new(0.35, 0.35, 0.35), Vector3.new(0, -2.0, -0.85), "Eye"),
+			part("LegLeft", "Block", Vector3.new(1.8, 0.15, 0.2), Vector3.new(0, -2.6, -0.3), "Dark"),
+			part("LegRight", "Block", Vector3.new(1.8, 0.15, 0.2), Vector3.new(0, -2.6, 0.4), "Dark"),
+		},
+	},
+
+	-- A walking mirror: a tall polished slab with a single eye, flanked by glass fins.
+	Mirror = {
+		Bob = 0.15,
+		BobRate = 1.3,
+		Parts = {
+			part("Slab", "Block", Vector3.new(2.4, 4.0, 0.6), Vector3.new(0, -0.6, 0), "Body"),
+			part("Frame", "Block", Vector3.new(2.7, 4.3, 0.3), Vector3.new(0, -0.6, 0.35), "Dark"),
+			part("Eye", "Ball", Vector3.new(0.6, 0.6, 0.6), Vector3.new(0, 0.6, -0.4), "Eye"),
+			part("FinLeft", "Wedge", Vector3.new(0.3, 2.2, 1.2), Vector3.new(-1.5, -1.2, 0), "Glow"),
+			part("FinRight", "Wedge", Vector3.new(0.3, 2.2, 1.2), Vector3.new(1.5, -1.2, 0), "Glow"),
+		},
+		Rings = {
+			{ Name = "Glint", Shape = "Ball", Size = Vector3.new(0.3, 0.3, 0.3), Count = 3, Radius = 1.9, Height = 0.8, Speed = 160, Tilt = 0, Role = "Glow" },
+		},
+	},
+
+	-- A bloated sac on stubby legs, pocked with pores that drink shots.
+	Sponge = {
+		Bob = 0.2,
+		BobRate = 0.9,
+		Parts = {
+			part("Sac", "Ball", Vector3.new(3.4, 3.0, 3.4), Vector3.new(0, -0.9, 0), "Body"),
+			part("PoreA", "Ball", Vector3.new(0.7, 0.7, 0.7), Vector3.new(-0.9, -0.3, -1.4), "Dark"),
+			part("PoreB", "Ball", Vector3.new(0.6, 0.6, 0.6), Vector3.new(0.8, -1.2, -1.45), "Dark"),
+			part("PoreC", "Ball", Vector3.new(0.5, 0.5, 0.5), Vector3.new(0.2, 0.3, -1.5), "Dark"),
+			part("Eye", "Ball", Vector3.new(0.5, 0.5, 0.5), Vector3.new(0, -0.8, -1.6), "Eye"),
+			part("Foot", "Block", Vector3.new(2.6, 0.5, 2.6), Vector3.new(0, -2.7, 0), "Dark"),
+		},
+	},
+
+	-- A horseshoe magnet on a plinth, with sparks circling between its poles.
+	Magnet = {
+		Bob = 0.1,
+		BobRate = 1.8,
+		Parts = {
+			part("Plinth", "Block", Vector3.new(2.8, 0.8, 2.8), Vector3.new(0, -2.5, 0), "Dark"),
+			part("ArmLeft", "Block", Vector3.new(0.8, 3.2, 0.8), Vector3.new(-0.9, -0.5, 0), "Body"),
+			part("ArmRight", "Block", Vector3.new(0.8, 3.2, 0.8), Vector3.new(0.9, -0.5, 0), "Body"),
+			part("Bridge", "Block", Vector3.new(2.6, 0.8, 0.8), Vector3.new(0, -1.9, 0), "Body"),
+			part("PoleLeft", "Block", Vector3.new(0.85, 0.6, 0.85), Vector3.new(-0.9, 1.3, 0), "Glow"),
+			part("PoleRight", "Block", Vector3.new(0.85, 0.6, 0.85), Vector3.new(0.9, 1.3, 0), "Glow"),
+		},
+		Rings = {
+			{ Name = "Spark", Shape = "Ball", Size = Vector3.new(0.35, 0.35, 0.35), Count = 5, Radius = 2.4, Height = 0.6, Speed = -240, Tilt = 70, Role = "Glow" },
+		},
+	},
+
+	-- The Splitter's elder: a great crystal crown that cracks into three.
+	SplitterKing = {
+		Bob = 0.12,
+		BobRate = 0.9,
+		Parts = {
+			part("Core", "Block", Vector3.new(2.8, 4.0, 2.8), Vector3.new(0, -0.6, 0), "Body"),
+			part("FacetLeft", "Wedge", Vector3.new(1.6, 3.4, 2.4), Vector3.new(-1.9, -1.0, 0), "Body"),
+			part("FacetRight", "Wedge", Vector3.new(1.6, 3.4, 2.4), Vector3.new(1.9, -1.0, 0), "Body"),
+			part("Seam", "Block", Vector3.new(0.4, 4.2, 2.9), Vector3.new(0, -0.6, 0), "Glow"),
+			part("CrownLeft", "Wedge", Vector3.new(0.5, 1.2, 1.0), Vector3.new(-0.9, 2.0, 0), "Glow"),
+			part("CrownRight", "Wedge", Vector3.new(0.5, 1.2, 1.0), Vector3.new(0.9, 2.0, 0), "Glow"),
+			part("Eye", "Ball", Vector3.new(0.7, 0.7, 0.7), Vector3.new(0, 0.6, -1.45), "Eye"),
+			part("Base", "Block", Vector3.new(4.2, 0.5, 4.2), Vector3.new(0, -2.7, 0), "Dark"),
+		},
+	},
+
+	-- A hooded thief hunched under a glowing sack of coins.
+	TreasureRunner = {
+		Bob = 0.25,
+		BobRate = 5,
+		Parts = {
+			part("Body", "Ball", Vector3.new(1.8, 2.0, 1.8), Vector3.new(0, -1.6, 0), "Dark"),
+			part("Hood", "Wedge", Vector3.new(1.6, 1.2, 1.6), Vector3.new(0, -0.2, -0.1), "Dark"),
+			part("Eye", "Block", Vector3.new(0.9, 0.2, 0.2), Vector3.new(0, -0.3, -0.8), "Eye"),
+			part("Sack", "Ball", Vector3.new(1.8, 1.8, 1.8), Vector3.new(0, -0.9, 1.1), "Body"),
+			part("Knot", "Ball", Vector3.new(0.6, 0.6, 0.6), Vector3.new(0, 0.1, 1.1), "Glow"),
+		},
+		Rings = {
+			{ Name = "Coin", Shape = "Block", Size = Vector3.new(0.6, 0.6, 0.15), Count = 4, Radius = 1.6, Height = -0.4, Speed = 200, Tilt = 20, Role = "Glow" },
+		},
+	},
+
+	-- The Ruins mini-boss: a squat stone statue with glowing runes and a heavy brow.
+	Colossus = {
+		Bob = 0,
+		Parts = {
+			part("Torso", "Block", Vector3.new(5.6, 3.6, 4.6), Vector3.new(0, -0.9, 0), "Body"),
+			part("Head", "Block", Vector3.new(3.0, 1.6, 2.6), Vector3.new(0, 1.8, -0.2), "Body"),
+			part("Brow", "Block", Vector3.new(3.2, 0.5, 0.6), Vector3.new(0, 2.2, -1.5), "Dark"),
+			part("Eyes", "Block", Vector3.new(2.0, 0.3, 0.3), Vector3.new(0, 1.7, -1.55), "Eye"),
+			part("RuneChest", "Block", Vector3.new(1.4, 1.4, 0.3), Vector3.new(0, -0.6, -2.35), "Glow"),
+			part("ArmLeft", "Block", Vector3.new(1.4, 3.8, 1.6), Vector3.new(-3.4, -1.0, 0), "Dark"),
+			part("ArmRight", "Block", Vector3.new(1.4, 3.8, 1.6), Vector3.new(3.4, -1.0, 0), "Dark"),
+			part("FootLeft", "Block", Vector3.new(1.8, 0.8, 2.6), Vector3.new(-1.5, -2.6, 0), "Dark"),
+			part("FootRight", "Block", Vector3.new(1.8, 0.8, 2.6), Vector3.new(1.5, -2.6, 0), "Dark"),
+		},
+		Rings = {
+			{ Name = "Rune", Shape = "Block", Size = Vector3.new(0.5, 0.8, 0.2), Count = 6, Radius = 4.4, Height = 1.2, Speed = 40, Tilt = 0, Role = "Glow" },
+		},
+	},
+
+	-- The Foundry mini-boss: a hovering press head with a glowing underside and piston rods.
+	ForgePress = {
+		Bob = 0.3,
+		BobRate = 0.8,
+		Parts = {
+			part("Head", "Block", Vector3.new(6.2, 1.8, 6.2), Vector3.new(0, 1.3, 0), "Body"),
+			part("Plate", "Block", Vector3.new(5.6, 0.4, 5.6), Vector3.new(0, 0.1, 0), "Glow"),
+			part("RodA", "Block", Vector3.new(0.6, 1.4, 0.6), Vector3.new(-2.2, 2.5, -2.2), "Dark"),
+			part("RodB", "Block", Vector3.new(0.6, 1.4, 0.6), Vector3.new(2.2, 2.5, -2.2), "Dark"),
+			part("RodC", "Block", Vector3.new(0.6, 1.4, 0.6), Vector3.new(-2.2, 2.5, 2.2), "Dark"),
+			part("RodD", "Block", Vector3.new(0.6, 1.4, 0.6), Vector3.new(2.2, 2.5, 2.2), "Dark"),
+			part("Eye", "Block", Vector3.new(2.4, 0.4, 0.3), Vector3.new(0, 1.4, -3.15), "Eye"),
+			part("Shadow", "Block", Vector3.new(5, 0.1, 5), Vector3.new(0, -2.9, 0), "Dark"),
+		},
+	},
 }
 
 return EnemyVisualConfig

@@ -38,6 +38,8 @@ local NET_EVENTS = {
 	"RunResults",
 	"EnemyDefeated",
 	"Notify",
+	"SurgeOffer",
+	"SurgeResolved",
 }
 
 function GameBootstrap.Start()

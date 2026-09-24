@@ -61,7 +61,7 @@ describe("EnemyService damage", function()
 		service.OnDeath = function()
 			deaths += 1
 		end
-		local enemy = service:Spawn("Drifter", Vector3.new(0, PLANE_Y, 0))
+		local enemy = service:Spawn("Mite", Vector3.new(0, PLANE_Y, 0))
 		local part = enemy.part
 
 		local result = service:ApplyHit(part, 1, Vector3.new(0, 0, 1), nil)

@@ -79,16 +79,20 @@ local function makePlayers(count)
 end
 
 local function wipeRoom(ctx, shooter)
-	local guard = 0
-	while ctx.enemies:GetActiveCount() > 0 and guard < 800 do
-		guard += 1
-		local enemy = ctx.enemies:GetEnemies()[1]
-		ctx.match:HandleImpact(
-			{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
-			{ direction = Vector3.new(0, 0, 1), damage = 100, damagePerBounce = 0, contacts = 2, shooter = shooter },
-			clock
-		)
-	end
+	__clearRoom(ctx.match._rooms, function()
+		local guard = 0
+		while ctx.enemies:GetActiveCount() > 0 and guard < 800 do
+			guard += 1
+			local enemy = ctx.enemies:GetEnemies()[1]
+			ctx.match:HandleImpact(
+				{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
+				{ direction = Vector3.new(0, 0, 1), damage = 100, damagePerBounce = 0, contacts = 2, wallBounces = 1, shooter = shooter },
+				clock
+			)
+		end
+	end, function(seconds)
+		step(ctx, seconds)
+	end)
 end
 
 local function resolveAllOffers(ctx, players)

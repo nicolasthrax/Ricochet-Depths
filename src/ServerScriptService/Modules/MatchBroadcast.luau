@@ -16,13 +16,25 @@ function Broadcast.methods:GetRunSnapshot()
 		RoomCount = #self._plan > 0 and #self._plan or RunConfig.RoomCount(),
 		RoomName = definition and definition.DisplayName or "",
 		Zone = definition and definition.Zone or "",
+		-- The zone of the room after this one, for the descent between them. Taken from the plan,
+		-- not the run shape, since a bonus room can shift the order.
+		NextZone = self._plan[self._roomIndex + 1] and self._plan[self._roomIndex + 1].Zone or nil,
 		RoomKind = definition and definition.Kind or "",
 		EnemiesRemaining = self._rooms:GetRemaining(),
 		Players = #self._participants,
 		Boss = self:_bossSnapshot(current),
 		Heat = self._pactEffects and self._pactEffects.Heat or 0,
 		Downed = self:_downedSnapshot(),
+		Wave = self._rooms.GetWaveInfo and self._rooms:GetWaveInfo() or nil,
+		Objective = self:_objectiveSnapshot(),
+		Challenge = self._challengeSnapshot and self:_challengeSnapshot() or nil,
+		Doors = self._state == RunConfig.States.UpgradeChoice and self._doorsSnapshot and self:_doorsSnapshot(self._now) or nil,
 	}
+end
+
+function Broadcast.methods:_objectiveSnapshot()
+	local objective = self._rooms.GetObjective and self._rooms:GetObjective()
+	return objective and objective:Snapshot(self._now) or nil
 end
 
 -- Downed teammates and how far along their revive is, while anyone is down in a group run.
@@ -47,7 +59,7 @@ end
 
 -- The boss bar's data while a boss is alive in the current room; nil otherwise.
 function Broadcast.methods:_bossSnapshot(current)
-	local boss = current and current.boss
+	local boss = current and (current.boss or current.miniBoss)
 	if not boss or boss.dead then
 		return nil
 	end
@@ -55,7 +67,7 @@ function Broadcast.methods:_bossSnapshot(current)
 		Name = boss.archetype.DisplayName,
 		Health = math.max(boss.health, 0),
 		MaxHealth = boss.maxHealth,
-		Phase = self._enemies.BossPhase(boss),
+		Phase = boss.archetype.Phases and self._enemies.BossPhase(boss) or nil,
 	}
 end
 

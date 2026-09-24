@@ -66,6 +66,27 @@ function RemoteRouter:Bind()
 		end
 	end)
 
+	self:_connect("Dash", "Dash", function(player, now, direction)
+		local match = self._matchFor(player)
+		if match and match.HandleDash then
+			match:HandleDash(player, typeof(direction) == "Vector3" and direction or nil, now)
+		end
+	end)
+
+	self:_connect("ChooseSurge", "ChooseSurge", function(player, now, offerId, cardId)
+		local match = self._matchFor(player)
+		if match and match.ChooseSurge then
+			match:ChooseSurge(player, offerId, cardId, now)
+		end
+	end)
+
+	self:_connect("ChooseDoor", "ChooseDoor", function(player, now, doorId)
+		local match = self._matchFor(player)
+		if match and match.ChooseDoor then
+			match:ChooseDoor(player, doorId, now)
+		end
+	end)
+
 	self:_connect("RequestStartRun", "RequestStartRun", function(player, now)
 		if self._onStartRequest then
 			self._onStartRequest(player, now)

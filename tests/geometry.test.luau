@@ -137,7 +137,9 @@ describe("RoomBuilder angled geometry", function()
 				end
 				expect(part.Size.X).toBeCloseTo(solid.Size.X)
 				expect(part.Size.Z).toBeCloseTo(solid.Size.Y)
-				expect(part.Size.Y).toBeCloseTo(RoomConfig.WallHeight)
+				-- Everything stands wall-high except explosive barrels, which are low props.
+				local height = solid.Kind == "Barrel" and RoomConfig.Mechanics.BarrelHeight or RoomConfig.WallHeight
+				expect(part.Size.Y).toBeCloseTo(height)
 				expect(part.CFrame.Position.X).toBeCloseTo(solid.Center.X)
 				expect(part.CFrame.Position.Z).toBeCloseTo(solid.Center.Y)
 				-- A yaw of theta turns the part's -Z look vector to (-sin theta, 0, -cos theta).

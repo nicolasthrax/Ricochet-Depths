@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "1.3.0"
+RunConfig.Version = "2.0.0"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -31,6 +31,8 @@ RunConfig.Regen = {
 RunConfig.SpawnInvulnerability = 2.5
 RunConfig.StartCountdown = 3
 RunConfig.TransitionDuration = 2.5
+-- How long the group has to vote on the next door (it closes early once everyone has voted).
+RunConfig.DoorVoteSeconds = 14
 RunConfig.ResultsDuration = 15
 
 -- Target descent length. Room count and spawn budgets are tuned against this.
@@ -41,7 +43,7 @@ RunConfig.RoomTimeLimit = 150
 -- the time runs out the run ends out of time, without the extraction bonus.
 RunConfig.BossRoomTimeLimit = 300
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
-RunConfig.HardRunTimeLimit = 1200
+RunConfig.HardRunTimeLimit = 1800
 -- A player this far below the room's floor has fallen out of the world; they are put back on
 -- the spawn pad instead of dying in the void and respawning in the lobby.
 RunConfig.FallRescueDepth = 30
@@ -75,6 +77,9 @@ RunConfig.RemoteRules = {
 	SelectRig = { Cooldown = 0.4, Burst = 3 },
 	SetPact = { Cooldown = 0.3, Burst = 4 },
 	ClaimAchievement = { Cooldown = 0.4, Burst = 3 },
+	Dash = { Cooldown = 0.25, Burst = 2 },
+	ChooseSurge = { Cooldown = 0.2, Burst = 3 },
+	ChooseDoor = { Cooldown = 0.2, Burst = 4 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
@@ -99,8 +104,16 @@ RunConfig.Zones = {
 
 -- Every room a run can draw. Zone and Tier place a room in the run shape below; Markers pin a
 -- spawn group to the layout's EnemySpawns, otherwise groups take markers in order.
+--
+-- 2.0: rooms fight in waves. Spawns is the first wave; each entry of Waves arrives later,
+-- announced by circles on the floor, once WhenRemaining or fewer enemies are left (or After
+-- seconds pass). An Objective room keeps its waves coming, looping, until the job is done.
+local function wave(spawns, whenRemaining, after)
+	return { Spawns = spawns, WhenRemaining = whenRemaining or 1, After = after or 18 }
+end
+
 RunConfig.Rooms = {
-	-- Upper Ruins: teaching rooms. Drifters to learn the ricochet on, then the first Chasers.
+	-- Upper Ruins: teaching rooms. Drifters to learn the ricochet on, then Mites to chain.
 	{
 		Id = "Atrium",
 		DisplayName = "Collapsed Atrium",
@@ -108,7 +121,10 @@ RunConfig.Rooms = {
 		Zone = "Ruins",
 		Tier = 1,
 		Kind = "Normal",
-		Spawns = { { Archetype = "Drifter", Count = 6 } },
+		Spawns = { { Archetype = "Drifter", Count = 5 } },
+		Waves = {
+			wave({ { Archetype = "Mite", Count = 6, Markers = { 1, 2, 3, 4, 5, 6 } } }),
+		},
 	},
 	{
 		Id = "Cistern",
@@ -118,8 +134,14 @@ RunConfig.Rooms = {
 		Tier = 1,
 		Kind = "Normal",
 		Spawns = {
-			{ Archetype = "Drifter", Count = 5 },
+			{ Archetype = "Drifter", Count = 4 },
 			{ Archetype = "Chaser", Count = 1, Markers = { 5 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Mite", Count = 5, Markers = { 1, 2, 3, 4, 6 } },
+				{ Archetype = "Chaser", Count = 1, Markers = { 8 } },
+			}),
 		},
 	},
 	{
@@ -130,8 +152,15 @@ RunConfig.Rooms = {
 		Tier = 2,
 		Kind = "Normal",
 		Spawns = {
-			{ Archetype = "Drifter", Count = 4 },
-			{ Archetype = "Chaser", Count = 3 },
+			{ Archetype = "Drifter", Count = 3 },
+			{ Archetype = "Chaser", Count = 2, Markers = { 5, 6 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Mirror", Count = 1, Markers = { 1 } },
+				{ Archetype = "Mite", Count = 6, Markers = { 2, 3, 4, 7, 8, 5 } },
+			}),
+			wave({ { Archetype = "Chaser", Count = 2, Markers = { 5, 6 } } }),
 		},
 	},
 	{
@@ -149,9 +178,48 @@ RunConfig.Rooms = {
 			{ Archetype = "Chaser", Count = 4, Markers = { 1, 2, 3, 4 } },
 			{ Archetype = "Bulwark", Count = 1, Markers = { 9 } },
 		},
+		Waves = {
+			wave({
+				{ Archetype = "Mirror", Count = 1, Markers = { 5 } },
+				{ Archetype = "Mite", Count = 5, Markers = { 1, 2, 3, 4, 7 } },
+			}),
+		},
+	},
+	-- Crystal Hunt: four crystals only a bank shot can crack, while the Ruins keep sending
+	-- more. Breaking the last one wins the room.
+	{
+		Id = "Reliquary",
+		DisplayName = "Sunken Reliquary",
+		Layout = "Atrium",
+		Zone = "Ruins",
+		Tier = 2,
+		Kind = "Normal",
+		Objective = {
+			Kind = "Crystals",
+			Spots = { Vector2.new(-42, 42), Vector2.new(42, 42), Vector2.new(-24, -44), Vector2.new(24, -44) },
+		},
+		Spawns = { { Archetype = "Drifter", Count = 3, Markers = { 4, 5, 6 } } },
+		Waves = {
+			wave({ { Archetype = "Mite", Count = 5, Markers = { 2, 4, 5, 6, 1 } } }, 3, 12),
+			wave({ { Archetype = "Chaser", Count = 2, Markers = { 4, 5 } }, { Archetype = "Mirror", Count = 1, Markers = { 6 } } }, 3, 14),
+		},
+	},
+	-- Ruins mini-boss.
+	{
+		Id = "ColossusHall",
+		DisplayName = "Hall of the Colossus",
+		Layout = "Colosseum",
+		Zone = "Ruins",
+		Tier = 3,
+		Kind = "MiniBoss",
+		Spawns = {
+			{ Archetype = "Colossus", Count = 1, Markers = { 1 } },
+			{ Archetype = "Mite", Count = 4, Markers = { 2, 3, 5, 6 } },
+		},
+		HealOnClear = 0.35,
 	},
 
-	-- The Foundry: tighter lanes and more Chasers; Bulwarks start guarding the back rooms.
+	-- The Foundry: tighter lanes, barrels, and enemies that punish straight shooting.
 	{
 		Id = "Smelter",
 		DisplayName = "Cold Smelter",
@@ -163,6 +231,12 @@ RunConfig.Rooms = {
 			{ Archetype = "Drifter", Count = 2 },
 			{ Archetype = "Chaser", Count = 3, Markers = { 1, 2, 4 } },
 			{ Archetype = "Sentinel", Count = 1, Markers = { 3 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Sponge", Count = 1, Markers = { 5 } },
+				{ Archetype = "Mite", Count = 6, Markers = { 1, 2, 4, 6, 7, 8 } },
+			}),
 		},
 	},
 	{
@@ -176,6 +250,12 @@ RunConfig.Rooms = {
 			{ Archetype = "Splitter", Count = 2, Markers = { 1, 2 } },
 			{ Archetype = "Chaser", Count = 2, Markers = { 3, 4 } },
 			{ Archetype = "Drifter", Count = 2, Markers = { 6, 7 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Mirror", Count = 2, Markers = { 1, 2 } },
+				{ Archetype = "Mite", Count = 5, Markers = { 3, 4, 5, 6, 7 } },
+			}),
 		},
 	},
 	{
@@ -191,6 +271,12 @@ RunConfig.Rooms = {
 			{ Archetype = "Splitter", Count = 1, Markers = { 8 } },
 			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
 		},
+		Waves = {
+			wave({
+				{ Archetype = "SplitterKing", Count = 1, Markers = { 2 } },
+				{ Archetype = "Mite", Count = 4, Markers = { 1, 3, 4, 5 } },
+			}),
+		},
 	},
 	{
 		Id = "Forgeworks",
@@ -205,9 +291,45 @@ RunConfig.Rooms = {
 			{ Archetype = "Chaser", Count = 2, Markers = { 3, 4 } },
 			{ Archetype = "Splitter", Count = 1, Markers = { 6 } },
 		},
+		Waves = {
+			wave({
+				{ Archetype = "Sponge", Count = 2, Markers = { 5, 6 } },
+				{ Archetype = "Mite", Count = 6, Markers = { 1, 2, 3, 4, 7, 8 } },
+			}),
+		},
+	},
+	-- Hold the Beacon: stand in the ring while the Foundry throws everything at you.
+	{
+		Id = "SignalTower",
+		DisplayName = "Signal Tower",
+		Layout = "Smelter",
+		Zone = "Foundry",
+		Tier = 2,
+		Kind = "Normal",
+		Objective = { Kind = "Beacon", Spot = Vector2.new(0, -6) },
+		Spawns = { { Archetype = "Chaser", Count = 2, Markers = { 1, 2 } } },
+		Waves = {
+			wave({ { Archetype = "Mite", Count = 6, Markers = { 1, 2, 4, 5, 6, 7 } } }, 3, 7),
+			wave({ { Archetype = "Splitter", Count = 2, Markers = { 1, 2 } }, { Archetype = "Drifter", Count = 2, Markers = { 4, 5 } } }, 3, 8),
+			wave({ { Archetype = "Sentinel", Count = 1, Markers = { 3 } }, { Archetype = "Mite", Count = 5, Markers = { 1, 2, 6, 7, 8 } } }, 3, 8),
+		},
+	},
+	-- Foundry mini-boss.
+	{
+		Id = "ForgeHall",
+		DisplayName = "The Forge Hall",
+		Layout = "ForgeHall",
+		Zone = "Foundry",
+		Tier = 3,
+		Kind = "MiniBoss",
+		Spawns = {
+			{ Archetype = "ForgePress", Count = 1, Markers = { 1 } },
+			{ Archetype = "Mite", Count = 4, Markers = { 2, 3, 5, 6 } },
+		},
+		HealOnClear = 0.35,
 	},
 
-	-- The Abyss: the hardest mixes, then the Warden itself.
+	-- The Abyss: the hardest mixes, magnets that bend your shots, then the Warden itself.
 	{
 		Id = "Rift",
 		DisplayName = "The Rift",
@@ -220,6 +342,12 @@ RunConfig.Rooms = {
 			{ Archetype = "Phaser", Count = 2, Markers = { 5, 6 } },
 			{ Archetype = "Chaser", Count = 2, Markers = { 7, 8 } },
 			{ Archetype = "Drifter", Count = 2, Markers = { 3, 4 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Magnet", Count = 1, Markers = { 2 } },
+				{ Archetype = "Mite", Count = 6, Markers = { 1, 3, 4, 5, 6, 7 } },
+			}),
 		},
 	},
 	{
@@ -234,6 +362,12 @@ RunConfig.Rooms = {
 			{ Archetype = "Phaser", Count = 2, Markers = { 1, 2 } },
 			{ Archetype = "Chaser", Count = 3, Markers = { 5, 6, 7 } },
 		},
+		Waves = {
+			wave({
+				{ Archetype = "Mirror", Count = 2, Markers = { 1, 2 } },
+				{ Archetype = "Mite", Count = 5, Markers = { 4, 5, 6, 7, 8 } },
+			}),
+		},
 	},
 	{
 		Id = "Hollow",
@@ -247,6 +381,13 @@ RunConfig.Rooms = {
 			{ Archetype = "Sentinel", Count = 1, Markers = { 6 } },
 			{ Archetype = "Phaser", Count = 2, Markers = { 2, 3 } },
 			{ Archetype = "Chaser", Count = 2, Markers = { 7, 8 } },
+		},
+		Waves = {
+			wave({
+				{ Archetype = "Magnet", Count = 1, Markers = { 4 } },
+				{ Archetype = "Sponge", Count = 1, Markers = { 5 } },
+				{ Archetype = "Mite", Count = 5, Markers = { 1, 2, 3, 7, 8 } },
+			}),
 		},
 	},
 	{
@@ -278,12 +419,15 @@ RunConfig.Rooms = {
 }
 
 -- The shape of every run: one room per slot, drawn at random from the rooms matching the
--- slot's Zone and Tier (never the same room twice), or the fixed Room named.
+-- slot's Zone and Tier (never the same room twice), or the fixed Room named. 2.0: each zone
+-- ends in a mini-boss, and after every room the group chooses the next door.
 RunConfig.RunShape = {
 	{ Zone = "Ruins", Tier = 1 },
 	{ Zone = "Ruins", Tier = 2 },
+	{ Room = "ColossusHall" },
 	{ Zone = "Foundry", Tier = 1 },
 	{ Zone = "Foundry", Tier = 2 },
+	{ Room = "ForgeHall" },
 	{ Zone = "Abyss", Tier = 1 },
 	{ Room = "WardenVault" },
 	{ Room = "Throne" },

@@ -6,6 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CoinDrops = require(script.Parent.CoinDrops)
 local EffectBroadcaster = require(script.Parent.EffectBroadcaster)
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local OrbDrops = require(script.Parent.OrbDrops)
 local EnemyService = require(script.Parent.EnemyService)
 local MatchService = require(script.Parent.MatchService)
 local ProjectileService = require(script.Parent.ProjectileService)
@@ -71,6 +73,19 @@ function ArenaDirector:_createSlot(index)
 	deps.upgrades = UpgradeService.new(seed)
 	deps.rewards = RewardService.new()
 	deps.seed = seed -- crit rolls
+	-- 2.0's systems, each behind its own flag.
+	deps.orbDrops = OrbDrops.new(arena)
+	deps.arsenal = {
+		orbs = FeatureFlags.IsEnabled("Orbs"),
+		surge = FeatureFlags.IsEnabled("Surge"),
+		combo = FeatureFlags.IsEnabled("Combo"),
+		dash = FeatureFlags.IsEnabled("Dash"),
+	}
+	deps.route = {
+		doors = FeatureFlags.IsEnabled("Doors"),
+		challenges = FeatureFlags.IsEnabled("Challenges"),
+		events = FeatureFlags.IsEnabled("RoomEvents"),
+	}
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs
 	-- would share a payout key and the profile ledger would refuse the second.

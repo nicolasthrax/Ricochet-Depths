@@ -3,7 +3,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
+local ObjectiveConfig = require(ReplicatedStorage:WaitForChild("ObjectiveConfig"))
+local PartPool = require(script.Parent.PartPool)
 local RoomBuilder = require(script.Parent.RoomBuilder)
+local RoomObjectives = require(script.Parent.RoomObjectives)
 local RoomMechanics = require(script.Parent.RoomMechanics)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RoomGeometry = require(ReplicatedStorage:WaitForChild("RoomGeometry"))
@@ -11,6 +14,30 @@ local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
 local RoomService = {}
 RoomService.__index = RoomService
+
+-- Waves: a later wave is announced by glowing circles on the floor for TelegraphTime seconds
+-- before its enemies arrive, so nothing ever spawns on top of a player unannounced.
+RoomService.WaveTelegraph = 1.4
+RoomService.MarkerPoolSize = 16
+local MARKER_STORAGE = Vector3.new(0, -500, 0)
+
+local function createMarker()
+	local part = Instance.new("Part")
+	part.Name = "WaveMarker"
+	part.Shape = Enum.PartType.Cylinder
+	part.Size = Vector3.new(0.2, 5, 5)
+	part.Color = Color3.fromRGB(255, 70, 90)
+	part.Material = Enum.Material.Neon
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Position = MARKER_STORAGE
+	part:SetAttribute("WaveMarker", true)
+	return part
+end
 
 -- origin (default the world origin) is where this service's rooms are centred: each arena slot
 -- builds its rooms at its own origin, so several runs can share a server.
@@ -31,6 +58,19 @@ function RoomService.new(arenaFolder, enemyService, planeY, random, origin, cham
 	}, RoomService)
 end
 
+-- Random room events (Treasure Runners). Off unless a match asks for them, so seeded rooms in
+-- tests hold exactly the enemies their definitions list.
+function RoomService:SetEvents(events)
+	self._events = type(events) == "table" and events or nil
+end
+
+function RoomService:_markers()
+	if not self._markerPool then
+		self._markerPool = PartPool.new("WaveMarkers", self._arena, RoomService.MarkerPoolSize, createMarker)
+	end
+	return self._markerPool
+end
+
 function RoomService:SetChampionBonus(bonus)
 	self._championBonus = math.max(tonumber(bonus) or 0, 0)
 end
@@ -49,6 +89,11 @@ function RoomService:_rollChampion(definition, archetypeId)
 	return order[self._championRandom:NextInteger(1, #order)]
 end
 
+-- The loaded room's objective (RoomObjectives), or nil.
+function RoomService:GetObjective()
+	return self._current and self._current.objective
+end
+
 function RoomService:GetCurrent()
 	return self._current
 end
@@ -59,12 +104,26 @@ function RoomService:GetMechanics()
 end
 
 function RoomService:Unload()
+	self:_hideMarkers()
 	if self._room then
 		self._room:Destroy()
 		self._room = nil
 	end
 	self._enemies:Clear()
 	self._current = nil
+end
+
+function RoomService:_hideMarkers()
+	local current = self._current
+	local telegraph = current and current.waveTelegraph
+	if telegraph then
+		for _, marker in telegraph.markers do
+			marker.Transparency = 1
+			marker.Position = MARKER_STORAGE
+			self._markerPool:Release(marker)
+		end
+		current.waveTelegraph = nil
+	end
 end
 
 -- Which marker each enemy in a room definition takes, as { archetype, marker } in spawn order.
@@ -114,42 +173,146 @@ function RoomService:Load(roomDefinition, now)
 		Vector2.new(self._origin.X, self._origin.Z)
 	))
 
-	local spawned, failed = 0, 0
-	local elite, boss = nil, nil
-	for _, assignment in RoomService.AssignSpawns(roomDefinition, layout) do
-		local champion = self:_rollChampion(roomDefinition, assignment.archetype)
-		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker),
-			champion and { champion = champion } or nil)
-		if enemy then
-			spawned += 1
-			if enemy.archetype.IsElite then
-				elite = enemy
-			end
-			if enemy.archetype.IsBoss then
-				boss = enemy
-			end
-		else
-			failed += 1
-		end
-	end
-
 	self._current = {
 		mechanics = RoomMechanics.new(room, layout, self._origin),
 		definition = roomDefinition,
 		bounds = bounds,
 		layout = layout,
-		spawned = spawned,
-		failed = failed,
-		elite = elite,
-		boss = boss,
 		startedAt = now,
 		escortNextAt = now + ((roomDefinition.EscortRespawn and roomDefinition.EscortRespawn.Delay) or math.huge),
 		forcedClear = false,
+		spawned = 0,
+		failed = 0,
+		-- Later waves (roomDefinition.Waves); the first is Spawns, placed below.
+		waves = roomDefinition.Waves or {},
+		nextWave = 1,
+		waveStartedAt = now,
+		waveTelegraph = nil,
 	}
-	return self._current
+	local current = self._current
+	self:_spawnGroup(roomDefinition.Spawns, layout, roomDefinition)
+	if roomDefinition.Objective then
+		current.objective = RoomObjectives.new(room, roomDefinition.Objective, self._origin, bounds.center.Y, now, self._championRandom)
+	end
+	self:_maybeRunner(roomDefinition, layout)
+	return current
+end
+
+-- Spawns one group of enemies (a room's Spawns, or one wave's), at its assigned markers or at
+-- `positions` when a wave already announced them.
+function RoomService:_spawnGroup(spawns, layout, definition, positions)
+	local current = self._current
+	for index, assignment in RoomService.AssignSpawns({ Spawns = spawns or {} }, layout) do
+		local champion = self:_rollChampion(definition, assignment.archetype)
+		local position = positions and positions[index] or self:_spawnPositionFor(layout, assignment.marker)
+		local enemy = self._enemies:Spawn(assignment.archetype, position, champion and { champion = champion } or nil)
+		if enemy then
+			current.spawned += 1
+			if enemy.archetype.IsElite then
+				current.elite = current.elite or enemy
+			end
+			if enemy.archetype.IsBoss then
+				current.boss = enemy
+			end
+			if enemy.archetype.IsMiniBoss then
+				current.miniBoss = enemy
+			end
+		else
+			current.failed += 1
+		end
+	end
+end
+
+-- A Treasure Runner, sometimes, when events are on.
+function RoomService:_maybeRunner(definition, layout)
+	if not self._events or not self._events.runners or definition.Kind ~= "Normal" or definition.Objective then
+		return
+	end
+	local chance = ObjectiveConfig.RunnerChance[definition.Zone] or 0
+	if self._championRandom:NextNumber() >= chance then
+		return
+	end
+	local marker = self._championRandom:NextInteger(1, #layout.EnemySpawns)
+	local runner = self._enemies:Spawn("TreasureRunner", self:_spawnPositionFor(layout, marker))
+	if runner then
+		self._current.runner = runner
+	end
+end
+
+-- Whether another wave is still to come (or looping, while an objective wants more).
+function RoomService:_waveDue()
+	local current = self._current
+	if #current.waves == 0 then
+		return false
+	end
+	if current.objective then
+		return current.objective:WantsWaves()
+	end
+	return current.nextWave <= #current.waves
+end
+
+-- Announces the next wave: circles on the floor where it will arrive.
+function RoomService:_announceWave(now)
+	local current = self._current
+	local index = ((current.nextWave - 1) % #current.waves) + 1
+	local wave = current.waves[index]
+	current.nextWave += 1
+	local positions, markers = {}, {}
+	local pool = self:_markers()
+	for slot, assignment in RoomService.AssignSpawns({ Spawns = wave.Spawns }, current.layout) do
+		local position = self:_spawnPositionFor(current.layout, assignment.marker)
+		positions[slot] = position
+		local marker = pool:Acquire()
+		if marker then
+			marker.CFrame = CFrame.new(position.X, current.bounds.center.Y + 0.4, position.Z) * CFrame.Angles(0, 0, math.pi / 2)
+			marker.Transparency = 0.25
+			table.insert(markers, marker)
+		end
+	end
+	current.waveTelegraph = { at = now + RoomService.WaveTelegraph, wave = wave, positions = positions, markers = markers }
+end
+
+function RoomService:_stepWaves(now)
+	local current = self._current
+	local telegraph = current.waveTelegraph
+	if telegraph then
+		if now >= telegraph.at then
+			local wave, positions = telegraph.wave, telegraph.positions
+			self:_hideMarkers()
+			self:_spawnGroup(wave.Spawns, current.layout, current.definition, positions)
+			current.waveStartedAt = now
+		end
+		return
+	end
+	if not self:_waveDue() then
+		return
+	end
+	local wave = current.waves[((current.nextWave - 1) % #current.waves) + 1]
+	if self:GetRemaining() <= (wave.WhenRemaining or 1) or now - current.waveStartedAt >= (wave.After or 14) then
+		self:_announceWave(now)
+	end
+end
+
+-- Whether more enemies are on the way: a wave announced, or one still to come.
+function RoomService:HasPendingWaves()
+	local current = self._current
+	return current ~= nil and (current.waveTelegraph ~= nil or self:_waveDue())
+end
+
+-- Wave progress for the HUD: this wave and how many there are (nil for a single-wave room).
+function RoomService:GetWaveInfo()
+	local current = self._current
+	if not current or #current.waves == 0 or current.objective then
+		return nil
+	end
+	local arrived = current.nextWave - (current.waveTelegraph and 1 or 0)
+	return { Wave = math.min(arrived, #current.waves + 1), Waves = #current.waves + 1, Incoming = current.waveTelegraph ~= nil }
 end
 
 function RoomService:GetRemaining()
+	if self._enemies.GetRequiredCount then
+		return self._enemies:GetRequiredCount()
+	end
 	return self._enemies:GetActiveCount()
 end
 
@@ -163,11 +326,22 @@ function RoomService:IsCleared(now)
 	if current.forcedClear then
 		return true
 	end
-	if current.spawned == 0 then
-		return true
-	end
-	if self:GetRemaining() == 0 then
-		return true
+	local objective = current.objective
+	if objective then
+		if objective:IsComplete() then
+			-- The job is done: whatever is left flees.
+			self:_hideMarkers()
+			self._enemies:Clear()
+			return true
+		end
+	else
+		local wavesDone = not current.waveTelegraph and not self:_waveDue()
+		if current.spawned == 0 and wavesDone then
+			return true
+		end
+		if self:GetRemaining() == 0 and wavesDone then
+			return true
+		end
 	end
 	local limit = current.boss and RunConfig.BossRoomTimeLimit or RunConfig.RoomTimeLimit
 	if now - current.startedAt >= limit then
@@ -178,13 +352,18 @@ function RoomService:IsCleared(now)
 	return false
 end
 
--- Elite rooms keep a small escort alive while the core lives, so the fight keeps pressure on.
-function RoomService:Step(deltaTime, now)
+-- Mechanics, waves and the objective move on; elite rooms keep a small escort alive while the
+-- core lives, so the fight keeps pressure on. positions are the live players' (for objectives).
+function RoomService:Step(deltaTime, now, positions)
 	local current = self._current
 	if not current then
 		return
 	end
 	current.mechanics:Step(deltaTime, now)
+	if current.objective then
+		current.objective:Step(deltaTime, now, positions)
+	end
+	self:_stepWaves(now)
 
 	local respawn = current.definition.EscortRespawn
 	if not respawn or not current.elite or current.elite.dead then

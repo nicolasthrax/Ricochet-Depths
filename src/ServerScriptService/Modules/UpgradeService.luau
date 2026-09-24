@@ -7,8 +7,11 @@ local UpgradeConfig = require(ReplicatedStorage:WaitForChild("UpgradeConfig"))
 local UpgradeService = {}
 UpgradeService.__index = UpgradeService
 
-function UpgradeService.new(seed)
+-- pool is nil for the between-room cards, or "Minor" for Surge perks; each service only ever
+-- offers cards from its own pool.
+function UpgradeService.new(seed, pool)
 	return setmetatable({
+		_pool = pool,
 		_random = Random.new(seed or 1),
 		_offers = {},
 		_nextOfferId = 0,
@@ -47,7 +50,7 @@ end
 function UpgradeService:GetEligibleCards(playerState)
 	local eligible = {}
 	for _, card in UpgradeConfig.Cards do
-		if UpgradeService.IsEligible(card, playerState) then
+		if card.Pool == self._pool and UpgradeService.IsEligible(card, playerState) then
 			table.insert(eligible, card)
 		end
 	end
@@ -77,12 +80,28 @@ end
 -- and drawn without replacement. The unlimited-stack fallback card guarantees the pool is never
 -- empty. A fused card the player qualifies for is always among them: an evolution is the payoff
 -- a build was working toward, and it should never be lost to a bad roll.
-function UpgradeService:BuildOffer(playerKey, playerState, now, count)
+--
+-- options (optional): { rare = true } makes sure at least one card is Rare or better.
+function UpgradeService:BuildOffer(playerKey, playerState, now, count, options)
 	local candidates = self:GetEligibleCards(playerState)
 	local cards = {}
+	if options and options.rare then
+		local rares = {}
+		for index, card in candidates do
+			if card.Rarity ~= "Common" then
+				table.insert(rares, index)
+			end
+		end
+		if #rares > 0 then
+			table.insert(cards, table.remove(candidates, rares[self._random:NextInteger(1, #rares)]))
+		end
+	end
+	-- One qualifying evolution, if there is any and none is in the offer yet.
+	local hasFused = cards[1] ~= nil and cards[1].Rarity == "Fused"
 	for index = #candidates, 1, -1 do
-		if #cards < 1 and candidates[index].Rarity == "Fused" and candidates[index].Requires then
+		if not hasFused and candidates[index].Rarity == "Fused" and candidates[index].Requires then
 			table.insert(cards, table.remove(candidates, index))
+			hasFused = true
 		end
 	end
 	for _ = #cards + 1, count or UpgradeConfig.OffersPerEvent do
@@ -95,7 +114,7 @@ function UpgradeService:BuildOffer(playerKey, playerState, now, count)
 	if #cards == 0 then
 		-- Deterministic last resort: the fallback card is always takeable.
 		for _, card in UpgradeConfig.Cards do
-			if card.IsFallback then
+			if card.IsFallback and card.Pool == self._pool then
 				table.insert(cards, card)
 				break
 			end
@@ -106,7 +125,7 @@ function UpgradeService:BuildOffer(playerKey, playerState, now, count)
 	local offer = {
 		id = self._nextOfferId,
 		cards = cards,
-		expiresAt = now + UpgradeConfig.ChoiceTimeout,
+		expiresAt = now + (options and options.timeout or UpgradeConfig.ChoiceTimeout),
 		resolved = false,
 		playerKey = playerKey,
 	}

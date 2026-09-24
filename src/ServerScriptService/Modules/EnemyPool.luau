@@ -79,6 +79,9 @@ function EnemyPool:Release(part)
 	part:SetAttribute("Champion", nil)
 	part:SetAttribute("Burning", nil)
 	part:SetAttribute("Chilled", nil)
+	part:SetAttribute("Health", nil)
+	part:SetAttribute("MaxHealth", nil)
+	part:SetAttribute("SlamRadius", nil)
 	part.Position = EnemyConfig.StoragePosition
 	local shield = part:FindFirstChild("Shield")
 	if shield then

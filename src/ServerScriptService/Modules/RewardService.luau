@@ -36,6 +36,7 @@ function RewardService.Experience(playerState, outcome, eliteCleared, heatMultip
 	local rates = ProgressionConfig.Xp
 	local xp = (playerState.kills or 0) * rates.PerKill + (playerState.roomsCleared or 0) * rates.PerRoomCleared
 		+ (playerState.championKills or 0) * CombatConfig.ChampionXp
+		+ (playerState.comboXp or 0)
 	if eliteCleared then
 		xp += rates.EliteCleared
 	end

@@ -19,6 +19,9 @@ local REMOTE_NAMES = {
 	"SelectRig", -- rig id; unlock level checked server-side
 	"SetPact", -- { [conditionId] = rank }; sanitised and unlock-checked server-side
 	"ClaimAchievement", -- achievement id
+	"Dash", -- the dash's heading; the client moves itself, the server grants i-frames and effects
+	"ChooseSurge", -- surge offer id + perk id
+	"ChooseDoor", -- door id, a vote for the next room
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -34,7 +37,9 @@ local REMOTE_NAMES = {
 	"LobbyReadyState", -- ready pads: how many are ready and the start countdown
 	"DebugStats", -- developer overlay only; sent to allowlisted users
 	"MetaSync", -- daily streak and today's quests for this player
-	"Notify", -- a toast: { Text, Kind = "Reward" | "Quest" | "Info" | "Error" }
+	"Notify", -- a toast: { Text, Kind = "Reward" | "Quest" | "Info" | "Error" }; "Callout" is a big centre call
+	"SurgeOffer", -- three Surge perks to pick from mid-fight
+	"SurgeResolved", -- which perk was taken
 }
 
 local Remotes = {}

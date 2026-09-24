@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.3.0` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `2.0.0` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -15,7 +15,8 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 | `luau-compile` on all sources | PASS | 100 sources + 38 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` or `tests/` |
 | `rojo build` | PASS | Rojo 7.7.0 |
-| Headless test suite | PASS | 612 tests, 0 failures |
+| Headless test suite | PASS | 655 tests, 0 failures |
+| 2.0 redesign | PASS | orbs (spend, drop, pickup, roll home, trick shot), bounce power, dash (i-frames, cooldown, Blink Strike, Recall), combo, Surge (pool, auto-pick), waves, Mirror/Sponge/Magnet/Runner, barrels (chains), boost pads, portals (exits clear of cover), loot, Crystal Hunt, Beacon, Gallery, doors and votes, Trials, mini-bosses, a full nine-room descent with everything on |
 | Shot effects, champions | PASS | crits, burns (full duration), arcs, chained explosions, chill, Siphon, Second Wind; champion stats, orb ring, regen, reuse clears tags |
 | Rigs, Pact, Journal | PASS | unlock rules, lobby-only, read-only refusals, group Pact merge, Heat reaching a real run, one claim per achievement, schema v8 migration |
 | Co-op revives | PASS | revive in range, drain out of range, helper credit, solo never |
@@ -66,6 +67,27 @@ fallback. Everything else is unverified.
 - [ ] Journal: claim OutAlive after an extraction; the Codex fills in as you play
 - [ ] Second Wind: a fatal hit shows "SECOND WIND!" and leaves you at half health
 
+## 2c. 2.0 redesign (Play Solo). Highest risk first.
+
+- [ ] **Dash:** Q / Shift / DASH moves the character about 15 studs quickly and smoothly
+      (client LinearVelocity in Plane mode); it does not fling, stick, or fight the Humanoid;
+      the button counts down
+- [ ] **Orbs:** after three throws the aim line greys out; orbs lie on the floor glowing, are
+      picked up by walking over them, and roll home after a second; a two-bounce kill shows
+      "TRICK SHOT!" and the pip refills
+- [ ] Bounce power reads: a banked shot visibly grows and changes colour, and hits harder
+- [ ] Wave circles pulse on the floor before a wave lands, never under the player's feet
+- [ ] Surge strip appears above the health panel, 1/2/3 and taps work, it never blocks aiming
+- [ ] Doors: after the card, two doors show; the vote advances the run; Trick Shot Gallery works
+- [ ] Barrels explode and chain; boost pads and the Rift portals move shots as described; a
+      shot through a portal never leaves the room
+- [ ] Crystal Hunt, Signal Tower and a Treasure Runner all play and clear
+- [ ] The Colossus and the Forge Press: the slam ring shows before the slam; the boss bar shows
+- [ ] Mirror: a straight shot does nothing, a banked one hurts; the first-sighting hint shows
+- [ ] Health bars appear over hurt enemies; shatter shards and the room-clear flash look right,
+      and disappear with Reduced Flash on
+- [ ] Performance with 40 enemies alive and burning (Highlights are capped at ~31 by the engine)
+
 ## 3. Multiplayer validation (Studio → Test → Local Server with 2–4 players)
 
 - [ ] Two players in Gate I start together after 15s; one player alone never starts (V9.10)
@@ -78,6 +100,9 @@ fallback. Everything else is unverified.
 - [ ] A downed player crawls; standing next to them revives them in about 3.5s, and the HUD
       shows "X is down!" to everyone else
 - [ ] Two players with different Pacts run at the lower rank of each condition
+- [ ] Door votes: both players see live vote counts; the vote closes once both have voted
+- [ ] Each player sees their own floor orbs bright and a teammate's dimmed, and can only pick up
+      their own
 
 ## 4. Datastore and purchases (published test experience)
 
@@ -114,6 +139,8 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 10 | 1.3.0 balance is untested with people: element cards, champions and Heat above ~6 are first guesses, and elemental damage ignoring shields may make the Warden Prime too easy for an Arcanist. | High | Playtest; tune `CombatConfig`, `PactConfig` and `RigConfig`. |
 | 11 | Champion glows use `Highlight`, and Roblox draws only about 31 at once. The enemy cap is 28, so this fits, but a busy co-op room is the place to watch. | Low | Check in V11 with 4 players. |
 | 12 | No onboarding hints yet for Rigs, the Pact or revives. | Medium | Add to `OnboardingView` hints. |
+| 13 | 2.0 balance is bot-tuned. Room 2 (Mirrors and Chasers) ends a quarter of bot runs; bots cannot bank, players can. | High | Playtest room 2 and the two mini-bosses first; tune `EnemyConfig`, `ArsenalConfig`. |
+| 14 | No music, so the combo cannot drive music intensity yet. | Medium | Upload a lobby loop and a layered combat loop. |
 
 ## 7. Rollback
 

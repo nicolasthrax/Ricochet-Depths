@@ -10,6 +10,7 @@ return {
 		Arc = Color3.fromRGB(140, 180, 255),
 		Blast = Color3.fromRGB(255, 140, 70),
 		Burn = Color3.fromRGB(255, 110, 40),
+		Dash = Color3.fromRGB(220, 240, 255),
 	},
 	-- Explosions burst this many times larger than an ordinary contact.
 	BlastScale = 2.6,

@@ -24,8 +24,11 @@ AchievementConfig.Achievements = {
 	{ Id = "FieldMedic", Title = "Field Medic", Description = "Revive teammates 10 times.", Source = "Stat", Key = "Revives", Target = 10, Coins = 400, Xp = 300 },
 	{ Id = "PactBreaker", Title = "Pact Breaker", Description = "Extract at Heat 4 or higher.", Source = "Stat", Key = "BestHeat", Target = 4, Coins = 500, Xp = 400 },
 	{ Id = "IntoTheAbyss", Title = "Into the Abyss", Description = "Extract at Heat 10 or higher.", Source = "Stat", Key = "BestHeat", Target = 10, Coins = 1500, Xp = 1000 },
+	{ Id = "Unstoppable", Title = "Unstoppable", Description = "Reach a 26-kill combo.", Source = "Stat", Key = "BestCombo", Target = 26, Coins = 400, Xp = 300 },
+	{ Id = "Godlike", Title = "Godlike", Description = "Reach a 45-kill combo.", Source = "Stat", Key = "BestCombo", Target = 45, Coins = 1000, Xp = 700 },
+	{ Id = "TrickShotArtist", Title = "Trick Shot Artist", Description = "Land 100 trick shots.", Source = "Stat", Key = "TrickShots", Target = 100, Coins = 800, Xp = 600 },
 	{ Id = "Versatile", Title = "Versatile", Description = "Extract with 3 different rigs.", Source = "Rigs", Target = 3, Coins = 600, Xp = 400 },
-	{ Id = "Archivist", Title = "Archivist", Description = "Take every upgrade card at least once.", Source = "Cards", Target = #UpgradeConfig.Cards, Coins = 1000, Xp = 800 },
+	{ Id = "Archivist", Title = "Archivist", Description = "Take every upgrade card at least once.", Source = "Cards", Target = #UpgradeConfig.MainCards(), Coins = 1000, Xp = 800 },
 	{ Id = "Naturalist", Title = "Naturalist", Description = "Defeat every kind of enemy.", Source = "Enemies", Target = 0, Coins = 600, Xp = 500 },
 }
 
@@ -69,7 +72,8 @@ function AchievementConfig.Progress(achievement, profile)
 	elseif achievement.Source == "Cards" then
 		local count = 0
 		for cardId, seen in type(codex.Cards) == "table" and codex.Cards or {} do
-			if seen and UpgradeConfig.Get(cardId) then
+			local card = UpgradeConfig.Get(cardId)
+			if seen and card and not UpgradeConfig.IsMinor(card) then
 				count += 1
 			end
 		end

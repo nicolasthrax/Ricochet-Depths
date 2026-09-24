@@ -228,6 +228,10 @@ RoomConfig.Layouts = {
 			{ Kind = "Breakable", Offset = Vector2.new(16, -20), Size = Vector2.new(6, 6) },
 			{ Kind = "LaserGate", From = Vector2.new(-62, -12), To = Vector2.new(-41, -12), OnTime = 1.8, OffTime = 2.8 },
 			{ Kind = "LaserGate", From = Vector2.new(41, -12), To = Vector2.new(62, -12), OnTime = 1.8, OffTime = 2.8, Phase = 2.3 },
+			-- Fuel barrels in the back corners and behind the conveyor bar: bank a shot into one.
+			{ Kind = "Barrel", Offset = Vector2.new(-54, 30), Size = Vector2.new(4, 4) },
+			{ Kind = "Barrel", Offset = Vector2.new(54, 30), Size = Vector2.new(4, 4) },
+			{ Kind = "Barrel", Offset = Vector2.new(0, -44), Size = Vector2.new(4, 4) },
 		},
 		EnemySpawns = {
 			Vector2.new(-44, 38), Vector2.new(44, 38), Vector2.new(0, 40), Vector2.new(-52, 0),
@@ -257,6 +261,9 @@ RoomConfig.Layouts = {
 		Mechanics = {
 			{ Kind = "LaserGate", From = Vector2.new(-28, 16), To = Vector2.new(-12, 16), OnTime = 2, OffTime = 2.5 },
 			{ Kind = "LaserGate", From = Vector2.new(12, 16), To = Vector2.new(28, 16), OnTime = 2, OffTime = 2.5, Phase = 2.25 },
+			-- Live belts: a shot crossing one speeds up and gains a bounce.
+			{ Kind = "BoostPad", Offset = Vector2.new(-40, 0), Size = Vector2.new(3, 14) },
+			{ Kind = "BoostPad", Offset = Vector2.new(40, 0), Size = Vector2.new(3, 14) },
 		},
 		EnemySpawns = {
 			Vector2.new(-54, 34), Vector2.new(54, 34), Vector2.new(-54, -30), Vector2.new(54, -30),
@@ -285,7 +292,7 @@ RoomConfig.Layouts = {
 		},
 		-- Slag plugs that half-close the north and south gaps until they are shot away.
 		Mechanics = {
-			{ Kind = "Breakable", Offset = Vector2.new(-14, 28), Size = Vector2.new(6, 4) },
+			{ Kind = "Breakable", Offset = Vector2.new(-14, 28), Size = Vector2.new(6, 4), Loot = { Coins = 8 } },
 			{ Kind = "Breakable", Offset = Vector2.new(14, 28), Size = Vector2.new(6, 4) },
 			{ Kind = "Breakable", Offset = Vector2.new(-14, -28), Size = Vector2.new(6, 4) },
 			{ Kind = "Breakable", Offset = Vector2.new(14, -28), Size = Vector2.new(6, 4) },
@@ -321,8 +328,8 @@ RoomConfig.Layouts = {
 		Mechanics = {
 			{ Kind = "LaserGate", From = Vector2.new(-70, 24), To = Vector2.new(-40, 24), OnTime = 2.2, OffTime = 2.6 },
 			{ Kind = "LaserGate", From = Vector2.new(40, -24), To = Vector2.new(70, -24), OnTime = 2.2, OffTime = 2.6, Phase = 2.4 },
-			{ Kind = "Breakable", Offset = Vector2.new(20, 10), Size = Vector2.new(6, 6), Health = 4 },
-			{ Kind = "Breakable", Offset = Vector2.new(-20, -10), Size = Vector2.new(6, 6), Health = 4 },
+			{ Kind = "Breakable", Offset = Vector2.new(20, 10), Size = Vector2.new(6, 6), Health = 4, Loot = { Coins = 12 } },
+			{ Kind = "Breakable", Offset = Vector2.new(-20, -10), Size = Vector2.new(6, 6), Health = 4, Loot = { Coins = 12 } },
 		},
 		EnemySpawns = {
 			Vector2.new(-54, 42), Vector2.new(54, -42), Vector2.new(28, 44), Vector2.new(-28, -44),
@@ -353,6 +360,9 @@ RoomConfig.Layouts = {
 		Mechanics = {
 			{ Kind = "AmpPad", Offset = Vector2.new(-36, 0), Size = Vector2.new(3, 14) },
 			{ Kind = "AmpPad", Offset = Vector2.new(36, 0), Size = Vector2.new(3, 14) },
+			-- A portal pair across the rift: a shot into one comes out of the other.
+			{ Kind = "Portal", Pair = "A", Offset = Vector2.new(-50, 30), Size = Vector2.new(5, 5) },
+			{ Kind = "Portal", Pair = "A", Offset = Vector2.new(50, -30), Size = Vector2.new(5, 5) },
 		},
 		EnemySpawns = {
 			Vector2.new(48, 48), Vector2.new(-48, 48), Vector2.new(-48, -48), Vector2.new(48, -48),
@@ -448,6 +458,62 @@ RoomConfig.Layouts = {
 			Vector2.new(0, 46), Vector2.new(-30, 20), Vector2.new(30, 20), Vector2.new(0, -52),
 		},
 	},
+
+	-- Ruins mini-boss arena: a round-shouldered hall with four pillars to stomp between, and
+	-- bumpers at the head and foot to bank round the Colossus's shield.
+	Colosseum = {
+		Zone = "Ruins",
+		DisplayName = "Hall of the Colossus",
+		TrimColor = Color3.fromRGB(236, 214, 170),
+		InteriorSize = Vector2.new(132, 132),
+		AccentColor = Color3.fromRGB(120, 108, 92),
+		Obstacles = {
+			{ Offset = Vector2.new(-36, 36), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(36, 36), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(-36, -36), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(36, -36), Size = Vector2.new(10, 10) },
+		},
+		CornerBevel = 14,
+		Reflectors = {
+			{ Offset = Vector2.new(0, 56), Length = 14, Yaw = 45 },
+			{ Offset = Vector2.new(0, -56), Length = 14, Yaw = -45 },
+		},
+		EnemySpawns = {
+			Vector2.new(0, 40), Vector2.new(-40, 0), Vector2.new(40, 0),
+			Vector2.new(0, -40), Vector2.new(-22, -22), Vector2.new(22, 22),
+		},
+	},
+
+	-- Foundry mini-boss arena: four pillars, bumpers on the flanks, and fuel barrels in the
+	-- corners. Lure the Press over one and bank a shot into it.
+	ForgeHall = {
+		Zone = "Foundry",
+		DisplayName = "The Forge Hall",
+		TrimColor = Color3.fromRGB(255, 170, 90),
+		InteriorSize = Vector2.new(136, 136),
+		AccentColor = Color3.fromRGB(118, 86, 66),
+		Obstacles = {
+			{ Offset = Vector2.new(-40, 40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(40, 40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(-40, -40), Size = Vector2.new(10, 10) },
+			{ Offset = Vector2.new(40, -40), Size = Vector2.new(10, 10) },
+		},
+		CornerBevel = 14,
+		Reflectors = {
+			{ Offset = Vector2.new(-56, 0), Length = 14, Yaw = 45 },
+			{ Offset = Vector2.new(56, 0), Length = 14, Yaw = -45 },
+		},
+		Mechanics = {
+			{ Kind = "Barrel", Offset = Vector2.new(-56, 40), Size = Vector2.new(4, 4) },
+			{ Kind = "Barrel", Offset = Vector2.new(56, -40), Size = Vector2.new(4, 4) },
+			{ Kind = "Barrel", Offset = Vector2.new(-56, -40), Size = Vector2.new(4, 4) },
+			{ Kind = "Barrel", Offset = Vector2.new(56, 40), Size = Vector2.new(4, 4) },
+		},
+		EnemySpawns = {
+			Vector2.new(0, 44), Vector2.new(-24, 0), Vector2.new(24, 0),
+			Vector2.new(0, -44), Vector2.new(-26, 26), Vector2.new(26, -26),
+		},
+	},
 }
 
 RoomConfig.DefaultLayout = "Atrium"
@@ -475,6 +541,22 @@ RoomConfig.Mechanics = {
 	AmpColor = Color3.fromRGB(255, 214, 90),
 	AmpPadThickness = 0.05,
 	AmpPadY = 0.27, -- centre height, between the floor border and the foot trims
+	-- Explosive barrels: one shot sets one off, hitting every enemy within BarrelRadius for
+	-- BarrelDamage, and setting off any other barrel in reach. Low, so they read as props.
+	BarrelHeight = 4.5,
+	BarrelRadius = 12,
+	BarrelDamage = 5,
+	BarrelColor = Color3.fromRGB(200, 60, 50),
+	BarrelBandColor = Color3.fromRGB(255, 200, 60),
+	-- Boost pads: a shot crossing one speeds up by BoostSpeed and gains BoostBounces bounces.
+	BoostSpeed = 1.35,
+	BoostBounces = 1,
+	BoostColor = Color3.fromRGB(110, 255, 160),
+	-- Portals come in pairs (same Pair letter): a shot entering one leaves the other on the same
+	-- heading, and cannot re-enter until it has flown clear of the exit.
+	PortalColors = { A = Color3.fromRGB(90, 200, 255), B = Color3.fromRGB(255, 120, 230) },
+	-- Loot crates: breakable cover that spills coins.
+	LootColor = Color3.fromRGB(214, 170, 90),
 }
 
 -- Each zone's look. RoomBuilder reads the floor and wall materials and colours from here; a

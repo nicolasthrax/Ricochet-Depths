@@ -7,15 +7,26 @@ depths take you.
 Original IP. Nothing here copies names, art, layouts, wording, enemies, cards or presentation
 from any existing game.
 
-**Status:** launch candidate (1.3.0). Every check below comes from static checks, a Rojo build
-and a headless test suite of 612 tests. The game has not yet been run end to end in Roblox
+**Status:** 2.0.0, the redesign. Every check below comes from static checks, a Rojo build
+and a headless test suite of 655 tests. The game has not yet been run end to end in Roblox
 Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
 [docs/PROGRESS.md](docs/PROGRESS.md) gives the honest state of things.
 
 ## Features
 
-- **Ricochet combat.** Drag to aim, release to fire; shots bank off walls, reflectors and
-  enemies. Shielded, splitting, phasing and sentinel enemies, and a boss, the Warden Prime.
+- **Ricochet combat.** Drag to aim, release to throw one of your **orbs**; they bank off walls,
+  reflectors and enemies, **grow stronger with every bounce**, and drop where they stop, to be
+  picked up again. A kill off two bounces sends the orb straight home. **Dash** (Q / Shift /
+  DASH) through danger. A **combo meter** multiplies what kills pay.
+- **Rooms that fight back.** Waves announced by circles on the floor, swarms of Mites,
+  enemies that care how you shoot (Mirrors, Sponges, Magnets, the Splitter King), explosive
+  barrels, boost pads, portals and loot crates, objective rooms (Crystal Hunt, Hold the Beacon,
+  the Trick Shot Gallery), Treasure Runners, and two mini-bosses: the Colossus and the Forge
+  Press, before the Warden Prime.
+- **Mid-fight Surge.** Kills fill a meter; a full one offers three quick perks you take with
+  1/2/3 or a tap, without the fight stopping.
+- **Your route.** After every room, pick a door: which room is next and what it promises (a
+  heal, treasure, a bigger card choice, a Surge, a Trial, or the Trick Shot Gallery).
 - **Roguelite runs.** Three zones (Ruins, Foundry, Abyss), randomised rooms, an upgrade card
   after each room, room mechanics (sweepers, laser gates, breakable cover, amp pads).
 - **Builds.** 30 upgrade cards, including elemental shot effects (crits, burn, chain arcs, kill
@@ -84,6 +95,10 @@ src/ServerScriptService/
     MatchFlow                 room-to-room progression, finish and teardown
     MatchCombat               fire requests, impacts, enemy contact, co-op revives
     MatchEffects              crits, burns, arcs, explosions: one damage path for every kill
+    MatchArsenal              orbs, bounce power, the dash, combo and Surge
+    MatchRoute                doors and votes, door rewards, Trials, objectives, barrels, loot
+    OrbDrops                  orbs on the floor: drop, pick up, roll home, recall
+    RoomObjectives            Crystal Hunt, Hold the Beacon, the Trick Shot Gallery
     LoadoutService            rigs, the Depth Pact and achievement claims
     MatchBroadcast            snapshots and client messaging
     RoomService / RoomBuilder room selection, runtime geometry, spawn orchestration
@@ -109,6 +124,7 @@ src/StarterPlayerScripts/     client input and views (display only)
   AimController.client        drag-to-aim for mouse and touch
   ClientMain.client           owns every view and one connection per server event
   RigView / PactView / JournalView  rigs, the Depth Pact, achievements and the Codex
+  SurgePickerView / RoomFx    the mid-fight perk strip; room-clear flash, stamp and camera kick
   HudView / CardPickerView / ResultsView / OnboardingView / SettingsView / ShopView
   MenuDock / DailyView / QuestsView / CodesView / StatsView / TitleScreen
   NotificationView / CalloutView   toasts, and kill-streak and ricochet callouts

@@ -2,6 +2,7 @@
 -- server last sent and never computes game state.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
 local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
 local RigConfig = require(ReplicatedStorage:WaitForChild("RigConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -17,8 +18,8 @@ function HudView.new(playerGui)
 	self.gui = UiTheme.screenGui("RicochetHud", playerGui, 10)
 
 	local health = UiTheme.panel("HealthPanel", self.gui)
-	health.Position = UDim2.new(0, 16, 1, -92)
-	health.Size = UDim2.fromOffset(260, 66)
+	health.Position = UDim2.new(0, 16, 1, -112)
+	health.Size = UDim2.fromOffset(260, 86)
 	UiTheme.padding(health, 10)
 	self.healthLabel = UiTheme.label("HealthLabel", health, "100 / 100", UiConfig.Text.Hud)
 	self.healthLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -35,6 +36,73 @@ function HudView.new(playerGui)
 	self.coinLabel.TextXAlignment = Enum.TextXAlignment.Right
 	self._coins = 0
 
+	-- Orbs in hand: one pip each, lit when the orb is ready to throw.
+	local pips = Instance.new("Frame")
+	pips.Name = "OrbPips"
+	pips.BackgroundTransparency = 1
+	pips.Position = UDim2.new(0, 0, 0, 46)
+	pips.Size = UDim2.new(0.6, 0, 0, 14)
+	pips.Parent = health
+	local pipLayout = Instance.new("UIListLayout")
+	pipLayout.FillDirection = Enum.FillDirection.Horizontal
+	pipLayout.Padding = UDim.new(0, 5)
+	pipLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	pipLayout.Parent = pips
+	self.orbPips = pips
+	self._pips = {}
+	self.orbLabel = UiTheme.label("OrbLabel", health, "", UiConfig.Text.Small - 2, UiConfig.Colors.TextMuted)
+	self.orbLabel.AnchorPoint = Vector2.new(1, 0)
+	self.orbLabel.Position = UDim2.new(1, 0, 0, 44)
+	self.orbLabel.Size = UDim2.new(0.4, 0, 0, 16)
+	self.orbLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+	-- The Surge meter: kills fill it; full, it offers a perk.
+	local surgeTrack, surgeFill = UiTheme.bar("SurgeBar", health, Color3.fromRGB(255, 120, 200))
+	surgeTrack.Position = UDim2.new(0, 0, 0, 64)
+	surgeTrack.Size = UDim2.new(1, 0, 0, 6)
+	surgeFill.Size = UDim2.fromScale(0, 1)
+	self.surgeFill = surgeFill
+
+	-- The combo meter, right of centre: the count, its tier, and how long it has left.
+	local combo = Instance.new("Frame")
+	combo.Name = "Combo"
+	combo.BackgroundTransparency = 1
+	combo.AnchorPoint = Vector2.new(1, 0.5)
+	combo.Position = UDim2.new(1, -24, 0.42, 0)
+	combo.Size = UDim2.fromOffset(170, 74)
+	combo.Visible = false
+	combo.Parent = self.gui
+	self.comboFrame = combo
+	self.comboCount = UiTheme.heading("Count", combo, "", 40, UiConfig.Colors.Gold)
+	self.comboCount.Size = UDim2.new(1, 0, 0, 44)
+	self.comboCount.TextXAlignment = Enum.TextXAlignment.Right
+	self.comboTier = UiTheme.heading("Tier", combo, "", UiConfig.Text.Small + 2, UiConfig.Colors.Warning)
+	self.comboTier.Position = UDim2.new(0, 0, 0, 44)
+	self.comboTier.Size = UDim2.new(1, 0, 0, 18)
+	self.comboTier.TextXAlignment = Enum.TextXAlignment.Right
+	local comboTrack, comboFill = UiTheme.bar("ComboTimer", combo, UiConfig.Colors.Gold)
+	comboTrack.AnchorPoint = Vector2.new(1, 0)
+	comboTrack.Position = UDim2.new(1, 0, 0, 64)
+	comboTrack.Size = UDim2.new(0.7, 0, 0, 5)
+	self.comboFill = comboFill
+	self._comboScale = Instance.new("UIScale")
+	self._comboScale.Parent = self.comboCount
+
+	-- The dash: a big thumb button for touch, which also shows the cooldown.
+	local dash = UiTheme.button("DashButton", self.gui, "DASH", "Primary")
+	dash.AnchorPoint = Vector2.new(1, 1)
+	dash.Position = UDim2.new(1, -24, 1, -150)
+	dash.Size = UDim2.fromOffset(84, 84)
+	dash.TextSize = UiConfig.Text.Hud
+	dash.Visible = false
+	UiTheme.corner(dash, 42)
+	dash.Activated:Connect(function()
+		if self._onDash then
+			self._onDash()
+		end
+	end)
+	self.dashButton = dash
+
 	local progress = UiTheme.panel("ProgressPanel", self.gui)
 	progress.Position = UDim2.new(0.5, 0, 0, 12)
 	progress.AnchorPoint = Vector2.new(0.5, 0)
@@ -47,6 +115,14 @@ function HudView.new(playerGui)
 	self.objectiveLabel.Position = UDim2.new(0, 0, 0, 22)
 	self.objectiveLabel.Size = UDim2.new(1, 0, 0, 20)
 	self.objectiveLabel.TextXAlignment = Enum.TextXAlignment.Center
+	-- A room's challenge (a Trial), under the room panel.
+	self.challengeLabel = UiTheme.label("ChallengeLabel", self.gui, "", UiConfig.Text.Small, UiConfig.Colors.Warning)
+	self.challengeLabel.AnchorPoint = Vector2.new(0.5, 0)
+	self.challengeLabel.Position = UDim2.new(0.5, 0, 0, 76)
+	self.challengeLabel.Size = UDim2.fromOffset(460, 18)
+	self.challengeLabel.TextXAlignment = Enum.TextXAlignment.Center
+	self.challengeLabel.TextStrokeTransparency = 0.4
+	self.challengeLabel.Visible = false
 
 	-- The boss bar, under the room label while a boss is alive.
 	local boss = UiTheme.panel("BossPanel", self.gui)
@@ -124,6 +200,7 @@ function HudView.new(playerGui)
 	self.saveWarning.TextXAlignment = Enum.TextXAlignment.Center
 	self.saveWarning.Visible = false
 
+	self._upgradeKey = nil
 	local upgrades = UiTheme.panel("UpgradePanel", self.gui)
 	upgrades.Position = UDim2.new(1, -16, 0, 12)
 	upgrades.AnchorPoint = Vector2.new(1, 0)
@@ -193,9 +270,86 @@ function HudView:UpdatePlayer(snapshot)
 	end
 
 	self:_renderUpgrades(snapshot.Upgrades or {})
+	self:_renderArsenal(snapshot)
+end
+
+-- Orb pips, the Surge meter and the combo meter from a player snapshot.
+function HudView:_renderArsenal(snapshot)
+	local orbsMax = tonumber(snapshot.OrbsMax)
+	local orbs = tonumber(snapshot.Orbs) or 0
+	self.orbPips.Visible = orbsMax ~= nil
+	self.orbLabel.Visible = orbsMax ~= nil
+	if orbsMax then
+		for index = #self._pips + 1, orbsMax do
+			local pip = Instance.new("Frame")
+			pip.Name = "Pip" .. index
+			pip.LayoutOrder = index
+			pip.Size = UDim2.fromOffset(14, 14)
+			pip.BorderSizePixel = 0
+			pip.Parent = self.orbPips
+			UiTheme.corner(pip, 7)
+			self._pips[index] = pip
+		end
+		for index, pip in self._pips do
+			pip.Visible = index <= orbsMax
+			pip.BackgroundColor3 = index <= orbs and ArsenalConfig.Orbs.Color or UiConfig.Colors.Track
+		end
+		self.orbLabel.Text = orbs > 0 and "ORBS" or "PICK UP ORBS"
+		self.orbLabel.TextColor3 = orbs > 0 and UiConfig.Colors.TextMuted or UiConfig.Colors.Warning
+	end
+
+	local need = tonumber(snapshot.SurgeNeeded) or 0
+	self.surgeFill.Size = UDim2.fromScale(need > 0 and math.clamp((tonumber(snapshot.Surge) or 0) / need, 0, 1) or 0, 1)
+
+	local combo = tonumber(snapshot.Combo) or 0
+	self.comboFrame.Visible = combo >= 2
+	if combo >= 2 then
+		local tier = ArsenalConfig.ComboTier(combo)
+		if combo > (self._lastCombo or 0) then
+			self._comboScale.Scale = 1.35
+			UiTheme.tween(self._comboScale, 0.18, { Scale = 1 }, Enum.EasingStyle.Back)
+		end
+		self.comboCount.Text = combo .. " COMBO"
+		self.comboTier.Text = tier.Multiplier > 1 and string.format("%s  x%s", tier.Name, tostring(tier.Multiplier)) or ""
+		self._comboUntil = os.clock() + (tonumber(snapshot.ComboWindow) or ArsenalConfig.Combo.Window)
+		self._comboWindow = tonumber(snapshot.ComboWindow) or ArsenalConfig.Combo.Window
+	end
+	self._lastCombo = combo
+end
+
+-- Drains the combo timer and counts down the dash. Called every frame.
+function HudView:Tick(now, dashReadyAt)
+	if self.comboFrame.Visible and self._comboUntil then
+		local left = math.max(self._comboUntil - now, 0)
+		self.comboFill.Size = UDim2.fromScale(left / math.max(self._comboWindow or 1, 0.1), 1)
+		if left <= 0 then
+			self.comboFrame.Visible = false
+		end
+	end
+	if self.dashButton.Visible then
+		local wait = (dashReadyAt or 0) - now
+		self.dashButton.Text = wait > 0 and string.format("%.1f", wait) or self._dashText
+		self.dashButton.BackgroundTransparency = wait > 0 and 0.5 or 0
+	end
+end
+
+function HudView:SetDashHandler(callback, keyboardHint)
+	self._onDash = callback
+	self._dashText = keyboardHint and "DASH\n(Q)" or "DASH"
+	self.dashButton.Text = self._dashText
 end
 
 function HudView:_renderUpgrades(upgrades)
+	-- Player snapshots now arrive on every throw and kill; rebuild the list only when it changed.
+	local parts = {}
+	for _, upgrade in upgrades do
+		table.insert(parts, tostring(upgrade.Title) .. "x" .. tostring(upgrade.Stacks))
+	end
+	local key = table.concat(parts, "|")
+	if key == self._upgradeKey then
+		return
+	end
+	self._upgradeKey = key
 	for _, entry in self.upgradeEntries do
 		entry:Destroy()
 	end
@@ -234,6 +388,18 @@ function HudView:UpdateRun(snapshot)
 	self.storeButton.Visible = not inRun
 	self.levelPanel.Visible = not inRun
 	self.loadoutLabel.Visible = not inRun
+	self.dashButton.Visible = snapshot.State == RunConfig.States.Combat and self._onDash ~= nil
+	if not inRun then
+		self.comboFrame.Visible = false
+	end
+	local challenge = type(snapshot.Challenge) == "table" and snapshot.Challenge or nil
+	self.challengeLabel.Visible = challenge ~= nil and inRun
+	if challenge then
+		local done = challenge.State == "Done"
+		local failed = challenge.State == "Failed"
+		self.challengeLabel.Text = (failed and "TRIAL FAILED: " or done and "TRIAL DONE: " or "TRIAL: ") .. tostring(challenge.Text)
+		self.challengeLabel.TextColor3 = failed and UiConfig.Colors.Danger or done and UiConfig.Colors.Health or UiConfig.Colors.Warning
+	end
 	if not inRun and #self.upgradeEntries > 1 then
 		self:_renderUpgrades({})
 	end
@@ -250,10 +416,23 @@ function HudView:UpdateRun(snapshot)
 		self.objectiveLabel.Text = string.format("%s is down! Stand next to them to revive (%d%%)", tostring(downed.Name),
 			math.floor((tonumber(downed.Progress) or 0) * 100))
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Danger
+	elseif snapshot.State == RunConfig.States.Combat and type(snapshot.Objective) == "table" then
+		self.objectiveLabel.Text = tostring(snapshot.Objective.Text)
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	elseif snapshot.State == RunConfig.States.Combat then
-		self.objectiveLabel.Text = snapshot.EnemiesRemaining == 1 and "1 target left"
+		local wave = type(snapshot.Wave) == "table" and snapshot.Wave or nil
+		local targets = snapshot.EnemiesRemaining == 1 and "1 target left"
 			or string.format("%d targets left", snapshot.EnemiesRemaining)
-		self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+		if wave and wave.Incoming then
+			self.objectiveLabel.Text = string.format("WAVE %d / %d INCOMING!", wave.Wave + 1, wave.Waves)
+			self.objectiveLabel.TextColor3 = UiConfig.Colors.Danger
+		elseif wave then
+			self.objectiveLabel.Text = string.format("Wave %d / %d  -  %s", math.min(wave.Wave, wave.Waves), wave.Waves, targets)
+			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+		else
+			self.objectiveLabel.Text = targets
+			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+		end
 	elseif snapshot.State == RunConfig.States.Lobby then
 		self:_renderLobbyObjective()
 	else

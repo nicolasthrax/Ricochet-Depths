@@ -4,8 +4,10 @@
 -- it. Installed onto MatchService.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
 local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local EnemyService = require(script.Parent.EnemyService)
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 
 local Effects = { methods = {} }
 
@@ -57,14 +59,15 @@ function Effects.methods:_queueEffect(position, normal, kind, contacts, damage)
 end
 
 -- Everything that follows damage landing: burning and chill on a survivor (from shots and arcs
--- only), the kill if it died, and chain arcs from a direct hit. `damage` is what landed.
-function Effects.methods:_afterHit(hit, stats, shooter, contacts, damage, source, now)
+-- only), the kill if it died, and chain arcs from a direct hit. `damage` is what landed; `entry`
+-- is the projectile for a direct hit, so the kill knows how many bounces it took.
+function Effects.methods:_afterHit(hit, stats, shooter, contacts, damage, source, now, entry)
 	local enemy = hit.enemy
 	if not hit.killed and (source == "Shot" or source == "Arc") then
 		self._enemies:ApplyStatus(enemy, stats.BurnDamage or 0, stats.ChillSeconds or 0, shooter, now)
 	end
 	if hit.killed then
-		self:_onEnemyKilled(enemy, shooter, contacts, source, now)
+		self:_onEnemyKilled(enemy, shooter, contacts, source, now, entry and entry.wallBounces or 0)
 	end
 	-- Arcs only ever start from a direct hit, so an arc can never arc again.
 	local arcs = math.floor(stats.ChainArcs or 0)
@@ -95,21 +98,35 @@ function Effects.methods:_secondaryDamage(enemy, amount, shooter, contacts, sour
 	return hit
 end
 
--- A kill from any source: the shooter's tallies and Siphon, coins on the floor, the callout
--- event, and Volatile's explosion.
-function Effects.methods:_onEnemyKilled(enemy, shooter, contacts, source, now)
+-- A kill from any source: the shooter's tallies, combo, Surge and Siphon, coins on the floor,
+-- the callout event, room challenges, and Volatile's explosion. `bounces` is how many times a
+-- killing shot had bounced (0 for anything that was not a shot).
+function Effects.methods:_onEnemyKilled(enemy, shooter, contacts, source, now, bounces)
 	local stats, state = self:_statsOf(shooter)
+	local coinMultiplier = 1
 	if state then
 		state:RecordKill(enemy)
 		if source == "Shot" then
 			state.bestChain = math.max(state.bestChain, contacts)
 		end
-		if (stats.HealOnKill or 0) > 0 and state.alive and state:Heal(stats.HealOnKill) > 0 then
-			self:_pushPlayerState(shooter)
+		if (stats.HealOnKill or 0) > 0 and state.alive then
+			state:Heal(stats.HealOnKill)
 		end
+		local ricochet = source == "Shot" and (bounces or 0) >= 1
+		coinMultiplier = self:_comboKill(state, shooter, ricochet, now)
+		if self._arsenal.combo then
+			state.comboXp += ProgressionConfig.Xp.PerKill * (coinMultiplier - 1)
+		end
+		local surge = ArsenalConfig.Surge
+		local archetype = enemy.archetype
+		local big = enemy.champion or archetype.IsElite or archetype.IsBoss or archetype.IsMiniBoss
+		self:_grantSurge(shooter, surge.PerKill + (ricochet and surge.RicochetBonus or 0) + (big and surge.EliteKill or 0), now)
+		self:_pushPlayerState(shooter)
 	end
+	self:_onChallengeKill(enemy, shooter, source, bounces or 0, now)
 	if self._coins then
-		self._coins:Drop(enemy.position, enemy.coins or enemy.archetype.Coins or 0)
+		local coins = enemy.coins or enemy.archetype.Coins or 0
+		self._coins:Drop(enemy.position, coins > 0 and math.floor(coins * coinMultiplier + 0.5) or 0)
 	end
 
 	-- Who scored it and off how many contacts, for kill-streak and ricochet callouts.

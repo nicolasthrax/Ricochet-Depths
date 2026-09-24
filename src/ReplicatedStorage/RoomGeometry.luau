@@ -98,11 +98,12 @@ function RoomGeometry.Solids(layout, roomConfig)
 		})
 	end
 
-	-- Mechanics that block shots are solids too: breakable cover, and sweeping reflectors in
-	-- their resting pose. Gates and amp pads are not; they never stop a shot.
+	-- Mechanics that block shots are solids too: breakable cover, explosive barrels, and
+	-- sweeping reflectors in their resting pose. Gates, pads and portals are not; they never
+	-- stop a shot.
 	local counts = {}
 	for _, mechanic in layout.Mechanics or {} do
-		if mechanic.Kind == "Breakable" or mechanic.Kind == "Sweeper" then
+		if mechanic.Kind == "Breakable" or mechanic.Kind == "Sweeper" or mechanic.Kind == "Barrel" then
 			counts[mechanic.Kind] = (counts[mechanic.Kind] or 0) + 1
 			local sweeper = mechanic.Kind == "Sweeper"
 			table.insert(solids, {

@@ -38,7 +38,8 @@ end
 function JournalView.CodexCounts(profile)
 	local codex = type(profile) == "table" and type(profile.Codex) == "table" and profile.Codex or {}
 	local cards, enemies = 0, 0
-	for _, card in UpgradeConfig.Cards do
+	local mainCards = UpgradeConfig.MainCards()
+	for _, card in mainCards do
 		if type(codex.Cards) == "table" and codex.Cards[card.Id] then
 			cards += 1
 		end
@@ -48,7 +49,7 @@ function JournalView.CodexCounts(profile)
 			enemies += 1
 		end
 	end
-	return cards, #UpgradeConfig.Cards, enemies, #AchievementConfig.EnemyIds
+	return cards, #mainCards, enemies, #AchievementConfig.EnemyIds
 end
 
 function JournalView.new(playerGui, onClaim)
@@ -192,7 +193,7 @@ function JournalView:SetProfile(profile)
 		end
 	end
 	add(string.format("UPGRADE CARDS  %d / %d", cards, cardTotal), UiConfig.Colors.Gold)
-	for _, card in UpgradeConfig.Cards do
+	for _, card in UpgradeConfig.MainCards() do
 		if seenCards[card.Id] then
 			add(string.format("  %s  -  %s", card.Title, card.Description))
 		else

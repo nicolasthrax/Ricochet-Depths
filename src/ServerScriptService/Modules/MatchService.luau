@@ -2,14 +2,17 @@
 -- teardown. Every collaborator is injected, so the whole loop is exercised headlessly in tests.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MatchArsenal = require(script.Parent.MatchArsenal)
 local MatchBroadcast = require(script.Parent.MatchBroadcast)
 local MatchCombat = require(script.Parent.MatchCombat)
 local MatchEffects = require(script.Parent.MatchEffects)
 local MatchFlow = require(script.Parent.MatchFlow)
 local MatchMembership = require(script.Parent.MatchMembership)
+local MatchRoute = require(script.Parent.MatchRoute)
 local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
+local UpgradeService = require(script.Parent.UpgradeService)
 
 local States = RunConfig.States
 
@@ -23,6 +26,8 @@ MatchMembership.Install(MatchService)
 MatchFlow.Install(MatchService)
 MatchCombat.Install(MatchService)
 MatchEffects.Install(MatchService)
+MatchArsenal.Install(MatchService)
+MatchRoute.Install(MatchService)
 MatchBroadcast.Install(MatchService)
 
 function MatchService.new(deps)
@@ -47,6 +52,13 @@ function MatchService.new(deps)
 	self._pactProvider = deps.pactProvider
 	-- Crit rolls. Seeded per arena so a test can reproduce them.
 	self._random = deps.random or Random.new(deps.seed or 1)
+	-- Which arsenal systems this match runs: { orbs, surge, combo }. Each is off unless asked
+	-- for, so a match built without them plays exactly as it always has.
+	self._arsenal = deps.arsenal or {}
+	-- Orbs on the floor (OrbDrops); required for orbs to be on.
+	self._orbDrops = deps.orbDrops
+	-- Surge perks come from their own pool and their own offer book.
+	self._surges = deps.surges or UpgradeService.new((deps.seed or 1) + 101, "Minor")
 	-- Coin pickups for this arena (CoinDrops). Optional: without it kills drop nothing.
 	self._coins = deps.coins
 	-- (player, summary) after each finished run is paid and recorded: quests, badges, boards.
@@ -56,7 +68,16 @@ function MatchService.new(deps)
 	self._planRun = deps.planRun or function()
 		return RunPlanner.Plan(Random.new())
 	end
+	-- Only a plan drawn from RunConfig.RunShape knows which slot each room fills, which is what
+	-- door choices need to find alternative rooms.
+	self._planFollowsShape = deps.planRun == nil
 	self._plan = {}
+	-- Doors, challenges and room events: { doors, challenges, events }. Off unless asked for.
+	self._route = deps.route or {}
+	self._roomRewards = {}
+	if self._route.events and self._rooms.SetEvents then
+		self._rooms:SetEvents({ runners = true })
+	end
 
 	self._states = {}
 	self._participants = {}
@@ -84,6 +105,8 @@ function MatchService.new(deps)
 		if mechanics then
 			mechanics:ApplySegment(entry, from, to)
 		end
+		-- Magnet enemies bend shots that pass near them.
+		self:_steerShot(entry, from, to)
 	end
 	self._hazardNextAt = {}
 	self._regenPushAt = {}
@@ -91,12 +114,31 @@ function MatchService.new(deps)
 	self._projectiles.OverlapQuery = function(position, margin)
 		return self._enemies:FindEnclosingMover(position, margin)
 	end
+	-- A shot that carried an orb drops it where it stopped.
+	self._projectiles.OnExpire = function(entry, position)
+		self:_onShotExpired(entry, position)
+	end
+	-- A Treasure Runner that got away.
+	self._enemies.OnEscape = function(enemy)
+		if enemy.archetype.Optional then
+			self:_fireAll("Notify", { Kind = "Error", Text = "The Treasure Runner got away!" })
+		end
+	end
 	-- Burn ticks land through the same damage path as every other hit.
 	self._enemies.OnStatusDamage = function(enemy, damage, shooter, now)
 		self:_secondaryDamage(enemy, damage, shooter, 0, "Burn", now or self._now)
 	end
 
 	return self
+end
+
+-- Where every live participant stands, for room objectives.
+function MatchService:_livePositions()
+	local positions = {}
+	for _, target in self:_targets() do
+		table.insert(positions, target.position)
+	end
+	return positions
 end
 
 -- Live participants, as EnemyService expects them.
@@ -142,7 +184,14 @@ function MatchService:RequestStart(player, now)
 	table.clear(self._pendingJoins)
 
 	self._runId += 1
-	self._plan = self._planRun(self._runId)
+	self._plan = table.clone(self._planRun(self._runId))
+	self._slots = self._planFollowsShape and table.clone(RunConfig.RunShape) or nil
+	self._roomRewards = {}
+	self._surges:ClearAll()
+	self._doors = nil
+	self._challenge = nil
+	self._lastReward = nil
+	self._activeReward = nil
 	self._runStartedAt = now
 	self._roomIndex = 0
 	self._eliteCleared = false
@@ -252,11 +301,13 @@ function MatchService:Step(deltaTime, now)
 			self:_beginRoom(1, now)
 		end
 	elseif state == States.Combat then
-		self._rooms:Step(deltaTime, now)
+		self._rooms:Step(deltaTime, now, self:_livePositions())
+		self:_stepChallenge(now)
 		self:_applyHazards(now)
 		self:_collectCoins(deltaTime, now)
 		self:_applyRegen(deltaTime, now)
 		self:_stepRevives(deltaTime, now)
+		self:_stepArsenal(deltaTime, now)
 		if self:_allDown() then
 			self:_finish("Defeated", now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then
@@ -272,13 +323,15 @@ function MatchService:Step(deltaTime, now)
 		end
 	elseif state == States.UpgradeChoice then
 		self:_applyRegen(deltaTime, now)
+		self:_resolveSurges(now, false)
 		for _, resolution in self._upgrades:ResolveExpired(now, function(key)
 			return self._states[key]
 		end) do
 			self:_fireClient("UpgradeResolved", resolution.playerKey, { CardId = resolution.card.Id, Auto = true })
 			self:_pushPlayerState(resolution.playerKey)
 		end
-		if not self._upgrades:HasPendingOffers() then
+		if not self._upgrades:HasPendingOffers() and self:_doorsSettled(now) then
+			self:_resolveDoors()
 			self:_setState(States.Transition, now)
 		end
 	elseif state == States.Transition then

@@ -5,7 +5,12 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.3.0: the depth build. Shot effects and evolutions, champion enemies, six rigs, the Depth
+**2.0.0: the redesign. Orbs, bounce power, the dash, combo, Surge, waves and swarms, ricochet-
+aware enemies, barrels, boost pads and portals, objective rooms, doors, Trials and two
+mini-bosses. Green on every gate: syntax, lint, Rojo build and 655 headless tests. Nothing in
+2.0 has run in Studio yet; see the 2.0 section of the release checklist.**
+
+Before it: **1.3.0: the depth build. Shot effects and evolutions, champion enemies, six rigs, the Depth
 Pact (Heat), co-op revives, achievements and the Codex. Green on every gate: syntax, lint, Rojo
 build and 612 headless tests. Awaiting Studio and published-server validation (V9, V10, V11 and
 the launch checklist).** The research behind it is in `docs/DESIGN_RESEARCH.md`.
@@ -270,6 +275,77 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 2.0.0 — the redesign
+
+Owner brief: "the fighting rooms just lack something. It feels a little dull." The diagnosis
+(numbers from the code and the dry run): shots were free (0.18s cooldown, ~640 shots and 0.10
+kills per shot per run), so spraying beat aiming and the bank shot was optional; enemies had
+1–4 health and every room was one wave of the same job, cleared in ~7s; and the player had one
+verb. 2.0 rebuilds the combat loop around the ricochet.
+
+- **Orbs** (`OrbDrops`, `MatchArsenal`, `ArsenalConfig.Orbs`). Three orbs; a throw spends one,
+  the middle projectile of a fan carries it, and it drops where the shot stops. Walk over it,
+  or it rolls home after a second. A kill off two or more wall bounces returns it at once
+  ("TRICK SHOT!"). Every room starts with a full hand. Cards: Extra Orb, Homecoming, Recall.
+- **Bounce power.** Every wall, cover or reflector bounce adds +50% damage (the BouncePower
+  stat), +8% speed (capped at 1.5x), and grows and heats the shot's colour. Enemy health rose to
+  match: a straight shot needs two hits where a banked one needs one. Cards: Overcharge, and the
+  Ricochet Storm evolution.
+- **Dash** (client-moved, server-authorised). 2.2s cooldown, 15 studs, 0.35s of invulnerability.
+  Q, Left Shift, gamepad B or the DASH button. Cards: Blink Strike, Quick Step, Recall, and the
+  Phantom evolution.
+- **Combo.** Kills within 3.5s chain; ricochet kills count double; a hit halves it. Tiers at 6,
+  14, 26 and 45 multiply coin drops and kill experience (x1.5 to x4) and are called out.
+- **Surge.** Kills (more for ricochets and big enemies) fill a meter; full, it offers three
+  minor perks from their own pool, taken with 1/2/3 or a tap while the fight goes on, and auto-
+  picked after 9s. Perks stay out of the card list, the Codex and room offers.
+- **Waves and swarms.** Rooms fight in two or three waves, each announced by pulsing floor
+  circles 1.4s before it lands. Mites (one hit, packs of five or six) make chain kills pay.
+- **Enemies that care how you shoot:** Mirror (only banked shots hurt it), Sponge (eats a
+  shot's bounces), Magnet (bends shots toward itself), Splitter King (splits into Splitters),
+  Treasure Runner (flees with 45 coins, escapes after 16s, never holds a room open). Enemies
+  with 3+ health show a health bar once hurt.
+- **Rooms you can play with:** explosive barrels that chain (Smelter, Forge Hall), boost pads
+  (Conveyor), a portal pair (Rift), loot crates (Crucible, Forgeworks).
+- **Objective rooms:** Crystal Hunt (Sunken Reliquary: only banked shots crack crystals), Hold
+  the Beacon (Signal Tower), and the Trick Shot Gallery bonus room (points double per bounce).
+- **Doors.** After each room the group votes between two doors: a different room of the next
+  slot where one exists, each with a promise (Mending Spring, Treasure Cache, Armoury, Surge
+  Well, Trial, Trick Shot Gallery). The vote closes when everyone has voted or after 14s.
+- **Trials:** Trick shots only, Untouchable, Swift, Frenzy. A Trial door always brings one, and
+  15% of other normal rooms do. Beating one pays coins and a Surge perk.
+- **Mini-bosses:** the Colossus (Ruins: spinning shield, stomp rings, Mites when hurt) and the
+  Forge Press (Foundry: a hovering press whose slam zone flashes red on the floor). The run is
+  now nine rooms: Ruins 1, Ruins 2, Colossus, Foundry 1, Foundry 2, Forge Press, Abyss 1, Warden
+  Vault, Throne.
+- **Feel:** enemies shatter into shards of their colour; a room clear flashes, stamps "ROOM
+  CLEARED" and kicks the camera; callouts kick it too; your floor orbs glow while teammates' are
+  dimmed; wave circles pulse. All of it respects Reduced Flash and Effect Intensity.
+- **HUD:** orb pips, the Surge meter, a combo counter with its draining timer, wave and
+  objective lines, the Trial line, and a DASH button with its cooldown. Hints for every new
+  system, and for the first Mirror, Magnet, Sponge and Treasure Runner a player meets; unlike
+  the 1.x hints, these show for veterans too.
+- **Lifetime stats** BestCombo and TrickShots; achievements Unstoppable, Godlike and Trick Shot
+  Artist.
+- **Every system has its own flag** (`Orbs`, `Surge`, `Combo`, `Dash`, `Doors`, `Challenges`,
+  `RoomEvents`); a match built without them plays as 1.3 did, which is also how the older
+  tests still run.
+- **Tests:** 41 new in `redesign.test.luau`; run-through helpers now clear every wave through the
+  shared `__clearRoom`; the stub gained `CFrame.Angles` and CFrame composition.
+
+Dry run (bots now throw orbs, fetch them when empty, and dash away when touched; they still
+cannot plan a bank shot, which 2.0 rewards more than ever, so read these as a floor on skill):
+
+| Bot | Median extracted run | Extraction rate | Where runs ended |
+|---|---|---|---|
+| Direct fire, exact aim | 459s | 40% | room 2: 18, room 5: 9, room 9: 27 of 60 |
+| Direct fire with aim error | 392s | 28% | room 2: 15, room 5: 6, room 9: 13 of 40 |
+| Probing | 388s | 40% | room 2: 10, room 5: 8, room 9: 19 of 40 |
+
+The run now lands on the 420s target. Room 2's deaths are mostly Chasers and Mirrors against
+bots that cannot bank; tuned twice already (Chaser health 3 to 2.5, Mirrors slower and softer,
+waves wait until one enemy is left). **Playtest room 2 first.**
 
 ### 1.3.0 — the depth build
 

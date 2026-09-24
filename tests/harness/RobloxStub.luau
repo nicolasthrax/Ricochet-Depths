@@ -272,6 +272,40 @@ CFrame = {
 	end,
 	identity = makeCFrame(v3(0, 0, 0)),
 }
+-- A vector in this CFrame's rotated frame: right * x + up * y + back * z (back is -look).
+local function rotate(cframe, vector)
+	local right, up, look = rawget(cframe, "_right"), rawget(cframe, "_up"), rawget(cframe, "_look")
+	return right * vector.X + up * vector.Y - look * vector.Z
+end
+-- Composition, as the engine does it: b is expressed in a's frame.
+CFrameMt.__mul = function(a, b)
+	if getmetatable(b) ~= CFrameMt then
+		return rawget(a, "_position") + rotate(a, b)
+	end
+	return makeCFrame(
+		rawget(a, "_position") + rotate(a, rawget(b, "_position")),
+		rotate(a, rawget(b, "_look")),
+		rotate(a, rawget(b, "_right")),
+		rotate(a, rawget(b, "_up"))
+	)
+end
+-- Rotation by rx, then ry, then rz about the world axes, applied Z first (the engine's order).
+CFrame.Angles = function(rx, ry, rz)
+	local function about(axis, angle, vector)
+		local c, s = math.cos(angle), math.sin(angle)
+		if axis == "X" then
+			return v3(vector.X, vector.Y * c - vector.Z * s, vector.Y * s + vector.Z * c)
+		elseif axis == "Y" then
+			return v3(vector.X * c + vector.Z * s, vector.Y, -vector.X * s + vector.Z * c)
+		end
+		return v3(vector.X * c - vector.Y * s, vector.X * s + vector.Y * c, vector.Z)
+	end
+	local function apply(vector)
+		return about("X", rx or 0, about("Y", ry or 0, about("Z", rz or 0, vector)))
+	end
+	return makeCFrame(v3(0, 0, 0), apply(v3(0, 0, -1)), apply(v3(1, 0, 0)), apply(v3(0, 1, 0)))
+end
+CFrame.fromEulerAnglesXYZ = CFrame.Angles
 CFrame.lookAlong = function(position, direction)
 	local look = direction.Magnitude > 0 and direction.Unit or v3(0, 0, -1)
 	return makeCFrame(position, look)

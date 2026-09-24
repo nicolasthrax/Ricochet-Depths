@@ -72,6 +72,19 @@ UpgradeConfig.BaseStats = {
 	HunterBonus = 0,
 	-- Times per run a fatal blow leaves you standing at half health instead.
 	ExtraLives = 0,
+
+	-- The arsenal (ArsenalConfig): orbs carried, how much each bounce adds to a shot's damage
+	-- (0.5 = +50% per bounce), how fast dropped orbs roll home, and the dash.
+	OrbCount = 3,
+	BouncePower = 0.5,
+	OrbReturnMultiplier = 1,
+	DashCooldownMultiplier = 1,
+	-- Damage a dash deals to every enemy it passes through (Blink Strike). 0 is off.
+	DashStrikeDamage = 0,
+	-- 1: a dash calls every orb you have on the floor straight back (Recall).
+	DashRecall = 0,
+	-- Multiplies Surge points from kills.
+	SurgeGain = 1,
 }
 
 UpgradeConfig.Cards = {
@@ -358,6 +371,88 @@ UpgradeConfig.Cards = {
 			{ Stat = "CritChance", Op = "Add", Value = 0.15 },
 		},
 	},
+	-- The arsenal: more orbs, harder bounces, and a dash worth building around.
+	{
+		Id = "ExtraOrb",
+		Title = "Extra Orb",
+		Description = "Carry one more orb.",
+		Category = "Projectile",
+		Rarity = "Rare",
+		MaxStacks = 2,
+		Effects = { { Stat = "OrbCount", Op = "Add", Value = 1 } },
+	},
+	{
+		Id = "Overcharge",
+		Title = "Overcharge",
+		Description = "Every bounce adds 25% more damage to the shot.",
+		Category = "Power",
+		Rarity = "Rare",
+		MaxStacks = 2,
+		Effects = { { Stat = "BouncePower", Op = "Add", Value = 0.25 } },
+	},
+	{
+		Id = "Homecoming",
+		Title = "Homecoming",
+		Description = "Dropped orbs roll back to you 60% faster.",
+		Category = "Projectile",
+		Rarity = "Common",
+		MaxStacks = 2,
+		Effects = { { Stat = "OrbReturnMultiplier", Op = "Multiply", Value = 1.6 } },
+	},
+	{
+		Id = "BlinkStrike",
+		Title = "Blink Strike",
+		Description = "Your dash deals 2 damage to every enemy it passes through.",
+		Category = "Power",
+		Rarity = "Rare",
+		MaxStacks = 2,
+		Effects = { { Stat = "DashStrikeDamage", Op = "Add", Value = 2 } },
+	},
+	{
+		Id = "Recall",
+		Title = "Recall",
+		Description = "Dashing calls every dropped orb straight back to you.",
+		Category = "Projectile",
+		Rarity = "Common",
+		MaxStacks = 1,
+		Effects = { { Stat = "DashRecall", Op = "Add", Value = 1 } },
+	},
+	{
+		Id = "QuickStep",
+		Title = "Quick Step",
+		Description = "Dash 30% more often.",
+		Category = "Survival",
+		Rarity = "Common",
+		MaxStacks = 2,
+		Effects = { { Stat = "DashCooldownMultiplier", Op = "Multiply", Value = 0.7 } },
+	},
+	{
+		Id = "RicochetStorm",
+		Title = "Ricochet Storm",
+		Description = "Bounces add 50% more damage each, and shots bounce twice more.",
+		Category = "Power",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { Overcharge = 2, LongBounce = 1 } },
+		Effects = {
+			{ Stat = "BouncePower", Op = "Add", Value = 0.5 },
+			{ Stat = "BounceBudget", Op = "Add", Value = 2 },
+		},
+	},
+	{
+		Id = "Phantom",
+		Title = "Phantom",
+		Description = "Your dash hits for 3 more, recharges faster, and recalls your orbs.",
+		Category = "Survival",
+		Rarity = "Fused",
+		MaxStacks = 1,
+		Requires = { Cards = { BlinkStrike = 1, QuickStep = 1 } },
+		Effects = {
+			{ Stat = "DashStrikeDamage", Op = "Add", Value = 3 },
+			{ Stat = "DashCooldownMultiplier", Op = "Multiply", Value = 0.8 },
+			{ Stat = "DashRecall", Op = "Add", Value = 1 },
+		},
+	},
 	{
 		Id = "Bulwarker",
 		Title = "Counterweight",
@@ -372,6 +467,32 @@ UpgradeConfig.Cards = {
 	},
 }
 
+-- Surge perks: small, quick, mid-fight picks (ArsenalConfig.Surge). Pool = "Minor" keeps them
+-- out of the between-room offers, and keeps the big cards out of Surge offers.
+local MINOR = {
+	{ Id = "Sharpen", Title = "Sharpen", Description = "Every shot deals 0.25 more damage.", Effects = { { Stat = "Damage", Op = "Add", Value = 0.25 } } },
+	{ Id = "Quickdraw", Title = "Quickdraw", Description = "Throw your orbs 7% more often.", Effects = { { Stat = "FireCooldownMultiplier", Op = "Multiply", Value = 0.93 } } },
+	{ Id = "Rebound", Title = "Rebound", Description = "Shots survive one more bounce.", MaxStacks = 4, Effects = { { Stat = "BounceBudget", Op = "Add", Value = 1 } } },
+	{ Id = "Momentum", Title = "Momentum", Description = "Bounces add 10% more damage.", Effects = { { Stat = "BouncePower", Op = "Add", Value = 0.1 } } },
+	{ Id = "Vigor", Title = "Vigor", Description = "Gain 12 maximum health, healed now.", Effects = { { Stat = "MaxHealthBonus", Op = "Add", Value = 12 } } },
+	{ Id = "Stride", Title = "Stride", Description = "Move a little faster on your feet.", MaxStacks = 4, Effects = { { Stat = "MoveSpeedBonus", Op = "Add", Value = 1 } } },
+	{ Id = "Focus", Title = "Focus", Description = "5% more of your hits are critical.", Effects = { { Stat = "CritChance", Op = "Add", Value = 0.05 } } },
+	{ Id = "Magnetism", Title = "Magnetism", Description = "Orbs and coins come to you faster.", Effects = {
+		{ Stat = "OrbReturnMultiplier", Op = "Multiply", Value = 1.2 },
+		{ Stat = "MagnetBonus", Op = "Add", Value = 3 },
+	} },
+	{ Id = "Reflex", Title = "Reflex", Description = "Dash 10% more often.", MaxStacks = 5, Effects = { { Stat = "DashCooldownMultiplier", Op = "Multiply", Value = 0.9 } } },
+	{ Id = "Hunger", Title = "Hunger", Description = "Surge fills 15% faster.", MaxStacks = 4, Effects = { { Stat = "SurgeGain", Op = "Multiply", Value = 1.15 } } },
+	{ Id = "SecondBreath", Title = "Second Breath", Description = "Heal a little faster between fights. Always available.", IsFallback = true, MaxStacks = UpgradeConfig.UnlimitedStacks, Effects = { { Stat = "RegenBonus", Op = "Add", Value = 0.4 } } },
+}
+for _, card in MINOR do
+	card.Pool = "Minor"
+	card.Category = card.Category or "Power"
+	card.Rarity = card.Rarity or "Common"
+	card.MaxStacks = card.MaxStacks or 8
+	table.insert(UpgradeConfig.Cards, card)
+end
+
 local byId = {}
 for _, card in UpgradeConfig.Cards do
 	assert(byId[card.Id] == nil, "duplicate upgrade card id: " .. card.Id)
@@ -380,6 +501,22 @@ end
 
 function UpgradeConfig.Get(cardId)
 	return byId[cardId]
+end
+
+-- Surge perks are not "cards" to the player: they stay out of the Codex and the upgrade list.
+function UpgradeConfig.IsMinor(card)
+	return card ~= nil and card.Pool == "Minor"
+end
+
+-- The between-room cards only, in their declared order.
+function UpgradeConfig.MainCards()
+	local cards = {}
+	for _, card in UpgradeConfig.Cards do
+		if not UpgradeConfig.IsMinor(card) then
+			table.insert(cards, card)
+		end
+	end
+	return cards
 end
 
 function UpgradeConfig.WeightOf(card)

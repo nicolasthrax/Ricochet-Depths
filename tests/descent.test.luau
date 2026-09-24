@@ -25,7 +25,8 @@ describe("DescentPlan.For", function()
 	end)
 
 	it("plunges again between rooms, into the next slot's zone", function()
-		local action = DescentPlan.For(States.UpgradeChoice, snap(States.Transition, 2, "Crossing", "Ruins"))
+		-- Room 3 is the Ruins mini-boss; the slot after it is the Foundry's first.
+		local action = DescentPlan.For(States.UpgradeChoice, snap(States.Transition, 3, "Hall of the Colossus", "Ruins"))
 		expect(action.Kind).toBe("Plunge")
 		expect(action.Zone).toBe("Foundry")
 		expect(action.Duration).toBeLessThanOrEqual(RunConfig.TransitionDuration)

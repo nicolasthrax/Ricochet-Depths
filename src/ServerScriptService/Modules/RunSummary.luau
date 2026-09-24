@@ -11,6 +11,9 @@ local function upgradeList(playerState)
 	local taken = {}
 	for _, cardId in playerState.upgradeOrder do
 		local card = UpgradeConfig.Get(cardId)
+		if UpgradeConfig.IsMinor(card) then
+			continue -- Surge perks are counted as the Surge level, not listed
+		end
 		table.insert(taken, {
 			Id = cardId,
 			Title = card and card.Title or cardId,
@@ -44,6 +47,9 @@ function RunSummary.ForPlayer(playerState, context)
 		BossesDefeated = playerState.bossKills or 0,
 		Crits = playerState.crits or 0,
 		RevivesGiven = playerState.revivesGiven or 0,
+		BestCombo = playerState.bestCombo or 0,
+		SurgeLevel = math.max((playerState.surgeLevel or 1) - 1, 0),
+		TrickShots = playerState.trickShots or 0,
 		-- archetype id -> kills, for the Codex.
 		KillsByArchetype = table.clone(playerState.killsByArchetype or {}),
 		-- Filled in once the payout lands (MatchFlow): level-up coins and the level progress.

@@ -753,6 +753,8 @@ function PlayerDataService:RecordRunEnd(player, summary)
 		profile.Stats.ChampionsDefeated += math.max(tonumber(summary.ChampionsDefeated) or 0, 0)
 		profile.Stats.BossesDefeated += math.max(tonumber(summary.BossesDefeated) or 0, 0)
 		profile.Stats.Revives += math.max(tonumber(summary.RevivesGiven) or 0, 0)
+		profile.Stats.BestCombo = math.max(profile.Stats.BestCombo, tonumber(summary.BestCombo) or 0)
+		profile.Stats.TrickShots += math.max(tonumber(summary.TrickShots) or 0, 0)
 		if summary.Outcome == "Extracted" then
 			profile.Stats.BestHeat = math.max(profile.Stats.BestHeat, tonumber(summary.Heat) or 0)
 			if type(summary.Rig) == "string" then

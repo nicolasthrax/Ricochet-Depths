@@ -12,6 +12,7 @@
 
 local EnemyService = __require("EnemyService")
 local MatchService = __require("MatchService")
+local OrbDrops = __require("OrbDrops")
 local ProjectileService = __require("ProjectileService")
 local RewardService = __require("RewardService")
 local RoomConfig = __require("RoomConfig")
@@ -25,6 +26,8 @@ local PLANE_Y = 3
 local DT = 1 / 30
 local WALK_SPEED = 16
 local KITE_DISTANCE = 22
+-- Closer than this and the bot dashes away (2.0).
+local DASH_TRIGGER = 6
 -- How far off a straight line the bot sidesteps while working around cover.
 local STRAFE_FRACTION = 0.6
 local MAX_FRAMES = 30000 -- hard stop so a pathological run cannot hang the tool
@@ -126,6 +129,7 @@ local function simulateRun(seed, scenario)
 	Harness.giveCharacter(player, Vector3.new(0, PLANE_Y, 0))
 	local root = player.Character:FindFirstChild("HumanoidRootPart")
 
+	local orbDrops = OrbDrops.new(arena)
 	local match = MatchService.new({
 		rooms = rooms,
 		enemies = enemies,
@@ -134,6 +138,11 @@ local function simulateRun(seed, scenario)
 		rewards = RewardService.new(),
 		net = net,
 		world = WorldAdapter, -- the real adapter, driving the real character
+		-- 2.0's kit as a player has it: three orbs that must be recovered (the bot never walks
+		-- to one, so it waits for them to roll home), Surge perks it always takes the first of,
+		-- and combo multipliers.
+		orbDrops = orbDrops,
+		arsenal = { orbs = true, surge = true, combo = true },
 		-- Seeded, so a given seed always plays the same rooms.
 		planRun = function()
 			return RunPlanner.Plan(Random.new(seed * 7919))
@@ -282,7 +291,23 @@ local function simulateRun(seed, scenario)
 				root.CFrame = CFrame.new(moved)
 			end
 
-			if nearest and nearestDistance and nearestDistance < KITE_DISTANCE then
+			-- 2.0: dash out of contact range, the way a player would, when the dash is ready.
+			if nearest and nearestDistance and nearestDistance < DASH_TRIGGER then
+				local away = botPosition - Vector3.new(nearest.position.X, PLANE_Y, nearest.position.Z)
+				if away.Magnitude > 1e-3 and match:HandleDash(player, away.Unit, clock) then
+					moveTo(away.Unit * __require("ArsenalConfig").Dash.Distance)
+				end
+			end
+
+			local state = match:GetPlayerState(player)
+			local orbSpot = state and state.orbsHeld == 0 and orbDrops:PositionsFor(player, botPosition)[1]
+			if orbSpot and (not nearestDistance or nearestDistance > KITE_DISTANCE * 0.6) then
+				-- Out of orbs and nothing on top of it: go and fetch one.
+				local toward = Vector3.new(orbSpot.X, PLANE_Y, orbSpot.Z) - botPosition
+				if toward.Magnitude > 1e-3 then
+					moveTo(toward.Unit * math.min(WALK_SPEED * DT, toward.Magnitude))
+				end
+			elseif nearest and nearestDistance and nearestDistance < KITE_DISTANCE then
 				-- Circle away rather than reversing in a straight line. Backing straight up
 				-- walks into a corner and dies there, which says more about the bot than the
 				-- game, so the bot strafes the way a player would.

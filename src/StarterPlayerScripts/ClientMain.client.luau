@@ -19,6 +19,8 @@ local NotificationView = require(script.Parent:WaitForChild("NotificationView"))
 local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
 local QuestsView = require(script.Parent:WaitForChild("QuestsView"))
 local StatsView = require(script.Parent:WaitForChild("StatsView"))
+local SurgePickerView = require(script.Parent:WaitForChild("SurgePickerView"))
+local RoomFx = require(script.Parent:WaitForChild("RoomFx"))
 local TitleScreen = require(script.Parent:WaitForChild("TitleScreen"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
@@ -44,6 +46,9 @@ local requestMeta = Remotes.Get("RequestMeta")
 local selectRig = Remotes.Get("SelectRig")
 local setPact = Remotes.Get("SetPact")
 local claimAchievement = Remotes.Get("ClaimAchievement")
+local chooseSurge = Remotes.Get("ChooseSurge")
+local chooseDoor = Remotes.Get("ChooseDoor")
+local UserInputService = game:GetService("UserInputService")
 
 -- Cosmetic scripts read these attributes rather than each opening their own remote.
 local function publishSettings(settings)
@@ -159,7 +164,19 @@ local descent = DescentCinematic.new(playerGui)
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 	sounds:Play("CardSelect")
 	chooseUpgrade:FireServer(offerId, cardId)
+end, function(doorId)
+	sounds:Play("CardSelect")
+	chooseDoor:FireServer(doorId)
 end)
+local surgePicker = SurgePickerView.new(playerGui, function(offerId, cardId)
+	sounds:Play("CardSelect")
+	chooseSurge:FireServer(offerId, cardId)
+end)
+local roomFx = RoomFx.new(playerGui)
+-- The dash button asks AimController to dash by bumping an attribute it listens to.
+hud:SetDashHandler(function()
+	player:SetAttribute("DashRequest", (player:GetAttribute("DashRequest") or 0) + 1)
+end, UserInputService.KeyboardEnabled)
 -- Declared before construction so the dismiss callback closes over the local, not a global.
 local results
 results = ResultsView.new(playerGui, function()
@@ -180,10 +197,13 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	if type(snapshot) ~= "table" then
 		return
 	end
-	-- A room just cleared: combat gave way to the upgrade round.
-	if lastState == RunConfig.States.Combat and snapshot.State == RunConfig.States.UpgradeChoice then
+	-- A room just cleared: combat gave way to the upgrade round (or the run ended in victory).
+	if lastState == RunConfig.States.Combat
+		and (snapshot.State == RunConfig.States.UpgradeChoice or snapshot.State == RunConfig.States.Results) then
 		sounds:Play("RoomClear")
+		roomFx:RoomCleared()
 	end
+	cardPicker:SetDoors(snapshot.State == RunConfig.States.UpgradeChoice and snapshot.Doors or nil)
 	descent:OnRunState(lastState, snapshot)
 	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
@@ -210,6 +230,16 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	elseif snapshot.State == RunConfig.States.Combat then
 		cardPicker:Hide()
 		onboarding:Show("Aim")
+		onboarding:Show("Orbs")
+		if type(snapshot.Wave) == "table" and snapshot.Wave.Incoming then
+			onboarding:Show("Waves")
+		end
+		if type(snapshot.Objective) == "table" then
+			onboarding:Show(snapshot.Objective.Kind)
+		end
+		if snapshot.RoomIndex >= 2 then
+			onboarding:Show("Dash")
+		end
 		if snapshot.RoomIndex >= 2 then
 			onboarding:Show("Ricochet")
 		end
@@ -219,6 +249,9 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	elseif snapshot.State ~= RunConfig.States.UpgradeChoice then
 		cardPicker:Hide()
 	end
+	if snapshot.State ~= RunConfig.States.Combat and snapshot.State ~= RunConfig.States.UpgradeChoice then
+		surgePicker:Hide()
+	end
 end)
 
 Remotes.Get("PlayerStateChanged").OnClientEvent:Connect(function(snapshot)
@@ -226,6 +259,11 @@ Remotes.Get("PlayerStateChanged").OnClientEvent:Connect(function(snapshot)
 	if type(snapshot) == "table" and type(snapshot.FireCooldown) == "number" then
 		-- AimController predicts its own cooldown from this, purely for feedback.
 		player:SetAttribute("FireCooldown", snapshot.FireCooldown)
+	end
+	if type(snapshot) == "table" then
+		-- Orbs in hand and the dash's cooldown, for AimController's own checks.
+		player:SetAttribute("Orbs", type(snapshot.OrbsMax) == "number" and snapshot.Orbs or nil)
+		player:SetAttribute("DashCooldown", snapshot.DashCooldown)
 	end
 end)
 
@@ -295,9 +333,35 @@ Remotes.Get("UpgradeOffer").OnClientEvent:Connect(function(payload)
 end)
 
 Remotes.Get("UpgradeResolved").OnClientEvent:Connect(function(payload)
-	cardPicker:Hide()
+	-- With doors on, the card is only half the choice: the next room comes second.
+	if not cardPicker:ShowDoors() then
+		cardPicker:Hide()
+	else
+		onboarding:Show("Doors")
+	end
 	if payload and payload.Auto and not player:GetAttribute("ReducedFlash") then
 		hud:Flash("Upgrade auto-selected")
+	end
+end)
+
+Remotes.Get("SurgeOffer").OnClientEvent:Connect(function(payload)
+	surgePicker:Show(payload)
+	sounds:Play("LevelUp")
+	onboarding:Show("Surge")
+end)
+
+Remotes.Get("SurgeResolved").OnClientEvent:Connect(function(payload)
+	surgePicker:Hide()
+	if type(payload) == "table" and payload.Title then
+		callouts:Show(string.upper(tostring(payload.Title)), Color3.fromRGB(255, 120, 200))
+	end
+end)
+
+-- 1 / 2 / 3 take a Surge perk without leaving the fight.
+local SURGE_KEYS = { [Enum.KeyCode.One] = 1, [Enum.KeyCode.Two] = 2, [Enum.KeyCode.Three] = 3 }
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and SURGE_KEYS[input.KeyCode] and surgePicker:IsOpen() then
+		surgePicker:Choose(SURGE_KEYS[input.KeyCode])
 	end
 end)
 
@@ -336,6 +400,13 @@ Remotes.Get("Notify").OnClientEvent:Connect(function(payload)
 		sounds:Play("LevelUp")
 		return
 	end
+	-- Big centre calls from the run: trick shots, combo tiers, trials, runners.
+	if payload.Kind == "Callout" then
+		callouts:Show(tostring(payload.Text), UiConfig.Colors[payload.Tone or "Gold"] or UiConfig.Colors.Gold)
+		sounds:Play("Combo")
+		roomFx:Punch(0.5)
+		return
+	end
 	notifications:Show(payload.Text, payload.Kind)
 	if payload.Kind == "Reward" or payload.Kind == "Revive" then
 		sounds:Play("Reward")
@@ -356,11 +427,22 @@ Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(_position, _archetyp
 	end
 end)
 
+-- First sightings of enemies with rules of their own (EnemyVisuals marks them).
+for _, name in { "Mirror", "Magnet", "Sponge", "TreasureRunner" } do
+	player:GetAttributeChangedSignal("Saw" .. name):Connect(function()
+		onboarding:Show(name, 7)
+	end)
+end
+
 -- The title card, over everything until the player presses Play.
 TitleScreen.new(playerGui, function()
 	sounds:Play("Reward")
 end)
 
 RunService.RenderStepped:Connect(function()
-	cardPicker:UpdateTimer(os.clock())
+	local now = os.clock()
+	cardPicker:UpdateTimer(now)
+	surgePicker:UpdateTimer(now)
+	hud:Tick(now, player:GetAttribute("DashReadyAt"))
+	roomFx:Step(now)
 end)

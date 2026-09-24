@@ -29,6 +29,9 @@ function ProjectileService.new(poolParent, collisionRoot, planeY)
 	-- Optional: (position, margin) -> instance, normal. Consulted only for a projectile that
 	-- made no contact this frame, to catch a body that moved over it. See ResolveEnemyOverlap.
 	self.OverlapQuery = nil
+	-- Optional (entry, position): a projectile finished its flight (out of bounces, time, or
+	-- consumed) at `position`. Not called for Clear, which ends every shot at once.
+	self.OnExpire = nil
 
 	return self
 end
@@ -74,6 +77,11 @@ function ProjectileService:Fire(shooter, origin, direction, power, options)
 		damagePerBounce = options.damagePerBounce or 0,
 		-- The shooter's stats table at firing time (shot effects); nil for a plain shot.
 		stats = options.stats,
+		-- The one projectile of a throw that is the player's orb; it drops when it stops.
+		carriesOrb = options.carriesOrb == true,
+		baseSpeed = speed,
+		-- Wall, cover and reflector bounces so far (enemy contacts are not bounces).
+		wallBounces = 0,
 		contacts = 0,
 	})
 
@@ -179,6 +187,13 @@ function ProjectileService:_stepEntry(entry, dt, now)
 		end
 	end
 
+	-- A portal crossed this frame (RoomMechanics) moves the shot to its partner.
+	if entry.teleportTo then
+		to = entry.teleportTo
+		entry.teleportTo = nil
+		resolved = math.max(resolved, 1)
+	end
+
 	entry.position = to
 	if resolved > 0 then
 		part.Position = to
@@ -202,6 +217,9 @@ function ProjectileService:Step(deltaTime)
 		if not self:_stepEntry(entry, dt, now) then
 			self._pool:Release(entry.part)
 			table.remove(self._active, index)
+			if self.OnExpire then
+				self.OnExpire(entry, entry.position)
+			end
 		end
 	end
 end
@@ -214,8 +232,14 @@ function ProjectileService:Clear()
 	end
 end
 
+-- Every live projectile, for systems that steer shots (Magnets).
+function ProjectileService:GetActive()
+	return self._active
+end
+
 function ProjectileService:Destroy()
 	self.SegmentHook = nil
+	self.OnExpire = nil
 	self:Clear()
 	self._pool:Destroy()
 	self.OnImpact = nil

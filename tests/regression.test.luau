@@ -246,24 +246,30 @@ end)
 describe("late joiners are credited only for rooms they were present for", function()
 	local RewardServiceModule = __require("RewardService")
 
-	local function wipeRoom(match, enemies, shooter, clock)
-		local guard = 0
-		while enemies:GetActiveCount() > 0 and guard < 500 do
-			guard += 1
-			local enemy = enemies:GetEnemies()[1]
-			match:HandleImpact(
-				{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
-				{ direction = Vector3.new(0, 0, 1), damage = 100, damagePerBounce = 0, contacts = 1, shooter = shooter },
-				clock
-			)
-		end
-	end
-
 	local function stepFor(match, clock, seconds)
 		for _ = 1, math.max(1, math.ceil(seconds / DT)) do
 			clock += DT
 			match:Step(DT, clock)
 		end
+		return clock
+	end
+
+	-- Clears every wave of the room; returns the clock after any waves it waited for.
+	local function wipeRoom(match, enemies, shooter, clock)
+		__clearRoom(match._rooms, function()
+			local guard = 0
+			while enemies:GetActiveCount() > 0 and guard < 500 do
+				guard += 1
+				local enemy = enemies:GetEnemies()[1]
+				match:HandleImpact(
+					{ Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part },
+					{ direction = Vector3.new(0, 0, 1), damage = 100, damagePerBounce = 0, contacts = 1, wallBounces = 1, shooter = shooter },
+					clock
+				)
+			end
+		end, function(seconds)
+			clock = stepFor(match, clock, seconds)
+		end)
 		return clock
 	end
 
@@ -288,7 +294,7 @@ describe("late joiners are credited only for rooms they were present for", funct
 				expect(match:IsPendingJoin(latecomer)).toBe(true)
 			end
 
-			wipeRoom(match, enemies, founder, clock)
+			clock = wipeRoom(match, enemies, founder, clock)
 			clock = stepFor(match, clock, DT)
 			local offer = upgrades:GetOffer(founder)
 			match:ChooseUpgrade(founder, offer.id, offer.cards[1].Id, clock)
@@ -302,7 +308,7 @@ describe("late joiners are credited only for rooms they were present for", funct
 		expect(lateState.roomsCleared).toBe(0)
 		expect(lateState.joinedAtRoom).toBe(eliteIndex)
 
-		wipeRoom(match, enemies, founder, clock)
+		clock = wipeRoom(match, enemies, founder, clock)
 		clock = stepFor(match, clock, DT)
 		expect(match:GetState()).toBe(RunConfig.States.Results)
 
@@ -335,7 +341,7 @@ describe("late joiners are credited only for rooms they were present for", funct
 
 		local state = match:GetPlayerState(founder)
 		expect(state.joinedAtRoom).toBe(1)
-		wipeRoom(match, enemies, founder, clock)
+		clock = wipeRoom(match, enemies, founder, clock)
 		stepFor(match, clock, DT)
 		expect(state.roomsCleared).toBe(1)
 	end)

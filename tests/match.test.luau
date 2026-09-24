@@ -88,20 +88,26 @@ end
 
 -- Kills every enemy alive in the current room through the real impact path.
 local function wipeRoom(ctx, shooter)
-	local guard = 0
-	while ctx.enemies:GetActiveCount() > 0 and guard < 500 do
-		guard += 1
-		local enemy = ctx.enemies:GetEnemies()[1]
-		local entry = {
-			direction = enemy.facing.Magnitude > 0 and enemy.facing or Vector3.new(0, 0, 1),
-			damage = 100,
-			damagePerBounce = 0,
-			contacts = 3,
-			shooter = shooter,
-		}
-		local result = { Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part }
-		ctx.match:HandleImpact(result, entry, clock)
-	end
+	__clearRoom(ctx.rooms, function()
+		local guard = 0
+		while ctx.enemies:GetActiveCount() > 0 and guard < 500 do
+			guard += 1
+			local enemy = ctx.enemies:GetEnemies()[1]
+			local entry = {
+				direction = enemy.facing.Magnitude > 0 and enemy.facing or Vector3.new(0, 0, 1),
+				damage = 100,
+				damagePerBounce = 0,
+				contacts = 3,
+				-- Banked, so Mirrors (which shrug off straight shots) die too.
+				wallBounces = 1,
+				shooter = shooter,
+			}
+			local result = { Position = enemy.position, Normal = Vector3.new(0, 0, 1), Instance = enemy.part }
+			ctx.match:HandleImpact(result, entry, clock)
+		end
+	end, function(seconds)
+		step(ctx, seconds)
+	end)
 	expect(ctx.enemies:GetActiveCount()).toBe(0)
 end
 
@@ -235,7 +241,13 @@ describe("soft-lock guards", function()
 		step(ctx, RunConfig.StartCountdown + DT)
 		expect(ctx.match:GetState()).toBe(States.Combat)
 
-		ctx.enemies:Clear() -- simulate enemies being cleaned up without ever being killed
+		-- Enemies cleaned up without ever being killed: later waves still arrive (and can vanish
+		-- the same way), and the room still clears.
+		__clearRoom(ctx.rooms, function()
+			ctx.enemies:Clear()
+		end, function(seconds)
+			step(ctx, seconds)
+		end)
 		step(ctx, DT * 2)
 		expect(ctx.match:GetState()).never().toBe(States.Combat)
 	end)

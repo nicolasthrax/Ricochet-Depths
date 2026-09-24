@@ -112,7 +112,7 @@ describe("AchievementConfig", function()
 			expect(achievement.Coins).toBeGreaterThan(0)
 		end
 		expect(AchievementConfig.Get("Naturalist").Target).toBe(#AchievementConfig.EnemyIds)
-		expect(AchievementConfig.Get("Archivist").Target).toBe(#UpgradeConfig.Cards)
+		expect(AchievementConfig.Get("Archivist").Target).toBe(#UpgradeConfig.MainCards())
 	end)
 
 	it("reads progress from stats, rigs and the Codex, ignoring ids that no longer exist", function()
@@ -321,9 +321,16 @@ describe("a Pact in a run", function()
 		now = run(ctx, RunConfig.Regen.Delay + 2, now)
 		expect(state.health).toBe(40) -- Drought
 
-		for _, enemy in ctx.enemies:GetEnemies() do
-			ctx.enemies:ApplyHit(enemy.part, 999, nil, hero)
+		local function clear()
+			__clearRoom(ctx.match._rooms, function()
+				for _, enemy in ctx.enemies:GetEnemies() do
+					ctx.enemies:ApplyHit(enemy.part, 999, nil, hero)
+				end
+			end, function(seconds)
+				now = run(ctx, seconds, now)
+			end)
 		end
+		clear()
 		now = run(ctx, DT, now)
 		expect(ctx.match:GetState()).toBe(States.UpgradeChoice)
 		expect(#ctx.upgrades:GetOffer(hero).cards).toBe(2)
@@ -334,9 +341,7 @@ describe("a Pact in a run", function()
 		ctx.match:ChooseUpgrade(hero, offer.id, offer.cards[1].Id, now)
 		now = run(ctx, RunConfig.TransitionDuration + 2 * DT, now)
 		expect(ctx.match:GetState()).toBe(States.Combat)
-		for _, enemy in ctx.enemies:GetEnemies() do
-			ctx.enemies:ApplyHit(enemy.part, 999, nil, hero)
-		end
+		clear()
 		now = run(ctx, DT, now)
 		expect(ctx.match:GetState()).toBe(States.Results)
 		local results = ctx.net.RunResults
@@ -471,7 +476,7 @@ describe("lobby views", function()
 		expect(slayer.button.Text).toBe("DONE")
 		local cards, cardTotal, enemies = JournalView.CodexCounts(profile)
 		expect(cards).toBe(1)
-		expect(cardTotal).toBe(#UpgradeConfig.Cards)
+		expect(cardTotal).toBe(#UpgradeConfig.MainCards())
 		expect(enemies).toBe(1)
 		view:ShowTab("Codex")
 		expect(view.codexList.Visible).toBe(true)

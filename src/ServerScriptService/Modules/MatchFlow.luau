@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Payout = require(script.Parent.Payout)
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
+local RouteConfig = require(ReplicatedStorage:WaitForChild("RouteConfig"))
 local RunSummary = require(script.Parent.RunSummary)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
@@ -45,6 +46,10 @@ function Flow.methods:_beginRoom(index, now)
 		end
 		return self:_finish("Aborted", now)
 	end
+
+	-- Every orb back in hand, and whatever the door into this room promised.
+	self:_resetOrbs()
+	self:_enterRoom(index, definition, now)
 
 	local spawnPoint = self._rooms:GetSpawnPoint()
 	for _, player in self._participants do
@@ -105,8 +110,13 @@ function Flow.methods:_rescueFallers(now)
 end
 
 function Flow.methods:_onRoomCleared(now)
-	self:_sweepCoins()
 	local definition = self._plan[self._roomIndex]
+	-- The door's reward, challenge payouts and gallery scores land before the coins are swept.
+	local armoury = self._activeReward == "Arsenal"
+	self:_leaveRoom(definition, now)
+	self:_sweepCoins()
+	self:_resolveSurges(now, true)
+	self:_resetOrbs()
 	if definition and definition.Kind == "Elite" then
 		self._eliteCleared = true
 	end
@@ -131,16 +141,24 @@ function Flow.methods:_onRoomCleared(now)
 	end
 
 	self._projectiles:Clear()
-	self:_openUpgradeChoice(now)
+	self:_openUpgradeChoice(now, armoury)
 	return nil
 end
 
-function Flow.methods:_openUpgradeChoice(now)
+-- armoury: the door into the room just cleared promised a bigger offer with a Rare in it.
+function Flow.methods:_openUpgradeChoice(now, armoury)
 	local offered = 0
+	local count = self._pactEffects.OfferCount
+	local options = nil
+	if armoury then
+		count = math.max(count or 0, RouteConfig.Rewards.Arsenal.Cards)
+		options = { rare = true }
+	end
+	self:_openDoors(now)
 	for _, player in self._participants do
 		local state = self._states[player]
 		if state then
-			local offer = self._upgrades:BuildOffer(player, state, now, self._pactEffects.OfferCount)
+			local offer = self._upgrades:BuildOffer(player, state, now, count, options)
 			self:_fireClient("UpgradeOffer", player, self._upgrades.ToClientPayload(offer, now))
 			offered += 1
 			self:_log("CardOffered", { RunId = self._runId, Room = self._roomIndex }, now)
@@ -159,6 +177,16 @@ end
 
 function Flow.methods:_finish(outcome, now)
 	self._projectiles:Clear()
+	self._doors = nil
+	self._challenge = nil
+	if self._orbDrops then
+		self._orbDrops:Clear()
+	end
+	-- A perk waiting at the end of a run can change nothing; drop it rather than let it open
+	-- another offer that would outlive the run.
+	if self._surges then
+		self._surges:ClearAll()
+	end
 	if self._coins then
 		-- Nothing a player earned is left behind: coins still on the floor go to the nearest
 		-- participant, downed or not, so a lost run still banks every drop.

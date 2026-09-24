@@ -17,11 +17,13 @@ local STATS = {
 	{ Key = "CoinsEarned", Label = "Coins earned" },
 	{ Key = "ChampionsDefeated", Label = "Champions slain" },
 	{ Key = "BestHeat", Label = "Highest Heat extracted" },
+	{ Key = "BestCombo", Label = "Best combo" },
+	{ Key = "TrickShots", Label = "Trick shots" },
 }
 
 function StatsView.new(playerGui, playerName)
 	local self = setmetatable({}, StatsView)
-	self.modal = UiTheme.modal("RicochetStats", playerGui, playerName or "PROFILE", Vector2.new(460, 500))
+	self.modal = UiTheme.modal("RicochetStats", playerGui, playerName or "PROFILE", Vector2.new(460, 580))
 	local content = self.modal.content
 
 	self.levelLabel = UiTheme.heading("Level", content, "LEVEL 1", UiConfig.Text.Title, UiConfig.Colors.Gold)

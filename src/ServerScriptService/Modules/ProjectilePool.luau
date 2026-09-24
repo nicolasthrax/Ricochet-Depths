@@ -80,6 +80,9 @@ function ProjectilePool:Release(part)
 	end
 	part.Anchored = true
 	part.AssemblyLinearVelocity = Vector3.zero
+	-- Bounce power grows and recolours a shot in flight; the next one starts fresh.
+	part.Size = Vector3.one * (ProjectileConfig.Radius * 2)
+	part.Color = ProjectileConfig.Color
 	part.Transparency = 1
 	part.Position = ProjectileConfig.StoragePosition
 	self._pool:Release(part)

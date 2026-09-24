@@ -170,7 +170,7 @@ end
 -- pads on the floor. Both opt out of raycasts; RoomMechanics drives them.
 local function buildFloorMechanics(room, layout, floorY)
 	local config = RoomConfig.Mechanics
-	local gates, pads = 0, 0
+	local gates, pads, boosts, portals = 0, 0, 0, 0
 	for _, mechanic in layout.Mechanics or {} do
 		if mechanic.Kind == "LaserGate" then
 			gates += 1
@@ -187,6 +187,29 @@ local function buildFloorMechanics(room, layout, floorY)
 			)
 			beam.CFrame = CFrame.lookAt(position, Vector3.new(to.X, position.Y, to.Y))
 			beam.Transparency = config.GateOffTransparency
+		elseif mechanic.Kind == "BoostPad" then
+			boosts += 1
+			makeDecor(
+				"BoostPad" .. boosts,
+				Vector3.new(mechanic.Size.X, config.AmpPadThickness, mechanic.Size.Y),
+				Vector3.new(mechanic.Offset.X, floorY + config.AmpPadY, mechanic.Offset.Y),
+				config.BoostColor,
+				Enum.Material.Neon,
+				room
+			)
+		elseif mechanic.Kind == "Portal" then
+			portals += 1
+			local disc = makeDecor(
+				"Portal" .. portals,
+				Vector3.new(config.AmpPadThickness, mechanic.Size.X, mechanic.Size.Y),
+				Vector3.new(mechanic.Offset.X, floorY + config.AmpPadY, mechanic.Offset.Y),
+				config.PortalColors[mechanic.Pair] or config.PortalColors.A,
+				Enum.Material.Neon,
+				room
+			)
+			disc.Shape = Enum.PartType.Cylinder
+			disc.CFrame = CFrame.new(disc.Position) * CFrame.Angles(0, 0, math.pi / 2)
+			disc:SetAttribute("Portal", mechanic.Pair)
 		elseif mechanic.Kind == "AmpPad" then
 			pads += 1
 			makeDecor(
@@ -211,6 +234,8 @@ local function styleFor(kind, layout)
 		return RoomConfig.ObstacleColor, trim
 	elseif kind == "Breakable" then
 		return RoomConfig.Mechanics.BreakableColor, trim
+	elseif kind == "Barrel" then
+		return RoomConfig.Mechanics.BarrelColor, RoomConfig.Mechanics.BarrelBandColor
 	end
 	return RoomConfig.BumperColor, RoomConfig.Decor.HazardColor
 end
@@ -264,17 +289,33 @@ function RoomBuilder.Build(parent, layoutId, origin)
 	buildFloorGrid(decor, interior, floorY, style)
 	buildBorder(decor, interior, floorY, trimColor)
 
-	local wallY = floorY + height / 2
+	local lootSpecs = {}
+	local breakableCount = 0
+	for _, mechanic in layout.Mechanics or {} do
+		if mechanic.Kind == "Breakable" then
+			breakableCount += 1
+			lootSpecs["Breakable" .. breakableCount] = mechanic
+		end
+	end
 	for _, solid in RoomGeometry.Solids(layout, RoomConfig) do
 		local color, trim = styleFor(solid.Kind, layout)
-		local part = makePart(solid.Name, Vector3.new(solid.Size.X, height, solid.Size.Y), Vector3.zero, color, room)
+		-- Barrels are low props; everything else stands wall-high.
+		local solidHeight = solid.Kind == "Barrel" and RoomConfig.Mechanics.BarrelHeight or height
+		local part = makePart(solid.Name, Vector3.new(solid.Size.X, solidHeight, solid.Size.Y), Vector3.zero, color, room)
 		local isCover = solid.Kind == "Wall" or solid.Kind == "Obstacle"
 		part.Material = if isCover then style.WallMaterial else RoomConfig.BumperMaterial
 		if solid.Kind == "Breakable" then
+			local spec = lootSpecs[solid.Name]
 			part.Material = RoomConfig.Mechanics.BreakableMaterial
+			if spec and spec.Loot then
+				part.Color = RoomConfig.Mechanics.LootColor
+				part.Material = Enum.Material.WoodPlanks
+			end
+		elseif solid.Kind == "Barrel" then
+			part.Material = Enum.Material.Metal
 		end
-		orient(part, Vector3.new(solid.Center.X, wallY, solid.Center.Y), solid.Yaw)
-		outlineSolid(decor, solid, floorY, height, trim)
+		orient(part, Vector3.new(solid.Center.X, floorY + solidHeight / 2, solid.Center.Y), solid.Yaw)
+		outlineSolid(decor, solid, floorY, solidHeight, trim)
 	end
 
 	buildSpawnPad(room, decor, floorY, layout.AccentColor or RoomConfig.WallColor, trimColor)

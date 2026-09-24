@@ -16,6 +16,26 @@ local HINTS = {
 	Upgrade = "Pick one upgrade. If you wait too long, one is chosen for you.",
 }
 
+-- 2.0's new systems. Shown once a session to everyone, veterans included, since none of them
+-- existed when earlier runs retired the hints above.
+local NEW_HINTS = {
+	Orbs = "You carry 3 orbs. Walk over a thrown orb to pick it up; bank a kill off 2 walls to get it back at once.",
+	Dash = "Press Q or Shift (or DASH) to dash through danger. You cannot be hit mid-dash.",
+	Waves = "Red circles on the floor: another wave is about to arrive there.",
+	Surge = "SURGE! Kills filled your meter. Pick a perk with 1 / 2 / 3 or a tap, and keep fighting.",
+	Doors = "Choose the next room. Each door promises something different; the group votes.",
+	Crystals = "Crystal Hunt: only a shot that has bounced can crack a crystal. Bank it!",
+	Beacon = "Hold the Beacon: stand in the glowing ring until it fills.",
+	Gallery = "Trick Shot Gallery: every bounce doubles a target's points.",
+	Mirror = "Mirror! Straight shots glance off it. Bounce a shot off a wall first.",
+	Magnet = "Magnet! It bends shots toward itself. Use it to curve round cover.",
+	Sponge = "Sponge! It soaks up a shot's bounces. Hit it last, or head on.",
+	TreasureRunner = "Treasure Runner! Catch it before it escapes with its coins.",
+}
+for hintId, text in NEW_HINTS do
+	HINTS[hintId] = text
+end
+
 function OnboardingView.new(playerGui)
 	local self = setmetatable({}, OnboardingView)
 	self._seen = {}
@@ -69,7 +89,9 @@ end
 -- Used when the profile says this player has already completed a run.
 function OnboardingView:MarkAllSeen()
 	for hintId in HINTS do
-		self._seen[hintId] = true
+		if not NEW_HINTS[hintId] then
+			self._seen[hintId] = true
+		end
 	end
 	self:Hide()
 end

@@ -193,6 +193,35 @@ end
 
 local DRESSERS = { Ruins = dressRuins, Foundry = dressFoundry, Abyss = dressAbyss }
 
+-- Drifting particles in each zone's mood: dust in the Ruins, embers in the Foundry, motes in the
+-- Abyss. Emitted from an invisible sheet above the walls, so they fall through the camera's view
+-- without ever being in the play space.
+local ATMOSPHERE = {
+	Ruins = { Color = Color3.fromRGB(230, 220, 200), Rate = 14, Size = 0.14, Speed = 1, LightEmission = 0.2 },
+	Foundry = { Color = Color3.fromRGB(255, 140, 60), Rate = 22, Size = 0.18, Speed = 2.5, LightEmission = 1 },
+	Abyss = { Color = Color3.fromRGB(190, 140, 255), Rate = 16, Size = 0.22, Speed = 1.2, LightEmission = 1 },
+}
+
+local function addAtmosphere(folder, layout, zone)
+	local spec = ATMOSPHERE[zone] or ATMOSPHERE.Ruins
+	local sheet = makeProp(folder, "Atmosphere", Vector3.new(layout.InteriorSize.X, 0.2, layout.InteriorSize.Y),
+		CFrame.new(0, RoomConfig.WallHeight + 8, 0), Color3.new(0, 0, 0), Enum.Material.SmoothPlastic)
+	sheet.Transparency = 1
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Drift"
+	emitter.EmissionDirection = Enum.NormalId.Bottom
+	emitter.Color = ColorSequence.new(spec.Color)
+	emitter.LightEmission = spec.LightEmission
+	emitter.Rate = spec.Rate
+	emitter.Lifetime = NumberRange.new(6, 9)
+	emitter.Speed = NumberRange.new(spec.Speed * 0.6, spec.Speed * 1.4)
+	emitter.SpreadAngle = Vector2.new(25, 25)
+	emitter.Size = NumberSequence.new(spec.Size, spec.Size * 0.4)
+	emitter.Transparency = NumberSequence.new(0.3, 1)
+	emitter.Parent = sheet
+	return sheet
+end
+
 function RoomDressing.Build(room, layoutId, layout)
 	local zone = layout.Zone or "Ruins"
 	local folder = Instance.new("Folder")
@@ -201,6 +230,7 @@ function RoomDressing.Build(room, layoutId, layout)
 	folder.Parent = room
 	local dresser = DRESSERS[zone] or dressRuins
 	dresser(folder, layout, Random.new(seedFor(layoutId)), layout.TrimColor or RoomConfig.Decor.TrimColor)
+	addAtmosphere(folder, layout, zone)
 	return folder
 end
 

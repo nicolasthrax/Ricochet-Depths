@@ -114,7 +114,13 @@ function Combat.methods:HandleImpact(result, entry, now)
 		if self._coins then
 			self._coins:Drop(hit.enemy.position, hit.enemy.archetype.Coins or 0)
 		end
-		self:_fireAll("EnemyDefeated", hit.enemy.position, hit.enemy.archetypeId)
+		-- Who scored it and off how many contacts, for kill-streak and ricochet callouts.
+		-- A real Player is userdata, not a table, so read the id defensively rather than by type.
+		local hasId, shooterId = pcall(function()
+			return entry.shooter.UserId
+		end)
+		shooterId = hasId and shooterId or nil
+		self:_fireAll("EnemyDefeated", hit.enemy.position, hit.enemy.archetypeId, shooterId, entry.contacts)
 		self:_log("EnemyDefeated", {
 			Archetype = hit.enemy.archetypeId,
 			Contacts = entry.contacts,
@@ -181,14 +187,15 @@ function Combat.methods:_applyRegen(deltaTime, now)
 end
 
 -- The live participants as coin collectors: where they stand and how far their magnet reaches.
-function Combat.methods:_coinCollectors()
+-- includeDowned counts downed participants too, for the sweep when a run ends.
+function Combat.methods:_coinCollectors(includeDowned)
 	local collectors = {}
 	if not self._world or not self._world.GetPosition then
 		return collectors
 	end
 	for _, player in self._participants do
 		local state = self._states[player]
-		local position = state and state.alive and self._world.GetPosition(player)
+		local position = state and (state.alive or includeDowned) and self._world.GetPosition(player)
 		if position then
 			table.insert(collectors, { player = player, position = position, magnet = state.stats.MagnetBonus or 0 })
 		end

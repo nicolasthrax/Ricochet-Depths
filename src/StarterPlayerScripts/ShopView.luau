@@ -52,14 +52,14 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	limit.Parent = panel
 	self.panel = panel
 
-	self.title = UiTheme.label("Title", panel, "Armory", UiConfig.Text.Title)
+	self.title = UiTheme.heading("Title", panel, "Armory", UiConfig.Text.Title)
 	self.title.Size = UDim2.new(1, -60, 0, 32)
 
 	self.balanceLabel = UiTheme.label("Balance", panel, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
 	self.balanceLabel.Position = UDim2.new(0, 0, 0, 34)
 	self.balanceLabel.Size = UDim2.new(1, 0, 0, 22)
 
-	local close = UiTheme.button("Close", panel, "X")
+	local close = UiTheme.button("Close", panel, "X", "Danger")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, 0, 0, 0)
 	close.Size = UDim2.fromOffset(UiConfig.MinTouchTarget, UiConfig.MinTouchTarget)
@@ -172,7 +172,12 @@ function ShopView:SetTab(tab)
 	end
 	self._list.CanvasSize = UDim2.fromOffset(0, visible * (ROW_HEIGHT + 6))
 	for name, button in self._tabButtons do
-		button.TextColor3 = name == tab and UiConfig.Colors.Accent or UiConfig.Colors.Text
+		button.TextColor3 = name == tab and UiConfig.Colors.Gold or UiConfig.Colors.Text
+		local edge = button:FindFirstChildOfClass("UIStroke")
+		if edge then
+			edge.Color = name == tab and UiConfig.Colors.Gold or UiConfig.Colors.Accent
+			edge.Transparency = name == tab and 0 or 0.55
+		end
 	end
 	if tab == "Store" and visible == 0 then
 		self.status.Text = "The Store opens soon."

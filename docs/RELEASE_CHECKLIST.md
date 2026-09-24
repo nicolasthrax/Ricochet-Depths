@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.0.2` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `1.2.0` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -12,10 +12,13 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 
 | Check | State | Notes |
 |---|---|---|
-| `luau-compile` on all sources | PASS | 84 sources + 32 test files |
-| `luau-analyze` lint | PASS | zero findings in `src/` |
-| `rojo build` | PASS | Rojo 7.5.1 |
-| Headless test suite | PASS | 510 tests, 0 failures |
+| `luau-compile` on all sources | PASS | 100 sources + 38 test files |
+| `luau-analyze` lint | PASS | zero findings in `src/` or `tests/` |
+| `rojo build` | PASS | Rojo 7.7.0 |
+| Headless test suite | PASS | 563 tests, 0 failures |
+| Daily rewards, quests, codes | PASS | streaks and resets, once per day across rejoins, quest progress and single claim, codes once per account, read-only pays nothing |
+| Leaderboards | PASS | batched writes, top-ten render, offline text when the store is unreachable |
+| Levels | PASS | XP from runs, daily rewards, quests and codes; level-up coins; Level column and nameplates |
 | Rooms load under the player | PASS | every room in every arena slot: floor under the spawn, cover and enemies on it; the stub now treats Position and CFrame as one property |
 | Concurrent arenas | PASS | two groups run side by side, isolated; slots freed and reused; payout keys unique per slot |
 | Multiplayer gates | PASS | 2-player minimum, 8-player cap with overflow, 15s/5s countdowns, cancel on leave |
@@ -78,12 +81,12 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
 
-## 6. Known issues at 1.0.2
+## 6. Known issues at 1.2.0
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|
 | 1 | Nothing added since 0.6.0-dev has run in Studio or on a published server. | **Blocker** | Sections 2–4 before going public. |
-| 2 | Audio hooks exist but every sound id is a placeholder and `FeatureFlags.Audio` is off: the game is silent. | High | Upload original sounds, fill `SoundConfig`, flip the flag. |
+| 2 | Audio uses sounds built into the Roblox client (`rbxasset://sounds/...`). They play with no uploads, but they are generic, and one missing on some client would simply be silent. There is no music. | Medium | Verify in V10.3; upload original sound effects and a lobby music loop when you can. |
 | 3 | Robux items are inert until real ids are pasted into `MonetizationConfig`. | Launch step | Section 8, step 10. |
 | 4 | Balance is tuned against bots, not people. The 1.0.0 tuning was measured against bots that (by a stub bug) never moved. Bots that walk and kite now beat the Warden Prime 93–100% of the time, but they see everything and dodge perfectly. How hard it is for people is unknown. | High | Playtest the boss before launch; tune `EnemyConfig.WardenPrime` from real deaths. |
 | 5 | Run length: the dry run's floor is ~1.5 min for competent bots against a 6–8 minute target. Real players are much slower (aiming, cards, walking, the cinematic), but it is unmeasured. | Medium | Measure in analytics. |
@@ -122,8 +125,19 @@ These cannot be done from this repository and need a human with account access.
 5. **Set max players to 20** (Game Settings → Players). Two gates of 8 plus solo players, each
    group in its own arena; up to 6 runs at once per server.
 6. **Enable the platforms** you intend to support (Game Settings → Places → Devices).
-7. **Set the icon and thumbnails** (Creator Hub → Experience). They must be original.
-8. **Upload sounds** you own, paste their ids into `SoundConfig`, and set `FeatureFlags.Audio = true`.
+7. **Set the icon and thumbnails** (Creator Hub → Experience). Ready-made originals are in
+   `marketing/`: `icon.png` (512×512) and `thumb1–3.png` (1920×1080). Add one or two real
+   in-game screenshots as well once the game runs. The store description is in
+   `marketing/STORE_PAGE.md`.
+8. **Sounds work out of the box** with Roblox's built-in sounds. For a distinctive identity,
+   upload your own and paste their ids into `SoundConfig`.
+8a. **Create the badges** (Creator Hub → Engagement → Badges): Welcome, First Descent,
+   Extracted, Bank Shot Artist, Level 10, Level 25, Level 50. Paste each id into
+   `MetaConfig.Badges`. Until then no badge is awarded.
+8b. **Promo codes** live in `MetaConfig.Codes` (RICOCHET, DEPTHS, LAUNCH, BANKSHOT ship). Post
+   them on your group and socials; add new ones and republish; set `Expires` to retire one.
+8c. **Make a Roblox group** for the game and link it on the experience page; that is where
+   players look for codes and updates.
 9. **Optional custom sky:** upload six skybox images and paste their ids into `SkyConfig`.
 10. **Create the passes and products** (Creator Hub → Monetization): passes *2x Coins* and *VIP*,
     developer products *500 / 1,500 / 5,000 Coins*. Paste each id into `MonetizationConfig`.

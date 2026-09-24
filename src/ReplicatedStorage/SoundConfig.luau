@@ -1,8 +1,10 @@
 -- Sound cues and the curves that shape them. Client-side only; nothing here is authoritative.
 --
--- Every SoundId is a placeholder until real assets are uploaded. An empty id makes that cue
--- inert (no Sound instance is built, nothing plays, nothing warns), so the hooks can ship and
--- be exercised long before the audio does. Fill in an id and turn on FeatureFlags.Audio.
+-- The ids below are sounds that ship inside every Roblox client (rbxasset://sounds/...), so the
+-- game has audio out of the box with no uploads. They are stand-ins: for a distinctive sound,
+-- upload original audio and paste "rbxassetid://<id>" over any cue. An empty id makes that cue
+-- inert (no Sound instance is built, nothing plays, nothing warns). Players scale every cue
+-- with the Sound volume option.
 local SoundConfig = {}
 
 -- Wall bounce pitch climbs with every ricochet in a chain, so a long bank shot audibly builds.
@@ -25,16 +27,16 @@ SoundConfig.MaxSoundsPerBatch = 6
 SoundConfig.Cues = {
 	Fire = {
 		Brief = "Weapon fire: punchy bass thump with a short metallic snap, under 150ms.",
-		SoundId = "",
-		Volume = 0.55,
-		PlaybackSpeed = 0.9,
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
+		Volume = 0.35,
+		PlaybackSpeed = 0.55,
 		PitchJitter = 0.04,
 		Voices = 6,
 		MinInterval = 0.03,
 	},
 	WallBounce = {
 		Brief = "Ricochet off stone: bright ping. Pitch is raised per bounce by BouncePitch.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
 		Volume = 0.4,
 		PlaybackSpeed = 1,
 		PitchJitter = 0.02,
@@ -43,7 +45,7 @@ SoundConfig.Cues = {
 	},
 	EnemyHit = {
 		Brief = "Enemy hit: dull crunch with a little glassy crack.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/clickfast.wav",
 		Volume = 0.5,
 		PlaybackSpeed = 1,
 		PitchJitter = 0.06,
@@ -52,7 +54,7 @@ SoundConfig.Cues = {
 	},
 	ShieldBlock = {
 		Brief = "Shot deflected by a shield: hard metallic clank, clearly 'no damage'.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/unsheath.wav",
 		Volume = 0.5,
 		PlaybackSpeed = 1,
 		PitchJitter = 0.03,
@@ -61,7 +63,7 @@ SoundConfig.Cues = {
 	},
 	EnemyShatter = {
 		Brief = "Enemy destroyed: glass shatter over a low boom, the most satisfying sound in the game.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/glassbreak.wav",
 		Volume = 0.7,
 		PlaybackSpeed = 1,
 		PitchJitter = 0.08,
@@ -70,16 +72,52 @@ SoundConfig.Cues = {
 	},
 	CardSelect = {
 		Brief = "Upgrade card picked: rising two-note chime.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
 		Volume = 0.6,
 		PlaybackSpeed = 1,
 		PitchJitter = 0,
 		Voices = 2,
 		MinInterval = 0.1,
 	},
+	UiClick = {
+		Brief = "Button press: soft, short click.",
+		SoundId = "rbxasset://sounds/clickfast.wav",
+		Volume = 0.35,
+		PlaybackSpeed = 1.1,
+		PitchJitter = 0.02,
+		Voices = 3,
+		MinInterval = 0.05,
+	},
+	Reward = {
+		Brief = "Coins or a reward claimed: bright rising sparkle.",
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
+		Volume = 0.6,
+		PlaybackSpeed = 1.6,
+		PitchJitter = 0,
+		Voices = 2,
+		MinInterval = 0.15,
+	},
+	Combo = {
+		Brief = "Kill streak callout: punchy stinger.",
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
+		Volume = 0.6,
+		PlaybackSpeed = 1.25,
+		PitchJitter = 0,
+		Voices = 2,
+		MinInterval = 0.2,
+	},
+	LevelUp = {
+		Brief = "Level up fanfare.",
+		SoundId = "rbxasset://sounds/victory.wav",
+		Volume = 0.7,
+		PlaybackSpeed = 1.1,
+		PitchJitter = 0,
+		Voices = 1,
+		MinInterval = 1,
+	},
 	RoomClear = {
 		Brief = "Room clear fanfare: short triumphant brass-and-synth stab, about one second.",
-		SoundId = "",
+		SoundId = "rbxasset://sounds/victory.wav",
 		Volume = 0.7,
 		PlaybackSpeed = 1,
 		PitchJitter = 0,

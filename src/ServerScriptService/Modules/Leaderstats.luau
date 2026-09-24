@@ -1,5 +1,5 @@
--- The player-list columns: coin balance and deepest room reached. Roblox shows any values in a
--- player's "leaderstats" folder there.
+-- The player-list columns: level, coin balance and deepest room reached. Roblox shows any values
+-- in a player's "leaderstats" folder there, in the order they were created, and sorts by the first.
 local Leaderstats = {}
 
 local function value(folder, name)
@@ -14,20 +14,28 @@ local function value(folder, name)
 	return created
 end
 
-function Leaderstats.Update(player, coins, bestDepth)
+local function set(folder, name, amount)
+	local holder = value(folder, name)
+	if holder.Value ~= amount then
+		holder.Value = amount
+	end
+end
+
+-- `level` is optional so older callers keep working; without it the column is left alone.
+function Leaderstats.Update(player, coins, bestDepth, level)
 	local folder = player:FindFirstChild("leaderstats")
 	if not folder then
 		folder = Instance.new("Folder")
 		folder.Name = "leaderstats"
 		folder.Parent = player
+		-- Created first so it is the leftmost column and the one the list sorts by.
+		value(folder, "Level").Value = 1
 	end
-	local coinValue, depthValue = value(folder, "Coins"), value(folder, "Best Depth")
-	if coinValue.Value ~= coins then
-		coinValue.Value = coins
+	if level then
+		set(folder, "Level", level)
 	end
-	if depthValue.Value ~= bestDepth then
-		depthValue.Value = bestDepth
-	end
+	set(folder, "Coins", coins)
+	set(folder, "Best Depth", bestDepth)
 end
 
 return Leaderstats

@@ -2,6 +2,8 @@
 -- a run and tearing it down. Installed onto MatchService.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Payout = require(script.Parent.Payout)
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RunSummary = require(script.Parent.RunSummary)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
@@ -149,10 +151,18 @@ function Flow.methods:_openUpgradeChoice(now)
 	self:_setState(offered > 0 and States.UpgradeChoice or States.Transition, now)
 end
 
+-- Pays `coins` and `xp` to a player's profile under one ledger key (see Payout.Grant).
+function Flow.methods:_payout(player, runKey, coins, xp)
+	local granted, xpGranted, levelCoins, levelBefore, levelAfter = Payout.Grant(self._persistence, player, runKey, coins, xp)
+	return granted, xpGranted, levelCoins, levelBefore, levelAfter
+end
+
 function Flow.methods:_finish(outcome, now)
 	self._projectiles:Clear()
 	if self._coins then
-		self._coins:Clear() -- whatever is still on the floor of a lost room is gone
+		-- Nothing a player earned is left behind: coins still on the floor go to the nearest
+		-- participant, downed or not, so a lost run still banks every drop.
+		self:_creditCoins(self._coins:Sweep(self:_coinCollectors(true)))
 	end
 	self._rooms:Unload()
 	self._upgrades:ClearAll()
@@ -173,13 +183,24 @@ function Flow.methods:_finish(outcome, now)
 
 			-- Two guards in series: the in-memory ledger stops a repeated completion event on
 			-- this server, and the profile ledger stops a repeat across reconnects or servers.
-			summary.Reward = self._rewards:Grant(self._runId, player, summary.Reward)
+			local reward, repeated = self._rewards:Grant(self._runId, player, summary.Reward)
+			summary.Reward = reward
+			if repeated then
+				summary.XpEarned = 0
+			end
 			if self._persistence then
-				if summary.Reward > 0 then
-					summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
-				end
+				local levelBefore, levelAfter
+				summary.Reward, summary.XpEarned, summary.LevelReward, levelBefore, levelAfter =
+					self:_payout(player, runKey, summary.Reward, summary.XpEarned)
+				summary.LevelBefore = levelBefore
+				summary.Progress = ProgressionConfig.Describe(Payout.XpOf(self._persistence, player))
+				summary.Progress.LeveledUp = levelAfter > levelBefore
 				-- Every finished run counts, paid or not: stats advance and onboarding retires.
 				self._persistence:RecordRunEnd(player, summary)
+				-- Quests, badges and leaderboards hear about every finished run.
+				if self._onRunEnd then
+					self._onRunEnd(player, summary)
+				end
 				-- Written now, not left for autosave or leave: a payout is the one change whose
 				-- loss really hurts, and this single write carries it with the run's stats.
 				self._persistence:SaveInBackground(player, now)

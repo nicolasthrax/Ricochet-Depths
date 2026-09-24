@@ -4,16 +4,25 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local CalloutView = require(script.Parent:WaitForChild("CalloutView"))
 local CardPickerView = require(script.Parent:WaitForChild("CardPickerView"))
+local CodesView = require(script.Parent:WaitForChild("CodesView"))
+local DailyView = require(script.Parent:WaitForChild("DailyView"))
 local DescentCinematic = require(script.Parent:WaitForChild("DescentCinematic"))
 local HudView = require(script.Parent:WaitForChild("HudView"))
+local MenuDock = require(script.Parent:WaitForChild("MenuDock"))
+local NotificationView = require(script.Parent:WaitForChild("NotificationView"))
 local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
+local QuestsView = require(script.Parent:WaitForChild("QuestsView"))
+local StatsView = require(script.Parent:WaitForChild("StatsView"))
+local TitleScreen = require(script.Parent:WaitForChild("TitleScreen"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local SettingsView = require(script.Parent:WaitForChild("SettingsView"))
 local ShopView = require(script.Parent:WaitForChild("ShopView"))
 local SoundPlayer = require(script.Parent:WaitForChild("SoundPlayer"))
+local UiTheme = require(script.Parent:WaitForChild("UiTheme"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -23,12 +32,17 @@ local requestReturnToLobby = Remotes.Get("RequestReturnToLobby")
 local updateSettings = Remotes.Get("UpdateSettings")
 local purchaseShopItem = Remotes.Get("PurchaseShopItem")
 local equipShopItem = Remotes.Get("EquipShopItem")
+local claimDaily = Remotes.Get("ClaimDaily")
+local claimQuest = Remotes.Get("ClaimQuest")
+local redeemCode = Remotes.Get("RedeemCode")
+local requestMeta = Remotes.Get("RequestMeta")
 
 -- Cosmetic scripts read these attributes rather than each opening their own remote.
 local function publishSettings(settings)
 	player:SetAttribute("EffectIntensity", settings.EffectIntensity)
 	player:SetAttribute("ReducedFlash", settings.ReducedFlash)
 	player:SetAttribute("ScreenShake", settings.ScreenShake)
+	player:SetAttribute("SfxVolume", settings.SfxVolume)
 end
 
 local hud = HudView.new(playerGui)
@@ -54,6 +68,66 @@ end, function(kind, id)
 	end
 end)
 local sounds = SoundPlayer.Shared()
+-- Every themed button clicks.
+UiTheme.onClick = function()
+	sounds:Play("UiClick")
+end
+
+local notifications = NotificationView.new(playerGui)
+local callouts = CalloutView.new(playerGui)
+local dailyView = DailyView.new(playerGui, function()
+	claimDaily:FireServer()
+end)
+local questsView = QuestsView.new(playerGui, function(questId)
+	claimQuest:FireServer(questId)
+end)
+local codesView = CodesView.new(playerGui, function(code)
+	redeemCode:FireServer(code)
+end)
+local statsView = StatsView.new(playerGui, string.upper(player.DisplayName or player.Name))
+local modals = { dailyView, questsView, codesView, statsView }
+local function closeModals()
+	for _, view in modals do
+		view:Close()
+	end
+end
+local function openOnly(view)
+	closeModals()
+	shopView:Close()
+	view:Open()
+end
+
+local function invite()
+	local SocialService = game:GetService("SocialService")
+	local ok, canInvite = pcall(function()
+		return SocialService:CanSendGameInviteAsync(player)
+	end)
+	if ok and canInvite then
+		pcall(function()
+			SocialService:PromptGameInvite(player)
+		end)
+	else
+		notifications:Show("Invites are not available right now.", "Error")
+	end
+end
+
+local menu = MenuDock.new(playerGui, {
+	Daily = function()
+		requestMeta:FireServer()
+		openOnly(dailyView)
+	end,
+	Quests = function()
+		requestMeta:FireServer()
+		openOnly(questsView)
+	end,
+	Codes = function()
+		openOnly(codesView)
+	end,
+	Invite = invite,
+})
+hud:SetProfileHandler(function()
+	openOnly(statsView)
+end)
 local descent = DescentCinematic.new(playerGui)
 local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 	sounds:Play("CardSelect")
@@ -90,8 +164,14 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	-- ZoneAmbience tweens the lighting from this.
 	local inRun = snapshot.State ~= RunConfig.States.Lobby and snapshot.State ~= RunConfig.States.Results
 	player:SetAttribute("Zone", inRun and type(snapshot.Zone) == "string" and snapshot.Zone ~= "" and snapshot.Zone or "Lobby")
-	if snapshot.State ~= RunConfig.States.Lobby then
-		shopView:Close() -- the shop is lobby-only
+	local inLobby = snapshot.State == RunConfig.States.Lobby
+	menu:SetVisible(inLobby)
+	if not inLobby then
+		shopView:Close() -- the shop and the menus are lobby-only
+		closeModals()
+	end
+	if snapshot.State == RunConfig.States.Starting then
+		callouts:Reset()
 	end
 
 	if snapshot.State == RunConfig.States.Lobby then
@@ -138,14 +218,22 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 		end
 	end
 	shopView:SetProfile(profile)
+	statsView:SetProfile(profile)
+	hud:SetReadOnly(profile.ReadOnly)
+	if hud:SetProgress(profile.Progression) then
+		sounds:Play("LevelUp")
+		notifications:Show(string.format("LEVEL UP! You reached level %d.", profile.Progression.Level), "Reward")
+	end
 	settingsView:Apply(profile.Settings)
 	publishSettings(settingsView:GetSettings())
 end)
 
 Remotes.Get("ShopOpen").OnClientEvent:Connect(function(tab)
+	closeModals()
 	shopView:Open(tab)
 end)
 hud:SetStoreHandler(function()
+	closeModals()
 	shopView:Open("Store")
 end)
 
@@ -184,6 +272,43 @@ Remotes.Get("RunResults").OnClientEvent:Connect(function(summary)
 		sounds:Play("RoomClear")
 	end
 	results:Show(summary)
+end)
+
+Remotes.Get("MetaSync").OnClientEvent:Connect(function(state)
+	if type(state) ~= "table" then
+		return
+	end
+	dailyView:SetState(state.Daily, state.ResetsIn)
+	questsView:SetState(state.Quests, state.ResetsIn)
+	local questReady = false
+	for _, quest in type(state.Quests) == "table" and state.Quests or {} do
+		if quest.Complete and not quest.Claimed then
+			questReady = true
+		end
+	end
+	menu:SetClaimable(type(state.Daily) == "table" and state.Daily.CanClaim, questReady)
+end)
+
+Remotes.Get("Notify").OnClientEvent:Connect(function(payload)
+	if type(payload) ~= "table" then
+		return
+	end
+	notifications:Show(payload.Text, payload.Kind)
+	if payload.Kind == "Reward" then
+		sounds:Play("Reward")
+	end
+end)
+
+-- Kill streaks and long ricochets, for this player's own kills.
+Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(_position, _archetypeId, shooterId, contacts)
+	if shooterId == player.UserId and callouts:OnKill(tonumber(contacts) or 0) then
+		sounds:Play("Combo")
+	end
+end)
+
+-- The title card, over everything until the player presses Play.
+TitleScreen.new(playerGui, function()
+	sounds:Play("Reward")
 end)
 
 RunService.RenderStepped:Connect(function()

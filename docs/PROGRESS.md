@@ -5,9 +5,9 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.0.2: the launch build, with the Studio fall-through fixed. Feature-complete and green
-headlessly (510 tests); awaiting Studio and published-server validation (V9, and the launch
-checklist).**
+**1.2.0: the polish build. Menus, daily rewards, quests, codes, badges, leaderboards, audio, a
+dressed lobby and store art. Green on every gate: syntax, lint, Rojo build and 563 headless
+tests. Awaiting Studio and published-server validation (V9, V10 and the launch checklist).**
 
 This build answers the third playtest's notes and adds what a public launch needs:
 
@@ -269,6 +269,65 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.2.0 — the polish build
+
+Owner note: "it only looks halfway finished". This build adds what players expect from a
+finished Roblox action game, modelled on the loops of the genre's most-played games.
+
+- **Come-back loop.** Daily login rewards on a 7-day streak (resets if a day is missed), three
+  daily quests drawn per player per UTC day, promo codes (`MetaConfig.Codes`), and badges
+  (`MetaConfig.Badges`, inert until ids are set). All server-side in `MetaService`; every payout
+  goes through the idempotent grant ledger, and the claim markers make rejoins and repeats pay
+  nothing. Experience from these levels players up like runs do (`Payout`). Schema v7.
+- **Global leaderboards.** Top levels, most defeated and most extractions, printed on framed
+  boards on the lobby's south wall from OrderedDataStores, with batched writes and an offline
+  message when the store is unreachable.
+- **Lobby.** A `RICOCHET DEPTHS` marquee and tagline, fire braziers, turning and bobbing
+  crystals over the well, rising motes and drifting dust, a lit walkway from the spawn, and the
+  leaderboards.
+- **Rooms.** Particle weather per zone: dust in the Ruins, embers in the Foundry, motes in the
+  Abyss, from above the walls so it never enters the play space.
+- **UI.** A new theme (lit panels, outlined buttons that press in and glow, gold primary
+  buttons, a display font for titles), a title screen with PLAY, a side menu (Daily, Quests,
+  Codes, Invite) with claim dots, modal windows for each, a profile card behind the level badge,
+  toasts, and `DOUBLE KILL` / `RICOCHET x5` callouts.
+- **Audio on.** Every cue now plays a sound built into the Roblox client, plus UI click,
+  reward, combo and level-up cues, and a Sound volume option.
+- **Social.** `[Lv N]` and `[VIP]` chat tags, an invite button, and a 10% coin bonus for Roblox
+  Premium members.
+- **Store art.** `marketing/`: icon, three thumbnails and the store description.
+- **Tooling.** Two engine-only bugs were caught in review before shipping: a DataStore is
+  userdata, so reading `store.Available` on it would have thrown and left the leaderboards
+  permanently offline; and a real Player is userdata, so a `type(...) == "table"` check would
+  have silenced every kill callout. Both now read defensively.
+
+### 1.1.0 — levels, and coins that always save
+
+Owner playtest notes: the lobby spawn pad was visible, coins did not save after dying, and the
+game needed levels.
+
+- **Coins did not save (Studio).** Every payout is keyed by run, and the key is remembered in
+  the profile so a run can never pay twice. Studio has no `JobId`, so every Studio session used
+  the prefix `studio` and its first run got the key `studio-a1-1` — a key the first session had
+  already paid. The ledger refused it and the coins vanished; dying ended most runs, so it
+  looked like a death bug. Studio sessions now get a fresh GUID prefix
+  (`GameBootstrap._runKeyPrefix`); live servers keep their `JobId`.
+- **Coins on the floor are banked when a run ends.** Previously a lost room's uncollected
+  coins were discarded. They now go to the nearest participant, downed or not.
+- **Levels (XP).** Every run earns experience: 4 per kill, 25 per room cleared, 60 for the
+  elite, 150 for extracting (`ProgressionConfig`). Dying keeps everything except the extraction
+  award, and leaving mid-run pays what was earned. Levels 1–100 on a rising curve, and each new
+  level pays coins (250 on every tenth). Experience travels with the run's coins in the same
+  idempotent grant, so neither can be paid twice or without the other. Profile schema v6
+  (`Progression.Xp`, store-owned like currency).
+- **Where levels show.** A level badge and XP bar in the lobby HUD, a "LEVEL UP" banner, experience
+  and level-up rows on the results screen (now scrollable), a `Level` column first in the
+  player list, and a "Lv N" plate over every character.
+- **Lobby spawn is invisible.** Transparent, no collision, no raycast hits; players still spawn
+  there, standing on the hall floor.
+- **Save warning.** A player whose profile could not load (read-only session, e.g. Studio with
+  API access off) now sees "Progress is not saving right now" instead of losing coins silently.
 
 ### 1.0.2 — the first room loads under you
 

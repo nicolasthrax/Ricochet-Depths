@@ -12,6 +12,10 @@ local REMOTE_NAMES = {
 	"UpdateSettings", -- accessibility options, sanitised server-side before storage
 	"PurchaseShopItem", -- salvage shop item id; price and eligibility are decided server-side
 	"EquipShopItem", -- an owned trail's item id, or "" to clear
+	"ClaimDaily", -- claim today's login reward
+	"ClaimQuest", -- quest id
+	"RedeemCode", -- promo code text
+	"RequestMeta", -- ask for a fresh MetaSync (opening the daily or quest panel)
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -26,6 +30,8 @@ local REMOTE_NAMES = {
 	"ShopOpen", -- the kiosk prompt was used: open the shop view
 	"LobbyReadyState", -- ready pads: how many are ready and the start countdown
 	"DebugStats", -- developer overlay only; sent to allowlisted users
+	"MetaSync", -- daily streak and today's quests for this player
+	"Notify", -- a toast: { Text, Kind = "Reward" | "Quest" | "Info" | "Error" }
 }
 
 local Remotes = {}

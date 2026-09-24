@@ -17,12 +17,20 @@ FeatureFlags.EnemyModels = true
 -- fills in real ids, so this is safe on with the shipped config.
 FeatureFlags.Monetization = true
 
+-- Sound effects, using the Roblox client's built-in sounds until original audio is uploaded
+-- (SoundConfig).
+FeatureFlags.Audio = true
+-- Daily login rewards, daily quests and promo codes (MetaConfig, MetaService).
+FeatureFlags.DailyRewards = true
+-- Global leaderboards on the lobby wall (LeaderboardService).
+FeatureFlags.Leaderboards = true
+
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false
 FeatureFlags.BaseBuilding = false
 FeatureFlags.Matchmaking = false
 FeatureFlags.SecondBoss = false
-FeatureFlags.Audio = false -- sound hooks are stubbed but no assets are wired
+
 
 function FeatureFlags.IsEnabled(name)
 	return FeatureFlags[name] == true

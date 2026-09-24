@@ -9,8 +9,16 @@ local SoundConfig = require(ReplicatedStorage:WaitForChild("SoundConfig"))
 local SoundPlayer = {}
 SoundPlayer.__index = SoundPlayer
 
+-- The local player's Sound volume option (0..1), published as an attribute by ClientMain.
+local function playerVolume()
+	local Players = game:GetService("Players")
+	local localPlayer = Players.LocalPlayer
+	local value = localPlayer and localPlayer:GetAttribute("SfxVolume")
+	return type(value) == "number" and math.clamp(value, 0, 1) or 1
+end
+
 -- options: cues (defaults to SoundConfig.Cues), enabled() -> bool, clock() -> seconds,
--- random (a Random).
+-- random (a Random), volumeScale() -> 0..1 (the player's volume option by default).
 function SoundPlayer.new(parent, options)
 	options = options or {}
 	local self = setmetatable({}, SoundPlayer)
@@ -19,6 +27,7 @@ function SoundPlayer.new(parent, options)
 		return FeatureFlags.Audio
 	end
 	self._clock = options.clock or os.clock
+	self._volumeScale = options.volumeScale or playerVolume
 	self._random = options.random or Random.new()
 	self._voices = {}
 	self._next = {}
@@ -63,6 +72,11 @@ function SoundPlayer:Play(cueName, params)
 		return nil
 	end
 
+	local master = self._volumeScale()
+	if master <= 0 then
+		return nil
+	end
+
 	local now = self._clock()
 	local last = self._lastPlayed[cueName]
 	if last and now - last < (cue.MinInterval or 0) then
@@ -78,7 +92,7 @@ function SoundPlayer:Play(cueName, params)
 	local volume = params and params.volume or 1
 	local jitter = (cue.PitchJitter or 0) * (self._random:NextNumber() * 2 - 1)
 	sound.PlaybackSpeed = cue.PlaybackSpeed * pitch * (1 + jitter)
-	sound.Volume = cue.Volume * volume
+	sound.Volume = cue.Volume * volume * master
 	sound:Play()
 	return sound
 end

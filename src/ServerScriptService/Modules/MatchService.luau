@@ -42,6 +42,8 @@ function MatchService.new(deps)
 	self._metaProvider = deps.metaProvider
 	-- Coin pickups for this arena (CoinDrops). Optional: without it kills drop nothing.
 	self._coins = deps.coins
+	-- (player, summary) after each finished run is paid and recorded: quests, badges, boards.
+	self._onRunEnd = deps.onRunEnd
 	-- runId -> the rooms for that run. Defaults to a fresh random draw from the zone pools;
 	-- tests and tools pass a fixed plan.
 	self._planRun = deps.planRun or function()

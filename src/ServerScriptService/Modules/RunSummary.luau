@@ -37,6 +37,9 @@ function RunSummary.ForPlayer(playerState, context)
 		Upgrades = upgradeList(playerState),
 		Reward = reward,
 		CurrencyName = RewardConfig.CurrencyName,
+		XpEarned = RewardService.Experience(playerState, context.outcome, context.eliteCleared),
+		-- Filled in once the payout lands (MatchFlow): level-up coins and the level progress.
+		LevelReward = 0,
 	}
 end
 

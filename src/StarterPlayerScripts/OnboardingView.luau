@@ -9,7 +9,7 @@ local OnboardingView = {}
 OnboardingView.__index = OnboardingView
 
 local HINTS = {
-	Lobby = "Step into a Gate with friends (2-8), or use the Solo Portal. Spend coins at the Armory.",
+	Lobby = "Step into a Gate with friends (2-8), or use the Solo Portal. Claim free rewards in Daily and Quests!",
 	Aim = "Drag away from your target, then release to fire.",
 	Ricochet = "Shots bounce. Bank them off walls to reach what you cannot see.",
 	Shield = "Shields turn slowly. Shoot the open side, or bank a shot round the back.",

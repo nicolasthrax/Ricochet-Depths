@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "1.0.2"
+RunConfig.Version = "1.2.0"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -66,6 +66,10 @@ RunConfig.RemoteRules = {
 	UpdateSettings = { Cooldown = 0.5, Burst = 4 },
 	PurchaseShopItem = { Cooldown = 0.4, Burst = 3 },
 	EquipShopItem = { Cooldown = 0.3, Burst = 3 },
+	ClaimDaily = { Cooldown = 1, Burst = 2 },
+	ClaimQuest = { Cooldown = 0.4, Burst = 3 },
+	RedeemCode = { Cooldown = 2, Burst = 3 },
+	RequestMeta = { Cooldown = 0.5, Burst = 4 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,

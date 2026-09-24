@@ -416,12 +416,19 @@ describe("persisted rewards", function()
 		expect(summary.RunKey).toBe("testjob-1")
 
 		local profile = persistence:GetSession(player).profile
-		expect(profile.Currency.Salvage).toBe(summary.Reward)
+		-- The balance is the run's coins plus the coins for every level the run's experience passed.
+		expect(summary.XpEarned).toBeGreaterThan(0)
+		expect(profile.Progression.Xp).toBe(summary.XpEarned)
+		expect(summary.Progress.Level).toBeGreaterThan(1)
+		expect(summary.Progress.LeveledUp).toBe(true)
+		expect(summary.LevelReward).toBeGreaterThan(0)
+		expect(profile.Currency.Salvage).toBe(summary.Reward + summary.LevelReward)
 		expect(profile.Stats.RunsExtracted).toBe(1)
 
-		-- A replayed completion for the same run key pays nothing more.
-		expect((persistence:GrantReward(player, "testjob-1", summary.Reward))).toBe(0)
-		expect(profile.Currency.Salvage).toBe(summary.Reward)
+		-- A replayed completion for the same run key pays nothing more, coins or experience.
+		expect((persistence:GrantReward(player, "testjob-1", summary.Reward, summary.XpEarned))).toBe(0)
+		expect(profile.Currency.Salvage).toBe(summary.Reward + summary.LevelReward)
+		expect(profile.Progression.Xp).toBe(summary.XpEarned)
 	end)
 
 	it("still finishes a run when the profile failed to load", function()

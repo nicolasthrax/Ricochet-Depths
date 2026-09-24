@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "1.0.0"
+RunConfig.Version = "1.0.2"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {
@@ -35,8 +35,14 @@ RunConfig.ResultsDuration = 15
 RunConfig.TargetRunSeconds = 420
 -- A room that somehow cannot be cleared is force-cleared rather than soft-locking the run.
 RunConfig.RoomTimeLimit = 150
+-- The boss is the exception: outlasting it is not beating it. Its room gets longer, and when
+-- the time runs out the run ends out of time, without the extraction bonus.
+RunConfig.BossRoomTimeLimit = 300
 -- Safety net: a run can never outlive this, whatever state it is stuck in.
 RunConfig.HardRunTimeLimit = 1200
+-- A player this far below the room's floor has fallen out of the world; they are put back on
+-- the spawn pad instead of dying in the void and respawning in the lobby.
+RunConfig.FallRescueDepth = 30
 
 -- Lobby sits far from the arenas so room geometry never overlaps it.
 RunConfig.LobbyPosition = Vector3.new(0, 0, 600)

@@ -18,8 +18,10 @@ RunService.RenderStepped:Connect(function()
 				if coin:IsA("BasePart") and coin.Transparency < 1 then
 					local position = coin.Position
 					local spin = now * SPIN_SPEED + index
-					-- A cylinder's axis is its X: standing it on edge and turning it about Y.
-					coin.CFrame = CFrame.new(position) * CFrame.Angles(0, spin, math.pi / 2)
+					-- A cylinder's axis is its X, so with X kept level the coin stands on edge; turning
+					-- it about the vertical makes it spin. (Tipping X upright would lay it flat, where
+					-- a spin about its own axis cannot be seen.)
+					coin.CFrame = CFrame.new(position) * CFrame.Angles(0, spin, 0)
 				end
 			end
 		end

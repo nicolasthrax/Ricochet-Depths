@@ -73,6 +73,8 @@ end
 publishState(RunConfig.States.Lobby)
 
 local lastState = nil
+-- Hints wait for the saved profile, which says whether this player has already seen them.
+local profileArrived = false
 Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	if type(snapshot) ~= "table" then
 		return
@@ -93,7 +95,9 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	end
 
 	if snapshot.State == RunConfig.States.Lobby then
-		onboarding:Show("Lobby")
+		if profileArrived then
+			onboarding:Show("Lobby")
+		end
 		results:Hide()
 		cardPicker:Hide()
 	elseif snapshot.State == RunConfig.States.Combat then
@@ -124,6 +128,14 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	end
 	if type(profile.Flags) == "table" and profile.Flags.OnboardingSeen then
 		onboarding:MarkAllSeen()
+	end
+	-- Lobby players get no run state until they descend, so the lobby hint is shown from here
+	-- on the first profile, once it is known whether they have seen it.
+	if not profileArrived then
+		profileArrived = true
+		if lastState == nil or lastState == RunConfig.States.Lobby then
+			onboarding:Show("Lobby")
+		end
 	end
 	shopView:SetProfile(profile)
 	settingsView:Apply(profile.Settings)

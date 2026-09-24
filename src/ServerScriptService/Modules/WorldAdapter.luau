@@ -17,8 +17,10 @@ function WorldAdapter.Teleport(player, position)
 	if not root then
 		return false
 	end
-	-- Lifted clear of the floor so the character does not spawn embedded in geometry.
+	-- Lifted clear of the floor so the character does not spawn embedded in geometry, and
+	-- stopped, so a fall's speed is not carried into the landing.
 	root.CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
+	root.AssemblyLinearVelocity = Vector3.zero
 	return true
 end
 

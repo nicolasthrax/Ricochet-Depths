@@ -85,6 +85,23 @@ function Flow.methods:HandleCharacterAdded(player)
 	return true
 end
 
+-- Anyone who has dropped well below the room's floor (through a seam, or off an edge) is put
+-- back on the spawn pad at once, rather than left to die and respawn in the lobby.
+function Flow.methods:_rescueFallers(now)
+	local current = self._rooms:GetCurrent()
+	if not current or not self._world or not self._world.GetPosition then
+		return
+	end
+	local lowest = current.bounds.center.Y - RunConfig.FallRescueDepth
+	for _, player in self._participants do
+		local position = self._world.GetPosition(player)
+		if position and position.Y < lowest then
+			self._world.Teleport(player, self._rooms:GetSpawnPoint())
+			self:_log("FallRescued", { RunId = self._runId, Room = self._roomIndex }, now)
+		end
+	end
+end
+
 function Flow.methods:_onRoomCleared(now)
 	self:_sweepCoins()
 	local definition = self._plan[self._roomIndex]

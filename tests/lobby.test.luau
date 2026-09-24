@@ -152,6 +152,18 @@ describe("lobby layout", function()
 		expect(lobby:FindFirstChild("CosmeticsKiosk").Position.X - origin.X).toBeGreaterThan(20)
 	end)
 
+	it("has solid pillars and lamp posts, not ones players walk through", function()
+		local dressing = lobby:FindFirstChild("Dressing")
+		local checked = 0
+		for _, part in dressing:GetChildren() do
+			if part.Name:find("^Pillar%d") or part.Name:find("^LampPost") then
+				checked += 1
+				expect(part.CanCollide).toBe(true)
+			end
+		end
+		expect(checked).toBe(14)
+	end)
+
 	it("is sealed by an invisible barrier and ceiling nobody can jump over", function()
 		local barrier = lobby:FindFirstChild("Barrier")
 		expect(barrier).toBeTruthy()

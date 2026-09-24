@@ -62,6 +62,12 @@ describe("zone ambience", function()
 		for zoneId in RunConfig.Zones do
 			expect(ZoneAmbienceConfig.Zones[zoneId]).toBeTruthy()
 		end
+		-- Tweens run straight between values: all in the evening, so none sweeps through noon.
+		for id, ambience in ZoneAmbienceConfig.Zones do
+			if ambience.ClockTime < 17 or ambience.ClockTime > 24 then
+				error(id .. " ClockTime would tween through daylight")
+			end
+		end
 		-- Unknown zones fall back to the lobby look rather than failing.
 		expect(ZoneAmbienceConfig.For("Nowhere")).toBe(ZoneAmbienceConfig.Zones.Lobby)
 	end)

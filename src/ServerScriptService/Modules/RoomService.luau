@@ -143,7 +143,8 @@ function RoomService:IsCleared(now)
 	if self:GetRemaining() == 0 then
 		return true
 	end
-	if now - current.startedAt >= RunConfig.RoomTimeLimit then
+	local limit = current.boss and RunConfig.BossRoomTimeLimit or RunConfig.RoomTimeLimit
+	if now - current.startedAt >= limit then
 		current.forcedClear = true
 		current.timedOut = true
 		return true

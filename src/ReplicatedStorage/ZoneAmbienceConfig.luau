@@ -6,6 +6,8 @@ ZoneAmbienceConfig.TweenSeconds = 2
 
 -- A night sky over the depths: the lobby at violet dusk, the Ruins at twilight, the Foundry in
 -- an ember sunset, the Abyss at midnight. Ambient light stays high enough to read every wall.
+-- Every ClockTime sits in the evening (17-24): a tween runs straight between two values, so one
+-- just past midnight (0.5) would sweep back through noon and flash daylight on the way.
 ZoneAmbienceConfig.Zones = {
 	Lobby = {
 		Ambient = Color3.new(0.2, 0.19, 0.27),
@@ -38,7 +40,7 @@ ZoneAmbienceConfig.Zones = {
 		Ambient = Color3.new(0.2, 0.15, 0.3),
 		OutdoorAmbient = Color3.new(0.32, 0.24, 0.48),
 		Brightness = 1.2,
-		ClockTime = 0.5,
+		ClockTime = 23.6,
 		AtmosphereColor = Color3.new(0.42, 0.3, 0.66),
 		AtmosphereDensity = 0.45,
 		Tint = Color3.new(0.92, 0.88, 1),

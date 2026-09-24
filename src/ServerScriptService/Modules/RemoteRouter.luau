@@ -160,6 +160,16 @@ function RemoteRouter:Bind()
 				Reason = not ok and result or nil,
 			})
 		end)
+		self:_connect("DeepenArmory", "DeepenArmory", function(player, now)
+			local ok, result = self._shop:Deepen(player, now)
+			shopResult:FireClient(player, {
+				Ok = ok,
+				Action = "Deepen",
+				ItemId = "Deepen",
+				Level = ok and result.Rank or nil,
+				Reason = not ok and result or nil,
+			})
+		end)
 		self:_connect("EquipShopItem", "EquipShopItem", function(player, now, itemId)
 			local ok, reason = self._shop:Equip(player, itemId, now)
 			shopResult:FireClient(player, {

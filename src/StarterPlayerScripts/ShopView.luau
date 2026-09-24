@@ -4,6 +4,7 @@
 -- It never assumes a request succeeded; the next ProfileSync is the truth.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local MonetizationConfig = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
@@ -23,14 +24,23 @@ local REASONS = {
 	["profile not loaded"] = "Your profile is offline; purchases are disabled",
 	["not owned"] = "You do not own that yet",
 	["requires VIP"] = "The Gold trail is for VIP pass holders",
+	["not ready"] = "Max every Armory upgrade first",
+	["max rank"] = "Already at the deepest rank",
 }
 
+-- Seconds a first tap on Deepen waits for the confirming second tap.
+local DEEPEN_CONFIRM_SECONDS = 4
+
 -- onRobux(kind, id): kind is "Pass" or "Product"; the client script prompts Roblox's purchase.
-function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
+-- onDeepen(), optional: the player confirmed a Deepen.
+function ShopView.new(playerGui, onPurchase, onEquip, onRobux, onDeepen)
 	local self = setmetatable({}, ShopView)
 	self._onPurchase = onPurchase
 	self._onEquip = onEquip
 	self._onRobux = onRobux or function() end
+	self._onDeepen = onDeepen
+	self._rank = 0
+	self._confirmingDeepen = false
 	self._levels = {}
 	self._balance = 0
 	self._equipped = ""
@@ -94,8 +104,20 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = list
 
+	-- Deepen heads the Armory: the long goal every upgrade below is working toward.
+	if onDeepen then
+		self._deepenRow = self:_buildRow(list, 0, "Deepen", "Deepen",
+			string.format("Max every upgrade below, then reset them all for +%d%% coins, for good.",
+				math.floor(ShopConfig.Deepen.RewardPerRank * 100 + 0.5)), "Armory", function()
+				self:_activateDeepen()
+			end)
+		self._rows.Deepen = self._deepenRow
+	end
 	local order = 0
 	for _, item in ShopConfig.Items do
+		if not ShopConfig.IsAvailable(item, FeatureFlags) then
+			continue
+		end
 		order += 1
 		self._rows[item.Id] = self:_buildRow(list, order, item.Id, item.Title, item.Description, item.Category, function()
 			self:_activate(item)
@@ -204,10 +226,63 @@ function ShopView:_activate(item)
 	self._onPurchase(item.Id)
 end
 
+function ShopView:_canDeepen()
+	return ShopConfig.CanDeepen(self._levels, self._rank, FeatureFlags)
+end
+
+-- First tap arms it; a second within DEEPEN_CONFIRM_SECONDS sends it. The reset cannot be undone.
+function ShopView:_activateDeepen()
+	if not self:_canDeepen() then
+		self.status.Text = self._rank >= ShopConfig.Deepen.MaxRank and REASONS["max rank"] or REASONS["not ready"]
+		self.status.TextColor3 = UiConfig.Colors.Danger
+		return
+	end
+	if not self._confirmingDeepen then
+		self._confirmingDeepen = true
+		self.status.Text = "Deepen resets every Armory upgrade to 0. Tap again to confirm."
+		self.status.TextColor3 = UiConfig.Colors.Warning
+		self._deepenToken = (self._deepenToken or 0) + 1
+		local token = self._deepenToken
+		task.delay(DEEPEN_CONFIRM_SECONDS, function()
+			if self._deepenToken == token and self._confirmingDeepen then
+				self._confirmingDeepen = false
+				self:_render()
+			end
+		end)
+		self:_render()
+		return
+	end
+	self._confirmingDeepen = false
+	self.status.Text = "Deepening..."
+	self.status.TextColor3 = UiConfig.Colors.TextMuted
+	self._onDeepen()
+	self:_render()
+end
+
+function ShopView:_renderDeepen()
+	local row = self._deepenRow
+	if not row then
+		return
+	end
+	local max = ShopConfig.Deepen.MaxRank
+	row.level.Text = string.format("Depth Rank %d / %d  (+%d%% coins)", self._rank, max,
+		math.floor(self._rank * ShopConfig.Deepen.RewardPerRank * 100 + 0.5))
+	local ready = self:_canDeepen()
+	row.button.Text = self._rank >= max and "Max rank" or not ready and "Locked"
+		or self._confirmingDeepen and "Confirm?" or "Deepen"
+	row.button.AutoButtonColor = ready
+	row.button.TextColor3 = ready and (self._confirmingDeepen and UiConfig.Colors.Warning or UiConfig.Colors.Gold)
+		or UiConfig.Colors.TextMuted
+end
+
 function ShopView:_render()
 	self.balanceLabel.Text = string.format("%d coins", self._balance)
+	self:_renderDeepen()
 	for _, item in ShopConfig.Items do
 		local row = self._rows[item.Id]
+		if not row then
+			continue -- not on sale in this build
+		end
 		local owned = self:_owned(item)
 		local max = ShopConfig.MaxLevel(item)
 		local nextCost = ShopConfig.CostFor(item, owned + 1)
@@ -251,6 +326,7 @@ function ShopView:SetProfile(profile)
 	end
 	self._balance = type(profile.Salvage) == "number" and profile.Salvage or 0
 	self._levels = type(profile.MetaUpgrades) == "table" and profile.MetaUpgrades or {}
+	self._rank = tonumber(profile.DepthRank) or 0
 	self._equipped = type(profile.EquippedTrail) == "string" and profile.EquippedTrail or ""
 	self._passes = {}
 	for _, key in type(profile.Passes) == "table" and profile.Passes or {} do
@@ -266,7 +342,13 @@ function ShopView:ShowResult(payload)
 	end
 	local item = type(payload.ItemId) == "string" and ShopConfig.Get(payload.ItemId) or nil
 	local name = item and item.Title or "Item"
-	if payload.Action == "Refunded" then
+	if payload.Action == "Refunded" and payload.ItemId == "Deepen" then
+		self.status.Text = "The Deepen was undone: your Armory changed on another server"
+		self.status.TextColor3 = UiConfig.Colors.Warning
+	elseif payload.Action == "Deepen" and payload.Ok then
+		self.status.Text = string.format("Deepened! Depth Rank %d", tonumber(payload.Level) or 0)
+		self.status.TextColor3 = UiConfig.Colors.Gold
+	elseif payload.Action == "Refunded" then
 		self.status.Text = name .. " was refunded: those coins were already spent elsewhere"
 		self.status.TextColor3 = UiConfig.Colors.Warning
 	elseif payload.Ok then

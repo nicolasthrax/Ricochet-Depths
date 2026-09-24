@@ -11,6 +11,7 @@ ResultsView.__index = ResultsView
 
 local OUTCOME_TEXT = {
 	Extracted = { title = "Extracted", color = UiConfig.Colors.Health },
+	Surfaced = { title = "Surfaced", color = UiConfig.Colors.Health },
 	Defeated = { title = "Lost in the Depths", color = UiConfig.Colors.Danger },
 	TimedOut = { title = "Out of Time", color = UiConfig.Colors.Warning },
 	Abandoned = { title = "Run Abandoned", color = UiConfig.Colors.TextMuted },
@@ -102,6 +103,13 @@ function ResultsView:Show(summary)
 	local function extra(text, color)
 		index += 1
 		self:_row(index, text, color)
+	end
+	local haulLost = tonumber(summary.HaulLost) or 0
+	local haulBonus = tonumber(summary.HaulBonus) or 0
+	if haulLost > 0 then
+		extra(string.format("Haul lost to the depths: %d of %d", haulLost, tonumber(summary.Haul) or 0), UiConfig.Colors.Danger)
+	elseif haulBonus > 0 then
+		extra(string.format("Depth bonus on the haul: +%d", haulBonus), UiConfig.Colors.Gold)
 	end
 	local rig = type(summary.Rig) == "string" and RigConfig.Get(summary.Rig)
 	local heat = tonumber(summary.Heat) or 0

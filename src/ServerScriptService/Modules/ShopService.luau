@@ -39,7 +39,7 @@ function ShopService:Purchase(player, itemId, now)
 		return false, "shop disabled"
 	end
 	local item = type(itemId) == "string" and ShopConfig.Get(itemId) or nil
-	if not item then
+	if not item or not ShopConfig.IsAvailable(item, FeatureFlags) then
 		return false, "unknown item"
 	end
 	local persistence = self._persistence
@@ -76,6 +76,34 @@ function ShopService:Purchase(player, itemId, now)
 	return true, { ItemId = item.Id, Level = level, Cost = cost, Balance = balance }
 end
 
+-- Resets every Armory upgrade for the next Depth Rank, once all of them are maxed. Nothing is
+-- charged; the upgrades are the price. Returns true and { Rank }, or false and a reason.
+function ShopService:Deepen(player, now)
+	if not FeatureFlags.SalvageShop then
+		return false, "shop disabled"
+	end
+	local persistence = self._persistence
+	if not persistence:IsLoaded(player) then
+		return false, "profile not loaded"
+	end
+	if not self._canShop(player) then
+		return false, "shop closed"
+	end
+	local rank = persistence:GetDepthRank(player)
+	if rank >= ShopConfig.Deepen.MaxRank then
+		return false, "max rank"
+	end
+	if not ShopConfig.CanDeepen(persistence:GetMetaLevels(player), rank, FeatureFlags) then
+		return false, "not ready"
+	end
+	local newRank, reason = persistence:Deepen(player, rank + 1, ShopConfig.DeepenRequirements(FeatureFlags))
+	if not newRank then
+		return false, reason
+	end
+	self:_changed(player, now)
+	return true, { Rank = newRank }
+end
+
 -- Equips an owned trail, or clears it with "".
 function ShopService:Equip(player, itemId, now)
 	if not FeatureFlags.SalvageShop then
@@ -108,7 +136,8 @@ function ShopService:GetRunBonuses(player)
 	if item and item.Kind == "Trail" and (levels[item.Id] or 0) >= 1 then
 		trail = item.Trail
 	end
-	return { stats = ShopConfig.ComputeBonuses(levels), trail = trail }
+	local rank = self._persistence.GetDepthRank and self._persistence:GetDepthRank(player) or 0
+	return { stats = ShopConfig.ComputeBonuses(levels, rank), trail = trail }
 end
 
 -- Tells the player about any purchase the store refused at commit time (another server spent

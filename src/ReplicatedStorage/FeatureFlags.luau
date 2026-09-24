@@ -42,6 +42,11 @@ FeatureFlags.Doors = true
 FeatureFlags.Challenges = true
 -- Random room events (Treasure Runners).
 FeatureFlags.RoomEvents = true
+-- The haul at risk: a lost run keeps only part of its coins, and a Surface Lift door after each
+-- mini-boss lets the group bank the haul and leave.
+FeatureFlags.Haul = true
+-- Depth pressure: hunters arrive in a normal room that drags on.
+FeatureFlags.Pressure = true
 
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false

@@ -9,6 +9,7 @@ local Broadcast = { methods = {} }
 function Broadcast.methods:GetRunSnapshot()
 	local current = self._rooms:GetCurrent()
 	local definition = current and current.definition
+	local haul = self._haul and self:_haul()
 	return {
 		State = self._state,
 		RunId = self._runId,
@@ -29,6 +30,10 @@ function Broadcast.methods:GetRunSnapshot()
 		Objective = self:_objectiveSnapshot(),
 		Challenge = self._challengeSnapshot and self:_challengeSnapshot() or nil,
 		Doors = self._state == RunConfig.States.UpgradeChoice and self._doorsSnapshot and self:_doorsSnapshot(self._now) or nil,
+		-- With the haul at risk: what getting out now would multiply it by.
+		Haul = haul and { Multiplier = haul.depthMultiplier } or nil,
+		Pressure = self._state == RunConfig.States.Combat and self._rooms.GetPressureInfo
+			and self._rooms:GetPressureInfo(self._now) or nil,
 	}
 end
 

@@ -41,6 +41,7 @@ PlayerDataService.STORE_OWNED_FIELDS = {
 	Currency = true,
 	GrantedRuns = true,
 	MetaUpgrades = true,
+	DepthRank = true,
 	Progression = true,
 }
 
@@ -337,6 +338,7 @@ function PlayerDataService:Update(player, mutator)
 	-- alone would neither detect nor undo the change.
 	local currencyTable, ledgerTable, levelsTable = profile.Currency, profile.GrantedRuns, profile.MetaUpgrades
 	local progressionTable, xpBefore = profile.Progression, profile.Progression.Xp
+	local rankBefore = profile.DepthRank
 	local currencyBefore = snapshotCurrency(currencyTable)
 	local ledgerBefore = snapshotLedger(ledgerTable)
 	local levelsBefore = table.clone(levelsTable)
@@ -352,11 +354,13 @@ function PlayerDataService:Update(player, mutator)
 		or not sameLevels(levelsBefore, levelsTable)
 		or profile.Progression ~= progressionTable
 		or progressionTable.Xp ~= xpBefore
+		or profile.DepthRank ~= rankBefore
 	then
 		-- Put everything back exactly as it was, into the original tables.
 		profile.Currency, profile.GrantedRuns, profile.MetaUpgrades = currencyTable, ledgerTable, levelsTable
 		profile.Progression = progressionTable
 		progressionTable.Xp = xpBefore
+		profile.DepthRank = rankBefore
 		table.clear(currencyTable)
 		for key, value in currencyBefore do
 			currencyTable[key] = value
@@ -369,7 +373,7 @@ function PlayerDataService:Update(player, mutator)
 		for itemId, level in levelsBefore do
 			levelsTable[itemId] = level
 		end
-		error("currency, experience, the run ledger and meta upgrades change only through grants and purchases, not Update", 2)
+		error("currency, experience, the run ledger, meta upgrades and the Depth Rank change only through grants and purchases, not Update", 2)
 	end
 
 	markChanged(session)
@@ -396,11 +400,38 @@ end
 --     so it is acknowledged and not charged again;
 --   * the stored level is one below and the stored balance covers the cost: charged and applied;
 --   * anything else: refused, and reported back so the player sees it undone.
+-- A Deepen rides the same queue, in order with the purchases around it: it applies when the
+-- stored rank is one below its target and the stored levels meet every requirement, zeroing
+-- those items; a stored rank already at its target means it happened already.
 -- Returns key -> "applied" | "owned" | "rejected".
+local function applyDeepen(merged, deepen)
+	local storedRank = tonumber(merged.DepthRank) or 0
+	if storedRank >= deepen.Rank then
+		return "owned"
+	end
+	if storedRank ~= deepen.Rank - 1 then
+		return "rejected"
+	end
+	for itemId, level in deepen.Requires do
+		if (merged.MetaUpgrades[itemId] or 0) < level then
+			return "rejected"
+		end
+	end
+	for itemId in deepen.Requires do
+		merged.MetaUpgrades[itemId] = nil
+	end
+	merged.DepthRank = deepen.Rank
+	return "applied"
+end
+
 local function applyPurchases(merged, pending)
 	local outcomes = {}
 	for _, entry in orderedPurchases(pending) do
 		local purchase = entry.purchase
+		if purchase.Kind == "Deepen" then
+			outcomes[entry.key] = applyDeepen(merged, purchase)
+			continue
+		end
 		local storedLevel = merged.MetaUpgrades[purchase.ItemId] or 0
 		local balance = merged.Currency.Salvage or 0
 		if storedLevel >= purchase.Level then
@@ -483,8 +514,8 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			session.pendingPurchases[key] = nil
 			if outcome == "rejected" then
 				table.insert(session.purchaseRejections, {
-					ItemId = purchase.ItemId,
-					Level = purchase.Level,
+					ItemId = purchase.Kind == "Deepen" and "Deepen" or purchase.ItemId,
+					Level = purchase.Level or purchase.Rank,
 					Cost = purchase.Cost,
 				})
 			end
@@ -505,13 +536,24 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 	profile.Currency.Salvage = (result.Currency.Salvage or 0) + stillPending
 	profile.Progression.Xp = (result.Progression and result.Progression.Xp or 0) + xpPending
 
-	-- Levels likewise: the store's, raised by anything still pending here.
+	-- Levels and rank likewise: the store's, with anything still pending here replayed on top in
+	-- the order it was made, so a Deepen still in flight resets what was bought before it and
+	-- not what was bought after.
 	table.clear(profile.MetaUpgrades)
 	for itemId, level in result.MetaUpgrades or {} do
 		profile.MetaUpgrades[itemId] = level
 	end
-	for _, purchase in session.pendingPurchases do
-		profile.MetaUpgrades[purchase.ItemId] = math.max(profile.MetaUpgrades[purchase.ItemId] or 0, purchase.Level)
+	profile.DepthRank = tonumber(result.DepthRank) or 0
+	for _, entry in orderedPurchases(session.pendingPurchases) do
+		local purchase = entry.purchase
+		if purchase.Kind == "Deepen" then
+			for itemId in purchase.Requires do
+				profile.MetaUpgrades[itemId] = nil
+			end
+			profile.DepthRank = math.max(profile.DepthRank, purchase.Rank)
+		else
+			profile.MetaUpgrades[purchase.ItemId] = math.max(profile.MetaUpgrades[purchase.ItemId] or 0, purchase.Level)
+		end
 	end
 
 	-- Take back the runs the store knows about, then keep memory within the same cap. The rest
@@ -659,7 +701,11 @@ function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost)
 	end
 
 	session.purchaseSequence += 1
-	session.pendingPurchases[itemId .. "#" .. level] = {
+	-- The same item and level can be bought again after a Deepen, so a purchase made at a Depth
+	-- Rank is keyed by it too and never replaces one still pending from before.
+	local rank = profile.DepthRank or 0
+	local key = itemId .. "#" .. level .. (rank > 0 and ("@" .. rank) or "")
+	session.pendingPurchases[key] = {
 		ItemId = itemId,
 		Level = level,
 		Cost = cost,
@@ -669,6 +715,57 @@ function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost)
 	profile.MetaUpgrades[itemId] = level
 	markChanged(session)
 	return profile.Currency.Salvage
+end
+
+-- A Deepen: resets the items in `requires` (item id -> the level each must have reached) and
+-- raises the Depth Rank to `rank`, applied like a purchase: in memory now, and re-checked against
+-- the store when the save commits. The shop decides the catalogue side (ShopService.Deepen);
+-- this only guarantees it happens once and in order. Returns the new rank, or nil and a reason.
+function PlayerDataService:Deepen(player, rank, requires)
+	if type(rank) ~= "number" or rank < 1 or rank ~= math.floor(rank) then
+		return nil, "invalid rank"
+	end
+	if type(requires) ~= "table" or next(requires) == nil then
+		return nil, "invalid requirements"
+	end
+	local session = self:_sessionFor(player)
+	if not session or not session.loaded or session.failed then
+		return nil, "profile not loaded"
+	end
+
+	local profile = session.profile
+	if (profile.DepthRank or 0) ~= rank - 1 then
+		return nil, "rank mismatch"
+	end
+	for itemId, level in requires do
+		if type(itemId) ~= "string" or type(level) ~= "number" or (profile.MetaUpgrades[itemId] or 0) < level then
+			return nil, "not ready"
+		end
+	end
+
+	session.purchaseSequence += 1
+	session.pendingPurchases["Deepen#" .. rank] = {
+		Kind = "Deepen",
+		Rank = rank,
+		Requires = table.clone(requires),
+		Cost = 0,
+		Sequence = session.purchaseSequence,
+	}
+	for itemId in requires do
+		profile.MetaUpgrades[itemId] = nil
+	end
+	profile.DepthRank = rank
+	markChanged(session)
+	return rank
+end
+
+-- Times this player has Deepened, including a Deepen not yet written.
+function PlayerDataService:GetDepthRank(player)
+	local session = self:_sessionFor(player)
+	if not session or not session.profile then
+		return 0
+	end
+	return session.profile.DepthRank or 0
 end
 
 function PlayerDataService:GetBalance(player)
@@ -730,6 +827,7 @@ function PlayerDataService:GetPublicProfile(player)
 		Flags = table.clone(profile.Flags),
 		Stats = table.clone(profile.Stats),
 		MetaUpgrades = table.clone(profile.MetaUpgrades),
+		DepthRank = profile.DepthRank or 0,
 		EquippedTrail = profile.EquippedTrail,
 		Progression = ProgressionConfig.Describe(profile.Progression.Xp),
 		SelectedRig = profile.SelectedRig,

@@ -63,6 +63,17 @@ ShopConfig.Items = {
 		Costs = { 250, 500, 900 },
 	},
 	{
+		Id = "Quiver",
+		Category = "Armory",
+		Title = "Deep Quiver",
+		Description = "+1 orb carried into every run.",
+		Kind = "Stat",
+		-- Only worth selling while orbs are a limited resource.
+		RequiresFlag = "Orbs",
+		Effect = { Stat = "OrbCount", PerLevel = 1 },
+		Costs = { 1500, 4000 },
+	},
+	{
 		Id = "TrailEmber",
 		Category = "Cosmetics",
 		Title = "Ember Trail",
@@ -119,6 +130,15 @@ ShopConfig.Items = {
 	},
 }
 
+-- Deepen: once every Armory upgrade is maxed, the player can reset them all for the next Depth
+-- Rank, which adds RewardPerRank to their coin multiplier for good. Trails are never reset.
+-- The rank is saved in profiles (DepthRank).
+ShopConfig.Deepen = {
+	MaxRank = 10,
+	RewardPerRank = 0.1,
+	Stat = "RewardMultiplier",
+}
+
 local byId = {}
 for _, item in ShopConfig.Items do
 	byId[item.Id] = item
@@ -137,11 +157,54 @@ function ShopConfig.CostFor(item, level)
 	return item.Costs[level]
 end
 
--- Stat deltas from owned levels, as { [stat] = amount }. Unknown ids are ignored and levels are
--- clamped to the item's max, so a stale or tampered profile can never grant more than the shop
--- sells.
-function ShopConfig.ComputeBonuses(levels)
+-- Whether an item is on sale in this build. `flags` is FeatureFlags; an item naming a flag
+-- that is off is neither sold nor shown.
+function ShopConfig.IsAvailable(item, flags)
+	return item.RequiresFlag == nil or (flags ~= nil and flags[item.RequiresFlag] == true)
+end
+
+-- The Armory items a Deepen resets, as item id -> the level each must reach first.
+function ShopConfig.DeepenRequirements(flags)
+	local required = {}
+	for _, item in ShopConfig.Items do
+		if item.Kind == "Stat" and ShopConfig.IsAvailable(item, flags) then
+			required[item.Id] = ShopConfig.MaxLevel(item)
+		end
+	end
+	return required
+end
+
+-- Whether `levels` has every Armory upgrade maxed, so the next Deepen is open.
+function ShopConfig.CanDeepen(levels, rank, flags)
+	if (tonumber(rank) or 0) >= ShopConfig.Deepen.MaxRank then
+		return false
+	end
+	for itemId, level in ShopConfig.DeepenRequirements(flags) do
+		if (tonumber((levels or {})[itemId]) or 0) < level then
+			return false
+		end
+	end
+	return true
+end
+
+-- A whole Depth Rank in 0..MaxRank; anything malformed counts as none.
+function ShopConfig.SanitiseRank(rank)
+	local value = tonumber(rank)
+	if not value or value ~= value then
+		return 0
+	end
+	return math.clamp(math.floor(value), 0, ShopConfig.Deepen.MaxRank)
+end
+
+-- Stat deltas from owned levels, as { [stat] = amount }, plus the Depth Rank's bonus when a
+-- rank is given. Unknown ids are ignored and levels are clamped to the item's max, so a stale
+-- or tampered profile can never grant more than the shop sells.
+function ShopConfig.ComputeBonuses(levels, depthRank)
 	local bonuses = {}
+	local rank = ShopConfig.SanitiseRank(depthRank)
+	if rank > 0 then
+		bonuses[ShopConfig.Deepen.Stat] = ShopConfig.Deepen.RewardPerRank * rank
+	end
 	for itemId, level in levels or {} do
 		local item = byId[itemId]
 		if item and item.Kind == "Stat" and type(level) == "number" and level > 0 then

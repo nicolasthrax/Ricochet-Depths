@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Payout = require(script.Parent.Payout)
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
+local RewardService = require(script.Parent.RewardService)
 local RouteConfig = require(ReplicatedStorage:WaitForChild("RouteConfig"))
 local RunSummary = require(script.Parent.RunSummary)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -111,6 +112,20 @@ end
 
 function Flow.methods:_onRoomCleared(now)
 	local definition = self._plan[self._roomIndex]
+	local current = self._rooms:GetCurrent()
+	-- Under depth pressure, a normal room the clock had to clear forfeits its door's reward and
+	-- any Trial: dragging a room out should never pay.
+	if self._route.pressure and current and current.timedOut and definition and definition.Kind == "Normal" then
+		self._activeReward = nil
+		if self._failChallenge then
+			self:_failChallenge("out of time")
+		end
+		self:_fireAll("Notify", { Kind = "Error", Text = "The depths drove you on. The door's reward is lost." })
+	end
+	-- Hunters leave with the room.
+	if self._rooms.EndPressure then
+		self._rooms:EndPressure()
+	end
 	-- The door's reward, challenge payouts and gallery scores land before the coins are swept.
 	local armoury = self._activeReward == "Arsenal"
 	self:_leaveRoom(definition, now)
@@ -119,6 +134,10 @@ function Flow.methods:_onRoomCleared(now)
 	self:_resetOrbs()
 	if definition and definition.Kind == "Elite" then
 		self._eliteCleared = true
+	end
+	-- Each zone ends in a boss; beating one is what deepens the haul.
+	if definition and (definition.Kind == "MiniBoss" or definition.Kind == "Boss") then
+		self._zonesCleared = (self._zonesCleared or 0) + 1
 	end
 
 	for _, player in self._participants do
@@ -169,6 +188,14 @@ function Flow.methods:_openUpgradeChoice(now, armoury)
 	self:_setState(offered > 0 and States.UpgradeChoice or States.Transition, now)
 end
 
+-- The haul's terms for this run, or nil when the haul is not at risk (RewardService.HaulValue).
+function Flow.methods:_haul()
+	if not self._route.haul then
+		return nil
+	end
+	return { depthMultiplier = RewardService.DepthMultiplier(self._zonesCleared or 0) }
+end
+
 -- Pays `coins` and `xp` to a player's profile under one ledger key (see Payout.Grant).
 function Flow.methods:_payout(player, runKey, coins, xp)
 	local granted, xpGranted, levelCoins, levelBefore, levelAfter = Payout.Grant(self._persistence, player, runKey, coins, xp)
@@ -203,6 +230,7 @@ function Flow.methods:_finish(outcome, now)
 		eliteCleared = self._eliteCleared,
 		heat = self._pactEffects.Heat,
 		rewardMultiplier = self._pactEffects.RewardMultiplier,
+		haul = self:_haul(),
 	}
 
 	local runKey = string.format("%s-%d", self._runKeyPrefix, self._runId)

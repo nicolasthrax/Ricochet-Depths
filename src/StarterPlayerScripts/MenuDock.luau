@@ -1,6 +1,7 @@
--- The lobby's side menu: Rigs, Pact, Journal, Daily, Quests, Codes and Invite, in two columns on
--- the right edge where a thumb can reach them. A red dot marks anything waiting to be claimed.
--- Lobby only.
+-- The lobby's side menu: a slim rail on the right edge where a thumb can reach it. The rail holds
+-- what a player reaches for before every run or every day (Rigs, Pact, Daily, Quests); the rest
+-- (Journal, Codes, Invite) sit behind MORE, which pops out beside it. A red dot marks anything
+-- waiting to be claimed, and MORE shows a dot when anything behind it has one. Lobby only.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
@@ -10,50 +11,77 @@ local UiTheme = require(script.Parent.UiTheme)
 local MenuDock = {}
 MenuDock.__index = MenuDock
 
-local BUTTON_WIDTH = 108
+local BUTTON_WIDTH = 104
+local GAP = 6
+-- See-through enough that the lobby shows behind the rail, so it reads as a quiet sidebar
+-- rather than a wall of boxes.
+local BUTTON_TRANSPARENCY = 0.3
 
+-- Group "Rail" is always shown; "More" lives in the pop-out.
 local ENTRIES = {
-	{ Id = "Rigs", Text = "RIGS", Flag = "Loadouts" },
-	{ Id = "Pact", Text = "PACT", Flag = "Loadouts" },
-	{ Id = "Journal", Text = "JOURNAL", Flag = "Loadouts" },
-	{ Id = "Daily", Text = "DAILY", Flag = "DailyRewards" },
-	{ Id = "Quests", Text = "QUESTS", Flag = "DailyRewards" },
-	{ Id = "Codes", Text = "CODES", Flag = "DailyRewards" },
-	{ Id = "Invite", Text = "INVITE" },
+	{ Id = "Rigs", Text = "RIGS", Flag = "Loadouts", Group = "Rail" },
+	{ Id = "Pact", Text = "PACT", Flag = "Loadouts", Group = "Rail" },
+	{ Id = "Daily", Text = "DAILY", Flag = "DailyRewards", Group = "Rail" },
+	{ Id = "Quests", Text = "QUESTS", Flag = "DailyRewards", Group = "Rail" },
+	{ Id = "Journal", Text = "JOURNAL", Flag = "Loadouts", Group = "More" },
+	{ Id = "Codes", Text = "CODES", Flag = "DailyRewards", Group = "More" },
+	{ Id = "Invite", Text = "INVITE", Group = "More" },
 }
+
+local function column(name, parent, count)
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.BackgroundTransparency = 1
+	frame.Size = UDim2.fromOffset(BUTTON_WIDTH, count * UiConfig.MinTouchTarget + math.max(count - 1, 0) * GAP)
+	frame.Parent = parent
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, GAP)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = frame
+	return frame
+end
+
+local function menuButton(name, parent, text, order)
+	local button = UiTheme.button(name, parent, text)
+	button.LayoutOrder = order
+	button.Size = UDim2.fromOffset(BUTTON_WIDTH, UiConfig.MinTouchTarget)
+	button.TextSize = UiConfig.Text.Small + 2
+	button.BackgroundTransparency = BUTTON_TRANSPARENCY
+	return button
+end
 
 -- handlers: Id -> function, called when that button is pressed.
 function MenuDock.new(playerGui, handlers)
 	local self = setmetatable({}, MenuDock)
 	self.gui = UiTheme.screenGui("RicochetMenu", playerGui, 12)
 
-	local dock = Instance.new("Frame")
-	dock.Name = "Dock"
-	dock.BackgroundTransparency = 1
+	local enabled = { Rail = {}, More = {} }
+	for _, entry in ENTRIES do
+		if not entry.Flag or FeatureFlags.IsEnabled(entry.Flag) then
+			table.insert(enabled[entry.Group], entry)
+		end
+	end
+	local hasMore = #enabled.More > 0
+	local railCount = #enabled.Rail + (hasMore and 1 or 0)
+
+	local dock = column("Dock", self.gui, railCount)
 	dock.AnchorPoint = Vector2.new(1, 0.5)
-	dock.Position = UDim2.new(1, -16, 0.5, -24)
-	-- Two columns keep seven buttons short enough for a phone held sideways.
-	local rows = math.ceil(#ENTRIES / 2)
-	dock.Size = UDim2.fromOffset(2 * BUTTON_WIDTH + 8, rows * (UiConfig.MinTouchTarget + 8))
-	dock.Parent = self.gui
+	dock.Position = UDim2.new(1, -16, 0.5, 0)
 	self.dock = dock
 
-	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromOffset(BUTTON_WIDTH, UiConfig.MinTouchTarget)
-	layout.CellPadding = UDim2.fromOffset(8, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = dock
+	-- The pop-out opens to the left of the rail, its bottom level with MORE. It sits outside the
+	-- rail's own list, so the rail's layout never moves it.
+	local more = column("More", self.gui, #enabled.More)
+	more.AnchorPoint = Vector2.new(1, 1)
+	more.Visible = false
+	self.more = more
+	self._moreIds = {}
 
 	self.buttons, self.dots = {}, {}
-	for index, entry in ENTRIES do
-		if entry.Flag and not FeatureFlags.IsEnabled(entry.Flag) then
-			continue
-		end
-		local button = UiTheme.button(entry.Id .. "Button", dock, entry.Text)
-		button.LayoutOrder = index
-		button.Size = UDim2.fromOffset(BUTTON_WIDTH, UiConfig.MinTouchTarget)
-		button.TextSize = UiConfig.Text.Hud
+	local function add(entry, parent, order)
+		local button = menuButton(entry.Id .. "Button", parent, entry.Text, order)
 		button.Activated:Connect(function()
+			self:SetMoreOpen(false)
 			local handler = handlers and handlers[entry.Id]
 			if handler then
 				handler()
@@ -62,11 +90,63 @@ function MenuDock.new(playerGui, handlers)
 		self.buttons[entry.Id] = button
 		self.dots[entry.Id] = UiTheme.dot("Dot", button)
 	end
+	for order, entry in enabled.Rail do
+		add(entry, dock, order)
+	end
+	for order, entry in enabled.More do
+		add(entry, more, order)
+		table.insert(self._moreIds, entry.Id)
+	end
+
+	if hasMore then
+		local toggle = menuButton("MoreButton", dock, "MORE", #enabled.Rail + 1)
+		toggle.Activated:Connect(function()
+			self:SetMoreOpen(not self:IsMoreOpen())
+		end)
+		self.moreButton = toggle
+		self.moreDot = UiTheme.dot("Dot", toggle)
+	end
+	self:_placeMore()
 	return self
+end
+
+-- Keeps the pop-out beside the rail, bottom-aligned with the MORE button.
+function MenuDock:_placeMore()
+	local height = self.dock.Size.Y.Offset
+	self.more.Position = UDim2.new(1, -16 - BUTTON_WIDTH - GAP, 0.5, height / 2)
+end
+
+function MenuDock:SetMoreOpen(open)
+	-- Only while the rail itself is showing: never pop out over a run.
+	self.more.Visible = open == true and self.dock.Visible ~= false
+	if self.moreButton then
+		self.moreButton.Text = self.more.Visible and "CLOSE" or "MORE"
+	end
+end
+
+function MenuDock:IsMoreOpen()
+	return self.more.Visible == true
 end
 
 function MenuDock:SetVisible(visible)
 	self.dock.Visible = visible
+	if not visible then
+		self:SetMoreOpen(false)
+	end
+end
+
+-- MORE carries a dot whenever something behind it has one, so a claim is never hidden.
+function MenuDock:_refreshMoreDot()
+	if not self.moreDot then
+		return
+	end
+	local any = false
+	for _, id in self._moreIds do
+		if self.dots[id].Visible then
+			any = true
+		end
+	end
+	self.moreDot.Visible = any
 end
 
 -- Shows or hides the claim dot on the Journal.
@@ -74,6 +154,7 @@ function MenuDock:SetJournalClaimable(ready)
 	if self.dots.Journal then
 		self.dots.Journal.Visible = ready == true
 	end
+	self:_refreshMoreDot()
 end
 
 -- Shows or hides the claim dot on Daily and Quests.
@@ -84,6 +165,7 @@ function MenuDock:SetClaimable(dailyReady, questReady)
 	if self.dots.Quests then
 		self.dots.Quests.Visible = questReady == true
 	end
+	self:_refreshMoreDot()
 end
 
 return MenuDock

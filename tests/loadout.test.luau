@@ -486,13 +486,43 @@ describe("lobby views", function()
 		expect(claimed).toBe("OutAlive")
 	end)
 
-	it("MenuDock offers Rigs, Pact and Journal, with a claim dot on the Journal", function()
+	it("MenuDock keeps a short rail and tucks the rest behind MORE", function()
+		local opened
+		local dock = MenuDock.new(Instance.new("Folder"), {
+			Journal = function()
+				opened = "Journal"
+			end,
+		})
+		for _, id in { "Rigs", "Pact", "Daily", "Quests" } do
+			expect(dock.buttons[id].Parent).toBe(dock.dock)
+		end
+		for _, id in { "Journal", "Codes", "Invite" } do
+			expect(dock.buttons[id].Parent).toBe(dock.more)
+		end
+		expect(dock:IsMoreOpen()).toBe(false)
+		dock.moreButton.Activated:Fire()
+		expect(dock:IsMoreOpen()).toBe(true)
+		expect(dock.moreButton.Text).toBe("CLOSE")
+		-- Choosing something closes the pop-out.
+		dock.buttons.Journal.Activated:Fire()
+		expect(opened).toBe("Journal")
+		expect(dock:IsMoreOpen()).toBe(false)
+		-- Hiding the dock (a run starting) closes it too.
+		dock.moreButton.Activated:Fire()
+		dock:SetVisible(false)
+		expect(dock:IsMoreOpen()).toBe(false)
+	end)
+
+	it("MenuDock shows a dot on MORE when the Journal behind it has something to claim", function()
 		local dock = MenuDock.new(Instance.new("Folder"), {})
-		expect(dock.buttons.Rigs).toBeTruthy()
-		expect(dock.buttons.Pact).toBeTruthy()
-		expect(dock.buttons.Journal).toBeTruthy()
+		expect(dock.moreDot.Visible).toBe(false)
 		dock:SetJournalClaimable(true)
 		expect(dock.dots.Journal.Visible).toBe(true)
+		expect(dock.moreDot.Visible).toBe(true)
+		dock:SetClaimable(true, false)
+		expect(dock.moreDot.Visible).toBe(true)
+		dock:SetJournalClaimable(false)
+		expect(dock.moreDot.Visible).toBe(false)
 	end)
 end)
 

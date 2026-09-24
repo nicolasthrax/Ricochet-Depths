@@ -21,7 +21,7 @@ local function upgradeList(playerState)
 end
 
 function RunSummary.ForPlayer(playerState, context)
-	local reward = RewardService.Compute(playerState, context.outcome, context.eliteCleared)
+	local reward = RewardService.Compute(playerState, context.outcome, context.eliteCleared, context.rewardMultiplier)
 	return {
 		RunId = context.runId,
 		Outcome = context.outcome,
@@ -37,7 +37,15 @@ function RunSummary.ForPlayer(playerState, context)
 		Upgrades = upgradeList(playerState),
 		Reward = reward,
 		CurrencyName = RewardConfig.CurrencyName,
-		XpEarned = RewardService.Experience(playerState, context.outcome, context.eliteCleared),
+		XpEarned = RewardService.Experience(playerState, context.outcome, context.eliteCleared, context.rewardMultiplier),
+		Heat = context.heat or 0,
+		Rig = playerState.meta and playerState.meta.rig or nil,
+		ChampionsDefeated = playerState.championKills or 0,
+		BossesDefeated = playerState.bossKills or 0,
+		Crits = playerState.crits or 0,
+		RevivesGiven = playerState.revivesGiven or 0,
+		-- archetype id -> kills, for the Codex.
+		KillsByArchetype = table.clone(playerState.killsByArchetype or {}),
 		-- Filled in once the payout lands (MatchFlow): level-up coins and the level progress.
 		LevelReward = 0,
 	}

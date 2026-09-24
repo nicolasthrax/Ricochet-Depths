@@ -66,7 +66,8 @@ local function formatAmount(amount)
 	return string.format("%.1f", amount)
 end
 
--- kind is "Hit", "Kill" or "Block". Returns false when the pool is dry.
+-- kind is "Hit", "Kill", "Block", or a shot effect: "Crit", "Arc", "Burn" or "Blast".
+-- Returns false when the pool is dry.
 function DamagePopups:Show(position, amount, kind, now)
 	local count = #self._free
 	if count == 0 then
@@ -79,9 +80,16 @@ function DamagePopups:Show(position, amount, kind, now)
 	if kind == "Block" then
 		popup.label.Text = config.BlockedText
 		popup.label.TextColor3 = config.BlockColor
+	elseif kind == "Crit" then
+		popup.label.Text = formatAmount(amount) .. "!"
+		popup.label.TextColor3 = config.CritColor
 	else
 		popup.label.Text = formatAmount(amount)
-		popup.label.TextColor3 = kind == "Kill" and config.KillColor or config.HitColor
+		popup.label.TextColor3 = kind == "Kill" and config.KillColor
+			or kind == "Arc" and config.ArcColor
+			or kind == "Burn" and config.BurnColor
+			or kind == "Blast" and config.BlastColor
+			or config.HitColor
 	end
 	popup.label.TextTransparency = 0
 	popup.label.TextStrokeTransparency = 0.3

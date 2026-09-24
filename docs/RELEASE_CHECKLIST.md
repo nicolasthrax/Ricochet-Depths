@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.2.0` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `1.3.0` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -15,7 +15,10 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 | `luau-compile` on all sources | PASS | 100 sources + 38 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` or `tests/` |
 | `rojo build` | PASS | Rojo 7.7.0 |
-| Headless test suite | PASS | 563 tests, 0 failures |
+| Headless test suite | PASS | 612 tests, 0 failures |
+| Shot effects, champions | PASS | crits, burns (full duration), arcs, chained explosions, chill, Siphon, Second Wind; champion stats, orb ring, regen, reuse clears tags |
+| Rigs, Pact, Journal | PASS | unlock rules, lobby-only, read-only refusals, group Pact merge, Heat reaching a real run, one claim per achievement, schema v8 migration |
+| Co-op revives | PASS | revive in range, drain out of range, helper credit, solo never |
 | Daily rewards, quests, codes | PASS | streaks and resets, once per day across rejoins, quest progress and single claim, codes once per account, read-only pays nothing |
 | Leaderboards | PASS | batched writes, top-ten render, offline text when the store is unreachable |
 | Levels | PASS | XP from runs, daily rewards, quests and codes; level-up coins; Level column and nameplates |
@@ -52,6 +55,17 @@ fallback. Everything else is unverified.
 - [ ] No errors or warnings in the Output window across a full run, including no `[place]`
       warnings at startup (streaming, template Baseplate, stray SpawnLocations)
 
+## 2b. 1.3.0 features (Play Solo)
+
+- [ ] Take Ignite and Chain Arc: burning enemies glow orange, arcs show blue bursts and numbers
+- [ ] Volatile: a kill in a cluster chains explosions; the big orange burst reads clearly
+- [ ] A champion in the Foundry has a glow and a name tag; a Volatile champion's orb ring is dodgeable
+- [ ] Rigs: the RIGS menu shows locks by level; selecting one changes the next run (Scatter fires two)
+- [ ] Pact: locked before the first extraction; after it, +/- set ranks, the HUD shows Heat, the
+      results show the bonus, and Drought stops healing
+- [ ] Journal: claim OutAlive after an extraction; the Codex fills in as you play
+- [ ] Second Wind: a fatal hit shows "SECOND WIND!" and leaves you at half health
+
 ## 3. Multiplayer validation (Studio → Test → Local Server with 2–4 players)
 
 - [ ] Two players in Gate I start together after 15s; one player alone never starts (V9.10)
@@ -61,6 +75,9 @@ fallback. Everything else is unverified.
 - [ ] The last player leaving ends the run and frees the arena
 - [ ] One player going down does not end the run; all going down does
 - [ ] A 9th player stepping into a full gate is moved back out
+- [ ] A downed player crawls; standing next to them revives them in about 3.5s, and the HUD
+      shows "X is down!" to everyone else
+- [ ] Two players with different Pacts run at the lower rank of each condition
 
 ## 4. Datastore and purchases (published test experience)
 
@@ -81,7 +98,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
 
-## 6. Known issues at 1.2.0
+## 6. Known issues at 1.3.0
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|
@@ -94,6 +111,9 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 | 7 | Telemetry only prints to the Studio output; no transport. | Low | Wire once an analytics destination is chosen. |
 | 8 | The sky is Roblox's built-in night sky, tinted per zone; no custom skybox art. | Low | Optional: paste six asset ids into `SkyConfig`. |
 | 9 | Players in the lobby cannot watch a run in progress; there is no spectate. | Low | Post-launch. |
+| 10 | 1.3.0 balance is untested with people: element cards, champions and Heat above ~6 are first guesses, and elemental damage ignoring shields may make the Warden Prime too easy for an Arcanist. | High | Playtest; tune `CombatConfig`, `PactConfig` and `RigConfig`. |
+| 11 | Champion glows use `Highlight`, and Roblox draws only about 31 at once. The enemy cap is 28, so this fits, but a busy co-op room is the place to watch. | Low | Check in V11 with 4 players. |
+| 12 | No onboarding hints yet for Rigs, the Pact or revives. | Medium | Add to `OnboardingView` hints. |
 
 ## 7. Rollback
 

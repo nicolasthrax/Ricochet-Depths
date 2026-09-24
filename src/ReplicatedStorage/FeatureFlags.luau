@@ -24,6 +24,9 @@ FeatureFlags.Audio = true
 FeatureFlags.DailyRewards = true
 -- Global leaderboards on the lobby wall (LeaderboardService).
 FeatureFlags.Leaderboards = true
+-- Rigs, the Depth Pact and the Journal (achievements and Codex): LoadoutService and its views.
+-- Off hides the lobby buttons and unbinds the remotes; runs then use the Striker at Heat 0.
+FeatureFlags.Loadouts = true
 
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false

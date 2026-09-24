@@ -5,9 +5,10 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.2.0: the polish build. Menus, daily rewards, quests, codes, badges, leaderboards, audio, a
-dressed lobby and store art. Green on every gate: syntax, lint, Rojo build and 563 headless
-tests. Awaiting Studio and published-server validation (V9, V10 and the launch checklist).**
+**1.3.0: the depth build. Shot effects and evolutions, champion enemies, six rigs, the Depth
+Pact (Heat), co-op revives, achievements and the Codex. Green on every gate: syntax, lint, Rojo
+build and 612 headless tests. Awaiting Studio and published-server validation (V9, V10, V11 and
+the launch checklist).** The research behind it is in `docs/DESIGN_RESEARCH.md`.
 
 This build answers the third playtest's notes and adds what a public launch needs:
 
@@ -269,6 +270,47 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.3.0 — the depth build
+
+Owner brief: research what makes games like this complete, compare it with the repo, and make
+the game far better. The research and gap analysis are in `docs/DESIGN_RESEARCH.md`. In short,
+the genre's best games (Ball x Pit, Hades, Brotato, Risk of Rain 2) have build-defining effects
+and evolutions, unlockable starting kits, player-chosen difficulty for bigger rewards, and a
+collection to complete. 1.2.0 had none of them.
+
+- **Shot effects.** Ten new cards and four evolutions (`UpgradeConfig`, numbers in
+  `CombatConfig`): Keen Edge, Trick Shot, Ignite, Chain Arc, Volatile, Frostbite, Siphon, Hunter,
+  Second Wind, Fleet Foot; Storm Conduit, Wildfire, Absolute Zero, Deadeye. A new mixin,
+  `MatchEffects`, is the one damage path after a contact: arcs, explosions and burn ticks all
+  count kills, drop coins, fire callouts and chain the same way. Elemental damage ignores
+  shields. An evolution the player qualifies for is always in the next offer.
+- **Champions.** `EnemyService` spawns Armored, Swift, Volatile (orb ring on death) and Mending
+  variants. `RoomService` rolls them per enemy from a separate seeded RNG, so existing layouts
+  are unchanged. They pay 3x coins and bonus experience; clients show a glow and name tag.
+  Burning and chilled enemies glow too (`Burning` and `Chilled` part attributes).
+- **Rigs** (`RigConfig`, `RigView`): six loadouts unlocked by level. Their stats fold in before
+  cards, like the Armory's. Saved as `SelectedRig`; a locked or unknown rig resolves to Striker.
+- **Depth Pact** (`PactConfig`, `PactView`): seven conditions, Heat 0–16, +10% coins and XP per
+  Heat, opened by the first extraction. `MatchService:_applyPact` sets enemy modifiers, the
+  champion bonus, Frailty, Drought and Narrow Path. Groups run each condition at the lowest rank
+  anyone chose. Reset to Heat 0 when the arena returns to the lobby.
+- **Co-op revives** (`MatchCombat:_stepRevives`): a teammate within 9 studs revives a downed
+  player in 3.5s (faster with more helpers) at 40% health. Downed players crawl at 6 speed. The
+  HUD shows who is down and the progress.
+- **Journal** (`AchievementConfig`, `JournalView`, `LoadoutService:ClaimAchievement`): 13
+  achievements, each paid once through `Payout.Grant` and marked in `Achievements`; a Codex of
+  cards taken and enemies defeated.
+- **Schema v8** adds `SelectedRig`, `Pact`, `Achievements`, `Codex` and the stats
+  `ChampionsDefeated`, `BossesDefeated`, `Revives`, `BestHeat` and `RigsExtracted`. The migration is
+  additive; nothing existing is touched.
+- **Remotes** `SelectRig`, `SetPact` and `ClaimAchievement`, rate-limited, validated, and lobby-only.
+  `FeatureFlags.Loadouts` turns all of it off (Striker, Heat 0, no buttons).
+- **Feel.** Element-coloured bursts, 2.6x explosion bursts, crit popups with "!", pitch-shifted
+  hits, "CHAMPION SLAIN" and "SECOND WIND!" callouts. The lobby menu is now a two-column grid.
+- **Bug found by the new tests:** a burn missed its final tick, so a 3s burn dealt 2.5s of damage.
+  Fixed before release.
+- 49 new tests (`shot_effects`, `loadout`); 612 in total.
 
 ### 1.2.0 — the polish build
 

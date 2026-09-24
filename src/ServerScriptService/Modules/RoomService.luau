@@ -2,6 +2,7 @@
 -- actually spawned, never on the configured count, so a failed spawn cannot soft-lock a run.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local RoomBuilder = require(script.Parent.RoomBuilder)
 local RoomMechanics = require(script.Parent.RoomMechanics)
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
@@ -13,8 +14,13 @@ RoomService.__index = RoomService
 
 -- origin (default the world origin) is where this service's rooms are centred: each arena slot
 -- builds its rooms at its own origin, so several runs can share a server.
-function RoomService.new(arenaFolder, enemyService, planeY, random, origin)
+-- championRandom decides which enemies spawn as champions. It is separate from `random`, which
+-- jitters spawn points, so adding champions never moved a seeded layout.
+function RoomService.new(arenaFolder, enemyService, planeY, random, origin, championRandom)
 	return setmetatable({
+		_championRandom = championRandom or Random.new(7),
+		-- Added to every zone's champion chance for this run (the Depth Pact's Champions).
+		_championBonus = 0,
 		_origin = origin or Vector3.zero,
 		_arena = arenaFolder,
 		_enemies = enemyService,
@@ -23,6 +29,24 @@ function RoomService.new(arenaFolder, enemyService, planeY, random, origin)
 		_room = nil,
 		_current = nil,
 	}, RoomService)
+end
+
+function RoomService:SetChampionBonus(bonus)
+	self._championBonus = math.max(tonumber(bonus) or 0, 0)
+end
+
+-- The champion affix for one enemy of this room, or nil. Elites, bosses and anything summoned
+-- later never roll; neither does any room whose zone chance and bonus are both zero.
+function RoomService:_rollChampion(definition, archetypeId)
+	local chance = (CombatConfig.ChampionChance[definition.Zone] or 0) + self._championBonus
+	if chance <= 0 or definition.Kind ~= "Normal" then
+		return nil
+	end
+	if self._championRandom:NextNumber() >= chance then
+		return nil
+	end
+	local order = CombatConfig.ChampionOrder
+	return order[self._championRandom:NextInteger(1, #order)]
 end
 
 function RoomService:GetCurrent()
@@ -93,7 +117,9 @@ function RoomService:Load(roomDefinition, now)
 	local spawned, failed = 0, 0
 	local elite, boss = nil, nil
 	for _, assignment in RoomService.AssignSpawns(roomDefinition, layout) do
-		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker))
+		local champion = self:_rollChampion(roomDefinition, assignment.archetype)
+		local enemy = self._enemies:Spawn(assignment.archetype, self:_spawnPositionFor(layout, assignment.marker),
+			champion and { champion = champion } or nil)
 		if enemy then
 			spawned += 1
 			if enemy.archetype.IsElite then

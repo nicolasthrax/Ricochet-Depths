@@ -7,8 +7,8 @@ depths take you.
 Original IP. Nothing here copies names, art, layouts, wording, enemies, cards or presentation
 from any existing game.
 
-**Status:** launch candidate (1.2.0). Every check below comes from static checks, a Rojo build
-and a headless test suite of 563 tests. The game has not yet been run end to end in Roblox
+**Status:** launch candidate (1.3.0). Every check below comes from static checks, a Rojo build
+and a headless test suite of 612 tests. The game has not yet been run end to end in Roblox
 Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
 [docs/PROGRESS.md](docs/PROGRESS.md) gives the honest state of things.
 
@@ -18,6 +18,13 @@ Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
   enemies. Shielded, splitting, phasing and sentinel enemies, and a boss, the Warden Prime.
 - **Roguelite runs.** Three zones (Ruins, Foundry, Abyss), randomised rooms, an upgrade card
   after each room, room mechanics (sweepers, laser gates, breakable cover, amp pads).
+- **Builds.** 30 upgrade cards, including elemental shot effects (crits, burn, chain arcs, kill
+  explosions, chill, lifesteal) and six evolutions that are always offered once a build
+  qualifies. Champion enemies (Armored, Swift, Volatile, Mending) vary each run.
+- **Rigs and the Depth Pact.** Six rigs, unlocked by level, each changing how you play; after the
+  first extraction, the Pact's seven conditions raise Heat (up to 16) for +10% rewards per point.
+- **Co-op that matters.** Stand next to a downed teammate to revive them mid-fight.
+- **The Journal.** 13 achievements with rewards and a Codex of every card and enemy found.
 - **Solo or co-op.** A solo portal and two lobby gates for 2–8 players; several runs play at
   once on one server, each in its own arena.
 - **Progression.** Coins from kills, a permanent Armory, cosmetic trails, and levels (XP) from
@@ -75,7 +82,9 @@ src/ServerScriptService/
     MatchService              run state machine
     MatchMembership           who is in a run, late-join queueing
     MatchFlow                 room-to-room progression, finish and teardown
-    MatchCombat               fire requests, impacts, enemy contact
+    MatchCombat               fire requests, impacts, enemy contact, co-op revives
+    MatchEffects              crits, burns, arcs, explosions: one damage path for every kill
+    LoadoutService            rigs, the Depth Pact and achievement claims
     MatchBroadcast            snapshots and client messaging
     RoomService / RoomBuilder room selection, runtime geometry, spawn orchestration
     EnemyService / Behaviour / Pool
@@ -99,6 +108,7 @@ src/ServerScriptService/
 src/StarterPlayerScripts/     client input and views (display only)
   AimController.client        drag-to-aim for mouse and touch
   ClientMain.client           owns every view and one connection per server event
+  RigView / PactView / JournalView  rigs, the Depth Pact, achievements and the Codex
   HudView / CardPickerView / ResultsView / OnboardingView / SettingsView / ShopView
   MenuDock / DailyView / QuestsView / CodesView / StatsView / TitleScreen
   NotificationView / CalloutView   toasts, and kill-streak and ricochet callouts

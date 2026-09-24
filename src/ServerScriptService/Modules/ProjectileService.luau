@@ -72,6 +72,8 @@ function ProjectileService:Fire(shooter, origin, direction, power, options)
 		shooter = shooter,
 		damage = options.damage or 1,
 		damagePerBounce = options.damagePerBounce or 0,
+		-- The shooter's stats table at firing time (shot effects); nil for a plain shot.
+		stats = options.stats,
 		contacts = 0,
 	})
 

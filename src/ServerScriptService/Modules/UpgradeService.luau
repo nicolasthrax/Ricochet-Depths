@@ -73,12 +73,19 @@ function UpgradeService:_pickWeighted(candidates)
 	return #candidates
 end
 
--- Builds an offer of up to OffersPerEvent distinct cards, weighted by rarity and drawn without
--- replacement. The unlimited-stack fallback card guarantees the pool is never empty.
-function UpgradeService:BuildOffer(playerKey, playerState, now)
+-- Builds an offer of up to `count` (default OffersPerEvent) distinct cards, weighted by rarity
+-- and drawn without replacement. The unlimited-stack fallback card guarantees the pool is never
+-- empty. A fused card the player qualifies for is always among them: an evolution is the payoff
+-- a build was working toward, and it should never be lost to a bad roll.
+function UpgradeService:BuildOffer(playerKey, playerState, now, count)
 	local candidates = self:GetEligibleCards(playerState)
 	local cards = {}
-	for _ = 1, UpgradeConfig.OffersPerEvent do
+	for index = #candidates, 1, -1 do
+		if #cards < 1 and candidates[index].Rarity == "Fused" and candidates[index].Requires then
+			table.insert(cards, table.remove(candidates, index))
+		end
+	end
+	for _ = #cards + 1, count or UpgradeConfig.OffersPerEvent do
 		if #candidates == 0 then
 			break
 		end

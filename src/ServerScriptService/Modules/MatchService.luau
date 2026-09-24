@@ -4,8 +4,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MatchBroadcast = require(script.Parent.MatchBroadcast)
 local MatchCombat = require(script.Parent.MatchCombat)
+local MatchEffects = require(script.Parent.MatchEffects)
 local MatchFlow = require(script.Parent.MatchFlow)
 local MatchMembership = require(script.Parent.MatchMembership)
+local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
 
@@ -20,6 +22,7 @@ MatchService.__index = MatchService
 MatchMembership.Install(MatchService)
 MatchFlow.Install(MatchService)
 MatchCombat.Install(MatchService)
+MatchEffects.Install(MatchService)
 MatchBroadcast.Install(MatchService)
 
 function MatchService.new(deps)
@@ -40,6 +43,10 @@ function MatchService.new(deps)
 	-- player -> salvage-shop bonuses for a run starting now. Optional: without it every player
 	-- starts from the base stats.
 	self._metaProvider = deps.metaProvider
+	-- player -> their saved Depth Pact. Optional: without it every run is at Heat 0.
+	self._pactProvider = deps.pactProvider
+	-- Crit rolls. Seeded per arena so a test can reproduce them.
+	self._random = deps.random or Random.new(deps.seed or 1)
 	-- Coin pickups for this arena (CoinDrops). Optional: without it kills drop nothing.
 	self._coins = deps.coins
 	-- (player, summary) after each finished run is paid and recorded: quests, badges, boards.
@@ -54,6 +61,7 @@ function MatchService.new(deps)
 	self._states = {}
 	self._participants = {}
 	self._pendingJoins = {}
+	self:_applyPact({})
 	self._state = States.Lobby
 	self._stateEnteredAt = 0
 	self._runStartedAt = 0
@@ -83,6 +91,10 @@ function MatchService.new(deps)
 	self._projectiles.OverlapQuery = function(position, margin)
 		return self._enemies:FindEnclosingMover(position, margin)
 	end
+	-- Burn ticks land through the same damage path as every other hit.
+	self._enemies.OnStatusDamage = function(enemy, damage, shooter, now)
+		self:_secondaryDamage(enemy, damage, shooter, 0, "Burn", now or self._now)
+	end
 
 	return self
 end
@@ -110,6 +122,13 @@ function MatchService:RequestStart(player, now)
 	end
 	self:RegisterPlayer(player)
 
+	-- The group's Pact is settled before anyone's stats are, since it can change them.
+	local pacts = {}
+	for candidate in self._states do
+		table.insert(pacts, self._pactProvider and self._pactProvider(candidate) or {})
+	end
+	self:_applyPact(PactConfig.Merge(pacts))
+
 	-- Shared ownership: everyone registered in the lobby joins the descent together.
 	table.clear(self._participants)
 	for candidate, state in self._states do
@@ -128,7 +147,12 @@ function MatchService:RequestStart(player, now)
 	self._roomIndex = 0
 	self._eliteCleared = false
 	self:_setState(States.Starting, now)
-	self:_log("RunStart", { RunId = self._runId, Players = #self._participants, Rooms = #self._plan }, now)
+	self:_log("RunStart", {
+		RunId = self._runId,
+		Players = #self._participants,
+		Rooms = #self._plan,
+		Heat = self._pactEffects.Heat,
+	}, now)
 	return true
 end
 
@@ -162,11 +186,33 @@ function MatchService:ChooseUpgrade(player, offerId, cardId, now)
 	return card
 end
 
--- Reads the player's shop bonuses as they stand now, for the run about to start.
+-- Reads the player's shop, pass and rig bonuses as they stand now, for the run about to start,
+-- and folds in what the run's Pact does to every player (Frailty).
 function MatchService:_refreshMeta(player, state)
-	if self._metaProvider then
-		state:SetMeta(self._metaProvider(player))
+	local meta = self._metaProvider and self._metaProvider(player) or {}
+	local stats = table.clone(type(meta.stats) == "table" and meta.stats or {})
+	local delta = self._pactEffects.MaxHealthDelta
+	if delta ~= 0 then
+		stats.MaxHealthBonus = (stats.MaxHealthBonus or 0) + delta
 	end
+	state:SetMeta({ stats = stats, trail = meta.trail, rig = meta.rig })
+end
+
+-- Sets the run's Depth Pact and applies what it does to enemies and rooms.
+function MatchService:_applyPact(pact)
+	self._pact = pact
+	self._pactEffects = PactConfig.Effects(pact)
+	local effects = self._pactEffects
+	if self._enemies.SetModifiers then
+		self._enemies:SetModifiers({ Health = effects.EnemyHealth, Speed = effects.EnemySpeed, Damage = effects.EnemyDamage })
+	end
+	if self._rooms.SetChampionBonus then
+		self._rooms:SetChampionBonus(effects.ChampionBonus)
+	end
+end
+
+function MatchService:GetPact()
+	return table.clone(self._pact), self._pactEffects.Heat
 end
 
 --// combat hooks -------------------------------------------------------------
@@ -210,6 +256,7 @@ function MatchService:Step(deltaTime, now)
 		self:_applyHazards(now)
 		self:_collectCoins(deltaTime, now)
 		self:_applyRegen(deltaTime, now)
+		self:_stepRevives(deltaTime, now)
 		if self:_allDown() then
 			self:_finish("Defeated", now)
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then

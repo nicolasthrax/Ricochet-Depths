@@ -2,6 +2,8 @@
 -- server last sent and never computes game state.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
+local RigConfig = require(ReplicatedStorage:WaitForChild("RigConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
 local UiTheme = require(script.Parent.UiTheme)
@@ -107,6 +109,11 @@ function HudView.new(playerGui)
 			self._onProfile()
 		end
 	end)
+	-- The rig and Heat this player will descend with, under the level badge.
+	self.loadoutLabel = UiTheme.label("LoadoutLabel", self.gui, "", UiConfig.Text.Small, UiConfig.Colors.Accent)
+	self.loadoutLabel.Position = UDim2.new(0, 18, 0, 130)
+	self.loadoutLabel.Size = UDim2.fromOffset(260, 18)
+	self.loadoutLabel.TextStrokeTransparency = 0.5
 
 	-- Shown only when the profile could not be loaded, so nothing earned will be kept.
 	self.saveWarning = UiTheme.label("SaveWarning", self.gui, "Progress is not saving right now. Rejoin to try again.",
@@ -159,8 +166,14 @@ function HudView:UpdatePlayer(snapshot)
 	self.healthFill.BackgroundColor3 = fraction <= UiConfig.LowHealthFraction and UiConfig.Colors.HealthLow
 		or UiConfig.Colors.Health
 
+	local lives = tonumber(snapshot.ExtraLivesLeft) or 0
+	if lives > 0 then
+		self.healthLabel.Text ..= "   Second Wind ready"
+	end
 	if not snapshot.Alive then
-		self.healthLabel.Text = "DOWN"
+		local progress = tonumber(snapshot.ReviveProgress) or 0
+		self.healthLabel.Text = progress > 0 and string.format("DOWN  -  being revived %d%%", math.floor(progress * 100))
+			or "DOWN  -  crawl to a teammate"
 	end
 
 	local coins = type(snapshot.Coins) == "number" and snapshot.Coins or 0
@@ -220,15 +233,24 @@ function HudView:UpdateRun(snapshot)
 	self.upgradePanel.Visible = inRun
 	self.storeButton.Visible = not inRun
 	self.levelPanel.Visible = not inRun
+	self.loadoutLabel.Visible = not inRun
 	if not inRun and #self.upgradeEntries > 1 then
 		self:_renderUpgrades({})
 	end
 	local zone = RunConfig.Zones[snapshot.Zone or ""]
 	local where = zone and string.format("%s: %s", zone.DisplayName, snapshot.RoomName) or snapshot.RoomName
-	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s", snapshot.RoomIndex, snapshot.RoomCount, where)
+	local heat = tonumber(snapshot.Heat) or 0
+	self.roomLabel.Text = inRun and string.format("Room %d / %d  -  %s%s", snapshot.RoomIndex, snapshot.RoomCount, where,
+		heat > 0 and string.format("  -  Heat %d", heat) or "")
 		or "Ricochet Depths"
 
-	if snapshot.State == RunConfig.States.Combat then
+	local downed = type(snapshot.Downed) == "table" and snapshot.Downed[1] or nil
+	if snapshot.State == RunConfig.States.Combat and downed and downed.UserId ~= self._userId then
+		-- A teammate is down: getting them up matters more than the target count.
+		self.objectiveLabel.Text = string.format("%s is down! Stand next to them to revive (%d%%)", tostring(downed.Name),
+			math.floor((tonumber(downed.Progress) or 0) * 100))
+		self.objectiveLabel.TextColor3 = UiConfig.Colors.Danger
+	elseif snapshot.State == RunConfig.States.Combat then
 		self.objectiveLabel.Text = snapshot.EnemiesRemaining == 1 and "1 target left"
 			or string.format("%d targets left", snapshot.EnemiesRemaining)
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
@@ -308,6 +330,20 @@ function HudView:SetProgress(progression)
 		self:Flash("LEVEL UP!  You are level " .. level, UiConfig.Colors.Warning)
 	end
 	return leveledUp
+end
+
+-- The lobby's loadout line: the selected rig and the Pact's Heat.
+function HudView:SetLoadout(rigId, pact)
+	local rig = RigConfig.Get(rigId) or RigConfig.Get(RigConfig.DefaultId)
+	local heat = PactConfig.Heat(pact)
+	self.loadoutLabel.Text = heat > 0 and string.format("Rig: %s   -   Heat %d", rig.Title, heat)
+		or string.format("Rig: %s", rig.Title)
+	self.loadoutLabel.TextColor3 = rig.Color
+end
+
+-- This player's user id, so the HUD never asks them to revive themselves.
+function HudView:SetUserId(userId)
+	self._userId = userId
 end
 
 function HudView:SetReadOnly(readOnly)

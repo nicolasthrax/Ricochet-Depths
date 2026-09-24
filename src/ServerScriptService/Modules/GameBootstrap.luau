@@ -14,6 +14,7 @@ local MetaConfig = require(ReplicatedStorage:WaitForChild("MetaConfig"))
 local MetaService = require(script.Parent.MetaService)
 local MonetizationService = require(script.Parent.MonetizationService)
 local Nameplates = require(script.Parent.Nameplates)
+local LoadoutService = require(script.Parent.LoadoutService)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
 local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
@@ -36,6 +37,7 @@ local NET_EVENTS = {
 	"UpgradeResolved",
 	"RunResults",
 	"EnemyDefeated",
+	"Notify",
 }
 
 function GameBootstrap.Start()
@@ -204,6 +206,12 @@ function GameBootstrap.Start()
 	-- The shop is open to anyone in the lobby; `director` is assigned just below, before any
 	-- request can arrive.
 	local director
+	-- Rigs, the Depth Pact and achievements; changed in the lobby only, like the shop.
+	local loadout = LoadoutService.new(persistence, {
+		canChange = function(player)
+			return director ~= nil and director:MatchFor(player) == nil
+		end,
+	})
 	local shop = ShopService.new(persistence, {
 		canShop = function(player)
 			return director ~= nil and director:MatchFor(player) == nil
@@ -251,7 +259,19 @@ function GameBootstrap.Start()
 				if GameBootstrap._isPremium(player) then
 					meta.stats.CoinMultiplier = (meta.stats.CoinMultiplier or 0) + MetaConfig.PremiumCoinBonus
 				end
+				-- The chosen rig bends the starting stats the same way the Armory does.
+				if FeatureFlags.Loadouts then
+					local rig = loadout:GetRig(player)
+					for stat, delta in rig.Stats do
+						meta.stats[stat] = (meta.stats[stat] or 0) + delta
+					end
+					meta.rig = rig.Id
+				end
 				return meta
+			end,
+			-- Each member's saved Pact; the match runs the group at the lowest shared ranks.
+			pactProvider = function(player)
+				return FeatureFlags.Loadouts and loadout:GetPact(player) or {}
 			end,
 		},
 	})
@@ -264,12 +284,35 @@ function GameBootstrap.Start()
 		end
 	end
 
+	local LOADOUT_REASONS = {
+		["profile not loaded"] = "Your data is offline right now. Rejoin to try again.",
+		["in a run"] = "You can change that in the lobby.",
+		["unknown rig"] = "That rig does not exist.",
+		["locked"] = "That is still locked.",
+		["unknown achievement"] = "That achievement has changed. Reopen the Journal.",
+		["already claimed"] = "Already claimed.",
+		["not complete"] = "Not complete yet.",
+	}
+	local function onLoadoutResult(player, kind, result, reason)
+		if not result then
+			notify:FireClient(player, { Kind = "Error", Text = LOADOUT_REASONS[reason] or "That did not go through." })
+		elseif kind == "Achievement" then
+			notify:FireClient(player, { Kind = "Reward", Text = "Achievement: " .. result.Title .. "!  " .. rewardText(result) })
+			persistence:SaveInBackground(player, os.clock())
+		elseif kind == "Rig" then
+			notify:FireClient(player, { Kind = "Info", Text = "Rig selected: " .. result.Title })
+		end
+		pushProfile(player)
+	end
+
 	local router = RemoteRouter.new(function(player)
 		return director:MatchFor(player)
 	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, {
 		onStartRequest = startSolo,
 		meta = FeatureFlags.DailyRewards and metaService or nil,
 		onMetaResult = onMetaResult,
+		loadout = FeatureFlags.Loadouts and loadout or nil,
+		onLoadoutResult = onLoadoutResult,
 	})
 	router:Bind()
 
@@ -469,6 +512,7 @@ function GameBootstrap.Start()
 		monetization = monetization,
 		meta = metaService,
 		leaderboards = leaderboards,
+		loadout = loadout,
 	}
 end
 

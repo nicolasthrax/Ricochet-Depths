@@ -2,7 +2,9 @@
 -- Installed onto MatchService, so these are ordinary methods on a match instance.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CombatConfig = require(ReplicatedStorage:WaitForChild("CombatConfig"))
 local FireValidator = require(script.Parent.FireValidator)
+local MatchEffects = require(script.Parent.MatchEffects)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -51,6 +53,8 @@ function Combat.methods:HandleFire(player, direction, power, now)
 		lifetimeBonus = state.stats.LifetimeBonus,
 		damagePerBounce = state.stats.DamagePerBounce,
 		trail = state.meta.trail, -- cosmetic, from the salvage shop
+		-- The shooter's stats as they stood when the shot left: crits, burns, arcs and the rest.
+		stats = state.stats,
 	}
 
 	local fired = 0
@@ -92,40 +96,32 @@ function Combat.methods:HandleImpact(result, entry, now)
 		return false
 	end
 
-	local hit = self._enemies:ApplyHit(
-		result.Instance,
-		entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0),
-		entry.direction,
-		entry.shooter
-	)
+	local stats = entry.stats or self:_statsOf(entry.shooter)
+	local base = entry.damage + entry.damagePerBounce * math.max(entry.contacts - 1, 0)
+	local damage, crit = base, false
+	local enemy = self._enemies:GetByPart(result.Instance)
+	if enemy and not enemy.dead then
+		damage, crit = MatchEffects.ShotDamage(stats, base, entry.contacts, enemy, now, self._random)
+	end
+
+	local hit = self._enemies:ApplyHit(result.Instance, damage, entry.direction, entry.shooter)
+	local kind = impactKind(hit)
+	if crit and kind == "Hit" then
+		kind = "Crit"
+	end
 	if self._effects then
-		self._effects:Queue(result.Position, result.Normal, impactKind(hit), entry.contacts, hit and hit.damage or 0)
+		self._effects:Queue(result.Position, result.Normal, kind, entry.contacts, hit and hit.damage or 0)
 	end
 	if not hit then
 		return false -- geometry: let it ricochet
 	end
 
-	if hit.killed then
+	if not hit.blocked then
 		local state = self._states[entry.shooter]
-		if state then
-			state.kills += 1
-			state.bestChain = math.max(state.bestChain, entry.contacts)
+		if crit and state then
+			state.crits += 1
 		end
-		if self._coins then
-			self._coins:Drop(hit.enemy.position, hit.enemy.archetype.Coins or 0)
-		end
-		-- Who scored it and off how many contacts, for kill-streak and ricochet callouts.
-		-- A real Player is userdata, not a table, so read the id defensively rather than by type.
-		local hasId, shooterId = pcall(function()
-			return entry.shooter.UserId
-		end)
-		shooterId = hasId and shooterId or nil
-		self:_fireAll("EnemyDefeated", hit.enemy.position, hit.enemy.archetypeId, shooterId, entry.contacts)
-		self:_log("EnemyDefeated", {
-			Archetype = hit.enemy.archetypeId,
-			Contacts = entry.contacts,
-			RunId = self._runId,
-		}, now)
+		self:_afterHit(hit, stats, entry.shooter, entry.contacts, hit.damage, "Shot", now)
 	end
 
 	-- By default shots ricochet off enemies too, which is what lets a single shot chain kills.
@@ -139,14 +135,72 @@ function Combat.methods:HandlePlayerContact(player, damage, _enemy, now)
 		return
 	end
 
-	local applied, fatal = state:ApplyDamage(damage, now)
+	local applied, fatal, savedByExtraLife = state:ApplyDamage(damage, now)
 	if applied <= 0 then
 		return
 	end
 	self:_pushPlayerState(player)
 
+	if savedByExtraLife then
+		self:_fireClient("Notify", player, { Kind = "SecondWind", Text = "SECOND WIND!" })
+		self:_log("ExtraLifeUsed", { RunId = self._runId, Room = self._roomIndex }, now)
+	end
 	if fatal then
+		-- Downed players crawl, so they can drag themselves toward a teammate for a revive.
+		self:_setWalkSpeed(player, RunConfig.DownedWalkSpeed)
 		self:_log("PlayerDown", { RunId = self._runId, Room = self._roomIndex }, now)
+	end
+end
+
+function Combat.methods:_setWalkSpeed(player, speed)
+	if self._world and self._world.SetWalkSpeed then
+		self._world.SetWalkSpeed(player, speed)
+	end
+end
+
+-- Co-op revives: a downed participant with a live teammate close by is picked back up after
+-- Revive.Seconds, faster with more helpers. Progress drains while nobody is near. Solo runs
+-- have nobody to revive them, so this never runs for them.
+function Combat.methods:_stepRevives(deltaTime, now)
+	if #self._participants < 2 or not self._world or not self._world.GetPosition then
+		return
+	end
+	local revive = CombatConfig.Revive
+	for _, player in self._participants do
+		local state = self._states[player]
+		if state and not state.alive then
+			local position = self._world.GetPosition(player)
+			local helpers = {}
+			for _, other in self._participants do
+				local helper = self._states[other]
+				local at = position and other ~= player and helper and helper.alive and self._world.GetPosition(other)
+				if at and Vector3.new(at.X - position.X, 0, at.Z - position.Z).Magnitude <= revive.Radius then
+					table.insert(helpers, other)
+				end
+			end
+
+			local before = state.reviveProgress
+			if #helpers > 0 then
+				local rate = (1 + (#helpers - 1) * revive.HelperBonus) / revive.Seconds
+				state.reviveProgress = math.min(before + rate * deltaTime, 1)
+			else
+				state.reviveProgress = math.max(before - revive.DecayPerSecond * deltaTime, 0)
+			end
+
+			if state.reviveProgress >= 1 then
+				state:Revive(now, revive.HealthFraction, revive.Invulnerability)
+				self:_setWalkSpeed(player, RunConfig.BaseWalkSpeed + (state.stats.MoveSpeedBonus or 0))
+				for _, helper in helpers do
+					self._states[helper].revivesGiven += 1
+				end
+				self:_fireAll("Notify", { Kind = "Revive", Text = state.name .. " is back up!" })
+				self:_log("PlayerRevived", { RunId = self._runId, Room = self._roomIndex, Helpers = #helpers }, now)
+				self:_pushPlayerState(player)
+			elseif state.reviveProgress ~= before and now >= (self._regenPushAt[player] or 0) then
+				self._regenPushAt[player] = now + RunConfig.Regen.PushInterval
+				self:_pushPlayerState(player)
+			end
+		end
 	end
 end
 
@@ -173,6 +227,9 @@ end
 -- Slow healing between fights: a live participant untouched for Regen.Delay seconds heals
 -- PerSecond plus their Mending bonus. The HUD is updated at most every PushInterval.
 function Combat.methods:_applyRegen(deltaTime, now)
+	if self._pactEffects and self._pactEffects.NoRegen then
+		return -- the Pact's Drought
+	end
 	local regen = RunConfig.Regen
 	for _, player in self._participants do
 		local state = self._states[player]

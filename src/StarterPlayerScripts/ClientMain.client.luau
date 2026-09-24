@@ -10,6 +10,10 @@ local CodesView = require(script.Parent:WaitForChild("CodesView"))
 local DailyView = require(script.Parent:WaitForChild("DailyView"))
 local DescentCinematic = require(script.Parent:WaitForChild("DescentCinematic"))
 local HudView = require(script.Parent:WaitForChild("HudView"))
+local JournalView = require(script.Parent:WaitForChild("JournalView"))
+local PactView = require(script.Parent:WaitForChild("PactView"))
+local RigView = require(script.Parent:WaitForChild("RigView"))
+local AchievementConfig = require(ReplicatedStorage:WaitForChild("AchievementConfig"))
 local MenuDock = require(script.Parent:WaitForChild("MenuDock"))
 local NotificationView = require(script.Parent:WaitForChild("NotificationView"))
 local OnboardingView = require(script.Parent:WaitForChild("OnboardingView"))
@@ -23,6 +27,7 @@ local SettingsView = require(script.Parent:WaitForChild("SettingsView"))
 local ShopView = require(script.Parent:WaitForChild("ShopView"))
 local SoundPlayer = require(script.Parent:WaitForChild("SoundPlayer"))
 local UiTheme = require(script.Parent:WaitForChild("UiTheme"))
+local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -36,6 +41,9 @@ local claimDaily = Remotes.Get("ClaimDaily")
 local claimQuest = Remotes.Get("ClaimQuest")
 local redeemCode = Remotes.Get("RedeemCode")
 local requestMeta = Remotes.Get("RequestMeta")
+local selectRig = Remotes.Get("SelectRig")
+local setPact = Remotes.Get("SetPact")
+local claimAchievement = Remotes.Get("ClaimAchievement")
 
 -- Cosmetic scripts read these attributes rather than each opening their own remote.
 local function publishSettings(settings)
@@ -46,6 +54,7 @@ local function publishSettings(settings)
 end
 
 local hud = HudView.new(playerGui)
+hud:SetUserId(player.UserId)
 local settingsView = SettingsView.new(playerGui, function(settings)
 	-- Applied here at once, not only when the server echoes the saved profile back: a read-only
 	-- session never echoes, and comfort options must still work there.
@@ -85,7 +94,16 @@ local codesView = CodesView.new(playerGui, function(code)
 	redeemCode:FireServer(code)
 end)
 local statsView = StatsView.new(playerGui, string.upper(player.DisplayName or player.Name))
-local modals = { dailyView, questsView, codesView, statsView }
+local rigView = RigView.new(playerGui, function(rigId)
+	selectRig:FireServer(rigId)
+end)
+local pactView = PactView.new(playerGui, function(pact)
+	setPact:FireServer(pact)
+end)
+local journalView = JournalView.new(playerGui, function(achievementId)
+	claimAchievement:FireServer(achievementId)
+end)
+local modals = { dailyView, questsView, codesView, statsView, rigView, pactView, journalView }
 local function closeModals()
 	for _, view in modals do
 		view:Close()
@@ -122,6 +140,15 @@ local menu = MenuDock.new(playerGui, {
 	end,
 	Codes = function()
 		openOnly(codesView)
+	end,
+	Rigs = function()
+		openOnly(rigView)
+	end,
+	Pact = function()
+		openOnly(pactView)
+	end,
+	Journal = function()
+		openOnly(journalView)
 	end,
 	Invite = invite,
 })
@@ -219,6 +246,17 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 	end
 	shopView:SetProfile(profile)
 	statsView:SetProfile(profile)
+	rigView:SetProfile(profile)
+	pactView:SetProfile(profile)
+	journalView:SetProfile(profile)
+	hud:SetLoadout(rigView:GetSelected(), pactView:GetPact())
+	local claimable = false
+	for _, entry in AchievementConfig.Describe(profile) do
+		if entry.Complete and not entry.Claimed then
+			claimable = true
+		end
+	end
+	menu:SetJournalClaimable(claimable)
 	hud:SetReadOnly(profile.ReadOnly)
 	if hud:SetProgress(profile.Progression) then
 		sounds:Play("LevelUp")
@@ -293,15 +331,27 @@ Remotes.Get("Notify").OnClientEvent:Connect(function(payload)
 	if type(payload) ~= "table" then
 		return
 	end
+	if payload.Kind == "SecondWind" then
+		callouts:Show(payload.Text, UiConfig.Colors.Health)
+		sounds:Play("LevelUp")
+		return
+	end
 	notifications:Show(payload.Text, payload.Kind)
-	if payload.Kind == "Reward" then
+	if payload.Kind == "Reward" or payload.Kind == "Revive" then
 		sounds:Play("Reward")
 	end
 end)
 
--- Kill streaks and long ricochets, for this player's own kills.
-Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(_position, _archetypeId, shooterId, contacts)
-	if shooterId == player.UserId and callouts:OnKill(tonumber(contacts) or 0) then
+-- Kill streaks and long ricochets, for this player's own kills. A champion kill gets its own.
+Remotes.Get("EnemyDefeated").OnClientEvent:Connect(function(_position, _archetypeId, shooterId, contacts, champion)
+	if shooterId ~= player.UserId then
+		return
+	end
+	if type(champion) == "string" then
+		callouts:OnKill(tonumber(contacts) or 0)
+		callouts:Show(string.upper(champion) .. " CHAMPION SLAIN", UiConfig.Colors.Purple)
+		sounds:Play("Combo")
+	elseif callouts:OnKill(tonumber(contacts) or 0) then
 		sounds:Play("Combo")
 	end
 end)

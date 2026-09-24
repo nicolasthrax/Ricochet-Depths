@@ -42,8 +42,8 @@ re-validated — and otherwise draws what it is told.
 
 ```
 src/ReplicatedStorage/        shared config and data (no logic)
-  *Config.luau                Run, Enemy, Upgrade, Reward, Projectile, Room, Aim, Effect,
-                              Ui, PlayerData, Debug, plus FeatureFlags
+  *Config.luau                Run, Enemy, Upgrade, Reward, Progression, Projectile, Room, Aim,
+                              Effect, Ui, PlayerData, Debug, plus FeatureFlags
   Remotes.luau                the one place remotes are created and looked up
 
 src/ServerScriptService/
@@ -65,7 +65,8 @@ src/ServerScriptService/
     PlayerState               authoritative per-player run state
     PlayerDataService         versioned profiles, retries, ledger, autosave
     DataStoreProvider         datastore wrapper that degrades cleanly
-    RewardService             payout maths and per-server idempotency
+    RewardService             payout maths (coins and experience) and per-server idempotency
+    Leaderstats / Nameplates  player-list columns and the "Lv N" plate over each character
     TelemetryService          rate-limited, de-identified event logging
     EffectBroadcaster         batches cosmetic impacts
     WorldAdapter              character position and teleport, injected for testability

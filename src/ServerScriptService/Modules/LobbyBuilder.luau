@@ -1,6 +1,6 @@
 -- The Descent Hall, where players gather between runs. North: the solo portal (a pedestal) in
 -- front of the zone banners. West: two multiplayer gates of 2-8 players. East: the Armory and
--- Cosmetics kiosks. South: the spawn. An invisible barrier and ceiling keep everyone inside.
+-- Cosmetics kiosks. South: the (invisible) spawn. An invisible barrier and ceiling keep everyone inside.
 -- Built at runtime; nothing here is a binary model.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -79,11 +79,16 @@ function LobbyBuilder.Build(parent)
 	spawnPad.Name = "LobbySpawn"
 	spawnPad.Size = RoomConfig.SpawnPadSize
 	spawnPad.Position = origin + SPAWN_OFFSET + Vector3.new(0, floorY + RoomConfig.SpawnPadSize.Y / 2, 0)
-	spawnPad.Color = GATE_GLOW
 	spawnPad.Anchored = true
 	spawnPad.Neutral = true
 	spawnPad.Duration = 0
-	spawnPad.TopSurface = Enum.SurfaceType.Smooth
+	-- Invisible and intangible: players still spawn here, but they stand on the hall floor and
+	-- never see or trip over a pad.
+	spawnPad.Transparency = 1
+	spawnPad.CanCollide = false
+	spawnPad.CanQuery = false
+	spawnPad.CanTouch = false
+	spawnPad.CastShadow = false
 	spawnPad.Parent = lobby
 
 	local signs = Instance.new("Folder")

@@ -255,6 +255,6 @@ describe("leaderboard", function()
 		expect(stats:FindFirstChild("Best Depth").Value).toBe(4)
 		Leaderstats.Update(player, 135, 4)
 		expect(stats:FindFirstChild("Coins").Value).toBe(135)
-		expect(#stats:GetChildren()).toBe(2)
+		expect(#stats:GetChildren()).toBe(3) -- Level, Coins, Best Depth
 	end)
 end)

@@ -656,7 +656,13 @@ makeService("ServerStorage")
 makeService("StarterPlayer")
 makeService("Lighting")
 makeService("TweenService")
-makeService("HttpService")
+local httpStub = makeService("HttpService")
+local guidCounter = 0
+rawset(httpStub, "GenerateGUID", function(_, wrapInCurlyBraces)
+	guidCounter += 1
+	local guid = string.format("00000000-0000-4000-8000-%012x", guidCounter)
+	return wrapInCurlyBraces == false and guid or "{" .. guid .. "}"
+end)
 makeService("DataStoreService")
 makeService("MessagingService")
 makeService("TextService")

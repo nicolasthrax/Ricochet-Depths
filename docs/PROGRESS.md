@@ -5,9 +5,9 @@ presentation from any existing game.
 
 ## Current milestone
 
-**1.0.2: the launch build, with the Studio fall-through fixed. Feature-complete and green
-headlessly (510 tests); awaiting Studio and published-server validation (V9, and the launch
-checklist).**
+**1.1.0: levels, coins that always save, and an invisible lobby spawn. Feature-complete and
+green headlessly (533 tests); awaiting Studio and published-server validation (V9, and the
+launch checklist).**
 
 This build answers the third playtest's notes and adds what a public launch needs:
 
@@ -269,6 +269,33 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 1.1.0 — levels, and coins that always save
+
+Owner playtest notes: the lobby spawn pad was visible, coins did not save after dying, and the
+game needed levels.
+
+- **Coins did not save (Studio).** Every payout is keyed by run, and the key is remembered in
+  the profile so a run can never pay twice. Studio has no `JobId`, so every Studio session used
+  the prefix `studio` and its first run got the key `studio-a1-1` — a key the first session had
+  already paid. The ledger refused it and the coins vanished; dying ended most runs, so it
+  looked like a death bug. Studio sessions now get a fresh GUID prefix
+  (`GameBootstrap._runKeyPrefix`); live servers keep their `JobId`.
+- **Coins on the floor are banked when a run ends.** Previously a lost room's uncollected
+  coins were discarded. They now go to the nearest participant, downed or not.
+- **Levels (XP).** Every run earns experience: 4 per kill, 25 per room cleared, 60 for the
+  elite, 150 for extracting (`ProgressionConfig`). Dying keeps everything except the extraction
+  award, and leaving mid-run pays what was earned. Levels 1–100 on a rising curve, and each new
+  level pays coins (250 on every tenth). Experience travels with the run's coins in the same
+  idempotent grant, so neither can be paid twice or without the other. Profile schema v6
+  (`Progression.Xp`, store-owned like currency).
+- **Where levels show.** A level badge and XP bar in the lobby HUD, a "LEVEL UP" banner, experience
+  and level-up rows on the results screen (now scrollable), a `Level` column first in the
+  player list, and a "Lv N" plate over every character.
+- **Lobby spawn is invisible.** Transparent, no collision, no raycast hits; players still spawn
+  there, standing on the hall floor.
+- **Save warning.** A player whose profile could not load (read-only session, e.g. Studio with
+  API access off) now sees "Progress is not saving right now" instead of losing coins silently.
 
 ### 1.0.2 — the first room loads under you
 

@@ -290,7 +290,7 @@ describe("profile schema v5", function()
 			GrantedRuns = { ["run-a"] = { Amount = 77, At = 5 } },
 		})
 		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
-		expect(PlayerDataConfig.SchemaVersion).toBe(5)
+		expect(PlayerDataConfig.SchemaVersion).toBe(6)
 		expect(profile.Currency.Salvage).toBe(77)
 		expect(profile.GrantedRuns["run-a"].Amount).toBe(77)
 		expect(type(profile.MetaUpgrades)).toBe("table")

@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 5
+PlayerDataConfig.SchemaVersion = 6
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -52,6 +52,9 @@ function PlayerDataConfig.DefaultProfile()
 		MetaUpgrades = {},
 		-- The cosmetic trail shown on this player's shots; "" for none. A player preference.
 		EquippedTrail = "",
+		-- Lifetime experience; the level is derived from it (ProgressionConfig). Store-owned,
+		-- like currency: it only ever grows, through run grants applied inside the save.
+		Progression = { Xp = 0 },
 		Settings = PlayerDataConfig.DefaultSettings(),
 		LastSaved = 0,
 	}
@@ -132,6 +135,13 @@ PlayerDataConfig.Migrations = {
 	[4] = function(profile)
 		profile.MetaUpgrades = type(profile.MetaUpgrades) == "table" and profile.MetaUpgrades or {}
 		profile.EquippedTrail = type(profile.EquippedTrail) == "string" and profile.EquippedTrail or ""
+		return profile
+	end,
+	-- v5 -> v6: levels. Everyone starts at level 1 with no experience.
+	[5] = function(profile)
+		local progression = type(profile.Progression) == "table" and profile.Progression or {}
+		local xp = tonumber(progression.Xp) or 0
+		profile.Progression = { Xp = math.max(math.floor(xp), 0) }
 		return profile
 	end,
 }

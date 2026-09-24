@@ -113,8 +113,9 @@ describe("step 1: a run's payout is written as soon as it is granted", function(
 		-- Nothing has called Save, StepAutosave, Release or SaveAll. The store must already
 		-- hold the payout, or a crash before the player leaves would lose it.
 		local stored = store.data["profile_5001"]
-		expect(stored.Currency.Salvage).toBe(summary.Reward)
-		expect(stored.GrantedRuns[summary.RunKey].Amount).toBe(summary.Reward)
+		expect(stored.Currency.Salvage).toBe(summary.Reward + summary.LevelReward)
+		expect(stored.GrantedRuns[summary.RunKey].Amount).toBe(summary.Reward + summary.LevelReward)
+		expect(stored.Progression.Xp).toBe(summary.XpEarned)
 	end)
 
 	it("writes the payout and the run's stats together in one request", function()
@@ -161,7 +162,7 @@ describe("step 1: a run's payout is written as soon as it is granted", function(
 		expect(persistence:IsDirty(player)).toBe(true)
 		store.failing = false
 		expect((persistence:Save(player, 1000))).toBe(true)
-		expect(store.data["profile_5004"].Currency.Salvage).toBe(summary.Reward)
+		expect(store.data["profile_5004"].Currency.Salvage).toBe(summary.Reward + summary.LevelReward)
 	end)
 
 	it("never writes for a player whose profile failed to load", function()

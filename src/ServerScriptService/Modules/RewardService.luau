@@ -2,6 +2,7 @@
 -- client sends ever reaches this maths.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
 
 local RewardService = {}
@@ -25,6 +26,20 @@ function RewardService.Compute(playerState, outcome, eliteCleared)
 		bonus = math.floor(bonus * RewardConfig.DefeatMultiplier)
 	end
 	return RewardService.Multiply(playerState, (playerState.coins or 0) + bonus)
+end
+
+-- Experience for a run. Every outcome keeps what the kills and clears earned; only extracting
+-- adds the extraction award. Multipliers never touch experience.
+function RewardService.Experience(playerState, outcome, eliteCleared)
+	local rates = ProgressionConfig.Xp
+	local xp = (playerState.kills or 0) * rates.PerKill + (playerState.roomsCleared or 0) * rates.PerRoomCleared
+	if eliteCleared then
+		xp += rates.EliteCleared
+	end
+	if outcome == "Extracted" then
+		xp += rates.Extracted
+	end
+	return math.max(math.floor(xp), 0)
 end
 
 -- `amount` after the player's multipliers, floored and capped.

@@ -3,7 +3,7 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `1.0.2` · **Status:** feature-complete and green headlessly, **not yet verified in
+**Build:** `1.1.0` · **Status:** feature-complete and green headlessly, **not yet verified in
 Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
@@ -78,7 +78,7 @@ Development builds write to the `dev_v1` scope and can never touch live data.
 - [ ] The shop panel and its tabs fit and scroll on the narrowest supported width
 - [ ] Every button meets the 48px minimum target
 
-## 6. Known issues at 1.0.2
+## 6. Known issues at 1.1.0
 
 | # | Issue | Severity | Plan |
 |---|---|---|---|

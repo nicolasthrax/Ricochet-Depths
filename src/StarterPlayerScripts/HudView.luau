@@ -73,6 +73,36 @@ function HudView.new(playerGui)
 	end)
 	self.storeButton = store
 
+	-- Level badge and experience bar, under the Store button. Lobby only, like the Store: in a
+	-- run the top of the screen belongs to the room and boss bars.
+	local levelPanel = UiTheme.panel("LevelPanel", self.gui)
+	levelPanel.Position = UDim2.new(0, 16, 0, 76)
+	levelPanel.Size = UDim2.fromOffset(200, 50)
+	UiTheme.padding(levelPanel, 8)
+	self.levelPanel = levelPanel
+	self.levelLabel = UiTheme.label("LevelLabel", levelPanel, "LEVEL 1", UiConfig.Text.Hud, UiConfig.Colors.Warning)
+	self.levelLabel.Font = UiConfig.FontBold
+	self.levelLabel.Size = UDim2.new(0.5, 0, 0, 18)
+	self.xpLabel = UiTheme.label("XpLabel", levelPanel, "0 / 100 XP", UiConfig.Text.Small, UiConfig.Colors.TextMuted)
+	self.xpLabel.AnchorPoint = Vector2.new(1, 0)
+	self.xpLabel.Position = UDim2.new(1, 0, 0, 0)
+	self.xpLabel.Size = UDim2.new(0.5, 0, 0, 18)
+	self.xpLabel.TextXAlignment = Enum.TextXAlignment.Right
+	local xpTrack, xpFill = UiTheme.bar("XpBar", levelPanel, UiConfig.Colors.Warning)
+	xpTrack.Position = UDim2.new(0, 0, 0, 24)
+	xpTrack.Size = UDim2.new(1, 0, 0, 10)
+	xpFill.Size = UDim2.fromScale(0, 1)
+	self.xpFill = xpFill
+
+	-- Shown only when the profile could not be loaded, so nothing earned will be kept.
+	self.saveWarning = UiTheme.label("SaveWarning", self.gui, "Progress is not saving right now. Rejoin to try again.",
+		UiConfig.Text.Small, UiConfig.Colors.Danger)
+	self.saveWarning.AnchorPoint = Vector2.new(0.5, 1)
+	self.saveWarning.Position = UDim2.new(0.5, 0, 1, -8)
+	self.saveWarning.Size = UDim2.fromOffset(420, 18)
+	self.saveWarning.TextXAlignment = Enum.TextXAlignment.Center
+	self.saveWarning.Visible = false
+
 	local upgrades = UiTheme.panel("UpgradePanel", self.gui)
 	upgrades.Position = UDim2.new(1, -16, 0, 12)
 	upgrades.AnchorPoint = Vector2.new(1, 0)
@@ -175,6 +205,7 @@ function HudView:UpdateRun(snapshot)
 	-- button is the reverse.
 	self.upgradePanel.Visible = inRun
 	self.storeButton.Visible = not inRun
+	self.levelPanel.Visible = not inRun
 	if not inRun and #self.upgradeEntries > 1 then
 		self:_renderUpgrades({})
 	end
@@ -237,6 +268,36 @@ function HudView:SetLobbyReady(snapshot)
 	if snapshot.Active then
 		self:_renderLobbyObjective()
 	end
+end
+
+-- progression is the profile's Progression: { Level, Xp, XpIntoLevel, XpToNext }. Returns true
+-- when this is a level up since the last profile, after announcing it.
+function HudView:SetProgress(progression)
+	if type(progression) ~= "table" or type(progression.Level) ~= "number" then
+		return false
+	end
+	local level = progression.Level
+	local into = type(progression.XpIntoLevel) == "number" and progression.XpIntoLevel or 0
+	local need = type(progression.XpToNext) == "number" and progression.XpToNext or 0
+	self.levelLabel.Text = "LEVEL " .. level
+	if need > 0 then
+		self.xpLabel.Text = string.format("%d / %d XP", into, need)
+		self.xpFill.Size = UDim2.fromScale(math.clamp(into / need, 0, 1), 1)
+	else
+		self.xpLabel.Text = "MAX"
+		self.xpFill.Size = UDim2.fromScale(1, 1)
+	end
+
+	local leveledUp = self._level ~= nil and level > self._level
+	self._level = level
+	if leveledUp then
+		self:Flash("LEVEL UP!  You are level " .. level, UiConfig.Colors.Warning)
+	end
+	return leveledUp
+end
+
+function HudView:SetReadOnly(readOnly)
+	self.saveWarning.Visible = readOnly == true
 end
 
 function HudView:SetStoreHandler(callback)

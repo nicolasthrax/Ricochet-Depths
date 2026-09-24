@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfig"))
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 
 local PlayerDataService = {}
 PlayerDataService.__index = PlayerDataService
@@ -40,6 +41,7 @@ PlayerDataService.STORE_OWNED_FIELDS = {
 	Currency = true,
 	GrantedRuns = true,
 	MetaUpgrades = true,
+	Progression = true,
 }
 
 local PROFILE_FIELDS = {}
@@ -334,6 +336,7 @@ function PlayerDataService:Update(player, mutator)
 	-- Snapshot by value: a mutator edits these tables in place, so keeping the table references
 	-- alone would neither detect nor undo the change.
 	local currencyTable, ledgerTable, levelsTable = profile.Currency, profile.GrantedRuns, profile.MetaUpgrades
+	local progressionTable, xpBefore = profile.Progression, profile.Progression.Xp
 	local currencyBefore = snapshotCurrency(currencyTable)
 	local ledgerBefore = snapshotLedger(ledgerTable)
 	local levelsBefore = table.clone(levelsTable)
@@ -347,9 +350,13 @@ function PlayerDataService:Update(player, mutator)
 		or not sameCurrency(currencyBefore, currencyTable)
 		or not sameLedger(ledgerBefore, ledgerTable)
 		or not sameLevels(levelsBefore, levelsTable)
+		or profile.Progression ~= progressionTable
+		or progressionTable.Xp ~= xpBefore
 	then
 		-- Put everything back exactly as it was, into the original tables.
 		profile.Currency, profile.GrantedRuns, profile.MetaUpgrades = currencyTable, ledgerTable, levelsTable
+		profile.Progression = progressionTable
+		progressionTable.Xp = xpBefore
 		table.clear(currencyTable)
 		for key, value in currencyBefore do
 			currencyTable[key] = value
@@ -362,7 +369,7 @@ function PlayerDataService:Update(player, mutator)
 		for itemId, level in levelsBefore do
 			levelsTable[itemId] = level
 		end
-		error("currency, the run ledger and meta upgrades change only through grants and purchases, not Update", 2)
+		error("currency, experience, the run ledger and meta upgrades change only through grants and purchases, not Update", 2)
 	end
 
 	markChanged(session)
@@ -434,6 +441,7 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			for runKey, grant in session.pendingGrants do
 				if merged.GrantedRuns[runKey] == nil then
 					merged.Currency.Salvage = (merged.Currency.Salvage or 0) + grant.Amount
+					merged.Progression.Xp = (merged.Progression.Xp or 0) + (grant.Xp or 0)
 					merged.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
 				end
 				applied[runKey] = grant -- applied now, or found already paid: acknowledged either way
@@ -486,14 +494,16 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 	-- Currency is store-owned now: what the store holds, plus grants still waiting to go, less
 	-- purchases still waiting to go. This is also how this server learns of grants and
 	-- purchases other servers committed.
-	local stillPending = 0
+	local stillPending, xpPending = 0, 0
 	for _, grant in session.pendingGrants do
 		stillPending += grant.Amount
+		xpPending += grant.Xp or 0
 	end
 	for _, purchase in session.pendingPurchases do
 		stillPending -= purchase.Cost
 	end
 	profile.Currency.Salvage = (result.Currency.Salvage or 0) + stillPending
+	profile.Progression.Xp = (result.Progression and result.Progression.Xp or 0) + xpPending
 
 	-- Levels likewise: the store's, raised by anything still pending here.
 	table.clear(profile.MetaUpgrades)
@@ -576,32 +586,49 @@ function PlayerDataService:_saveSession(session, now, deadline)
 	return self:_saveChain(session, now, deadline)
 end
 
--- Idempotent payout. A run key is only ever credited once per profile, whatever replays,
--- reconnects or duplicate completion events occur.
-function PlayerDataService:GrantReward(player, runKey, amount)
-	if type(amount) ~= "number" or amount ~= amount or amount <= 0 then
-		return 0, "invalid amount"
+local function validAmount(value)
+	return type(value) == "number" and value == value and value >= 0 and value ~= math.huge
+end
+
+-- Idempotent payout of coins and, optionally, experience. A run key is only ever credited once
+-- per profile, whatever replays, reconnects or duplicate completion events occur; the coins and
+-- the experience travel together, so neither can be paid without the other.
+-- Returns the coins credited, a reason when nothing was, and the experience credited.
+function PlayerDataService:GrantReward(player, runKey, amount, xp)
+	xp = xp or 0
+	if not validAmount(amount) or not validAmount(xp) or (math.floor(amount) <= 0 and math.floor(xp) <= 0) then
+		return 0, "invalid amount", 0
 	end
 	local session = self:_sessionFor(player)
 	if not session or not session.loaded or session.failed then
-		return 0, "profile not loaded"
+		return 0, "profile not loaded", 0
 	end
 	-- Pending grants are checked too: pruning may drop a run from the in-memory ledger before it
 	-- has been written, and it must still count as paid.
 	if session.profile.GrantedRuns[runKey] or session.pendingGrants[runKey] then
-		return 0, "already granted"
+		return 0, "already granted", 0
 	end
 
-	local grant = { Amount = math.floor(amount), At = self._wallClock() }
+	local grant = { Amount = math.floor(amount), Xp = math.floor(xp), At = self._wallClock() }
 	local profile = session.profile
 	profile.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
 	session.pendingGrants[runKey] = grant
 	-- Shown to the player straight away; reconciled against the store on the next save.
 	profile.Currency.Salvage += grant.Amount
+	profile.Progression.Xp += grant.Xp
 	markChanged(session)
 
 	pruneLedger(profile.GrantedRuns)
-	return grant.Amount
+	return grant.Amount, nil, grant.Xp
+end
+
+-- Lifetime experience, including grants not yet written.
+function PlayerDataService:GetXp(player)
+	local session = self:_sessionFor(player)
+	if not session or not session.profile then
+		return 0
+	end
+	return session.profile.Progression.Xp or 0
 end
 
 -- A salvage-shop purchase, applied the way grants are: optimistically in memory now, and
@@ -704,6 +731,7 @@ function PlayerDataService:GetPublicProfile(player)
 		Stats = table.clone(profile.Stats),
 		MetaUpgrades = table.clone(profile.MetaUpgrades),
 		EquippedTrail = profile.EquippedTrail,
+		Progression = ProgressionConfig.Describe(profile.Progression.Xp),
 		ReadOnly = session.failed == true,
 	}
 end

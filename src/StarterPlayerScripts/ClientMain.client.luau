@@ -138,6 +138,10 @@ Remotes.Get("ProfileSync").OnClientEvent:Connect(function(profile)
 		end
 	end
 	shopView:SetProfile(profile)
+	hud:SetReadOnly(profile.ReadOnly)
+	if hud:SetProgress(profile.Progression) then
+		sounds:Play("RoomClear")
+	end
 	settingsView:Apply(profile.Settings)
 	publishSettings(settingsView:GetSettings())
 end)

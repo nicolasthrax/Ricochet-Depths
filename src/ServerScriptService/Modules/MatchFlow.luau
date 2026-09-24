@@ -2,6 +2,7 @@
 -- a run and tearing it down. Installed onto MatchService.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RunSummary = require(script.Parent.RunSummary)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 
@@ -149,10 +150,35 @@ function Flow.methods:_openUpgradeChoice(now)
 	self:_setState(offered > 0 and States.UpgradeChoice or States.Transition, now)
 end
 
+-- Lifetime experience, for a persistence layer that tracks it (test doubles may not).
+local function xpOf(persistence, player)
+	return persistence.GetXp and persistence:GetXp(player) or 0
+end
+
+-- Pays `coins` and `xp` to a player's profile under one ledger key, adding the coins for any
+-- level the experience crosses. Returns the coins and experience actually credited (both 0 when
+-- the key was already paid or the profile is read-only), the level-up coins among those coins,
+-- and the levels before and after.
+function Flow.methods:_payout(player, runKey, coins, xp)
+	local persistence = self._persistence
+	local xpBefore = xpOf(persistence, player)
+	local levelCoins, levelBefore, levelAfter = ProgressionConfig.RewardBetween(xpBefore, xpBefore + xp)
+	if coins + levelCoins <= 0 and xp <= 0 then
+		return 0, 0, 0, levelBefore, levelBefore
+	end
+	local granted, reason, xpGranted = persistence:GrantReward(player, runKey, coins + levelCoins, xp)
+	if reason then
+		return 0, 0, 0, levelBefore, levelBefore
+	end
+	return granted - levelCoins, xpGranted or xp, levelCoins, levelBefore, levelAfter
+end
+
 function Flow.methods:_finish(outcome, now)
 	self._projectiles:Clear()
 	if self._coins then
-		self._coins:Clear() -- whatever is still on the floor of a lost room is gone
+		-- Nothing a player earned is left behind: coins still on the floor go to the nearest
+		-- participant, downed or not, so a lost run still banks every drop.
+		self:_creditCoins(self._coins:Sweep(self:_coinCollectors(true)))
 	end
 	self._rooms:Unload()
 	self._upgrades:ClearAll()
@@ -173,11 +199,18 @@ function Flow.methods:_finish(outcome, now)
 
 			-- Two guards in series: the in-memory ledger stops a repeated completion event on
 			-- this server, and the profile ledger stops a repeat across reconnects or servers.
-			summary.Reward = self._rewards:Grant(self._runId, player, summary.Reward)
+			local reward, repeated = self._rewards:Grant(self._runId, player, summary.Reward)
+			summary.Reward = reward
+			if repeated then
+				summary.XpEarned = 0
+			end
 			if self._persistence then
-				if summary.Reward > 0 then
-					summary.Reward = self._persistence:GrantReward(player, runKey, summary.Reward)
-				end
+				local levelBefore, levelAfter
+				summary.Reward, summary.XpEarned, summary.LevelReward, levelBefore, levelAfter =
+					self:_payout(player, runKey, summary.Reward, summary.XpEarned)
+				summary.LevelBefore = levelBefore
+				summary.Progress = ProgressionConfig.Describe(xpOf(self._persistence, player))
+				summary.Progress.LeveledUp = levelAfter > levelBefore
 				-- Every finished run counts, paid or not: stats advance and onboarding retires.
 				self._persistence:RecordRunEnd(player, summary)
 				-- Written now, not left for autosave or leave: a payout is the one change whose

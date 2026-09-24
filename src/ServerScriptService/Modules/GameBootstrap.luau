@@ -1,4 +1,5 @@
 -- Constructs and wires every server system. Main.server.luau does nothing but call this.
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -9,6 +10,7 @@ local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local Leaderstats = require(script.Parent.Leaderstats)
 local MonetizationService = require(script.Parent.MonetizationService)
+local Nameplates = require(script.Parent.Nameplates)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
 local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
@@ -79,7 +81,9 @@ function GameBootstrap.Start()
 	local function refreshLeaderstats(player)
 		local public = persistence:GetPublicProfile(player)
 		if public then
-			Leaderstats.Update(player, public.Salvage or 0, public.Stats and public.Stats.BestRoomsCleared or 0)
+			local level = public.Progression and public.Progression.Level or 1
+			Leaderstats.Update(player, public.Salvage or 0, public.Stats and public.Stats.BestRoomsCleared or 0, level)
+			Nameplates.Update(player, level)
 		end
 		return public
 	end
@@ -136,7 +140,7 @@ function GameBootstrap.Start()
 			net = net,
 			world = WorldAdapter,
 			persistence = persistence,
-			runKeyPrefix = game.JobId ~= "" and game.JobId or "studio",
+			runKeyPrefix = GameBootstrap._runKeyPrefix(game.JobId, HttpService:GenerateGUID(false)),
 			-- Shop and pass bonuses are read as each run starts.
 			metaProvider = function(player)
 				local meta = FeatureFlags.SalvageShop and shop:GetRunBonuses(player) or { stats = {} }
@@ -341,6 +345,17 @@ function GameBootstrap.Start()
 		gates = gates,
 		monetization = monetization,
 	}
+end
+
+-- Payout keys are stored in each profile's run ledger, so their prefix must never repeat across
+-- server sessions. Studio has no JobId, and a fixed "studio" prefix made every Studio session's
+-- first run reuse a key an earlier session had already paid: the ledger refused it and the
+-- coins were never saved. A live server's JobId is already unique; Studio gets a fresh GUID.
+function GameBootstrap._runKeyPrefix(jobId, guid)
+	if type(jobId) == "string" and jobId ~= "" then
+		return jobId
+	end
+	return "studio-" .. tostring(guid)
 end
 
 -- Settings and leftovers in the place file that break the game in ways the code cannot fix by

@@ -2,6 +2,7 @@
 -- a run and tearing it down. Installed onto MatchService.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Payout = require(script.Parent.Payout)
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RunSummary = require(script.Parent.RunSummary)
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -150,27 +151,10 @@ function Flow.methods:_openUpgradeChoice(now)
 	self:_setState(offered > 0 and States.UpgradeChoice or States.Transition, now)
 end
 
--- Lifetime experience, for a persistence layer that tracks it (test doubles may not).
-local function xpOf(persistence, player)
-	return persistence.GetXp and persistence:GetXp(player) or 0
-end
-
--- Pays `coins` and `xp` to a player's profile under one ledger key, adding the coins for any
--- level the experience crosses. Returns the coins and experience actually credited (both 0 when
--- the key was already paid or the profile is read-only), the level-up coins among those coins,
--- and the levels before and after.
+-- Pays `coins` and `xp` to a player's profile under one ledger key (see Payout.Grant).
 function Flow.methods:_payout(player, runKey, coins, xp)
-	local persistence = self._persistence
-	local xpBefore = xpOf(persistence, player)
-	local levelCoins, levelBefore, levelAfter = ProgressionConfig.RewardBetween(xpBefore, xpBefore + xp)
-	if coins + levelCoins <= 0 and xp <= 0 then
-		return 0, 0, 0, levelBefore, levelBefore
-	end
-	local granted, reason, xpGranted = persistence:GrantReward(player, runKey, coins + levelCoins, xp)
-	if reason then
-		return 0, 0, 0, levelBefore, levelBefore
-	end
-	return granted - levelCoins, xpGranted or xp, levelCoins, levelBefore, levelAfter
+	local granted, xpGranted, levelCoins, levelBefore, levelAfter = Payout.Grant(self._persistence, player, runKey, coins, xp)
+	return granted, xpGranted, levelCoins, levelBefore, levelAfter
 end
 
 function Flow.methods:_finish(outcome, now)
@@ -209,10 +193,14 @@ function Flow.methods:_finish(outcome, now)
 				summary.Reward, summary.XpEarned, summary.LevelReward, levelBefore, levelAfter =
 					self:_payout(player, runKey, summary.Reward, summary.XpEarned)
 				summary.LevelBefore = levelBefore
-				summary.Progress = ProgressionConfig.Describe(xpOf(self._persistence, player))
+				summary.Progress = ProgressionConfig.Describe(Payout.XpOf(self._persistence, player))
 				summary.Progress.LeveledUp = levelAfter > levelBefore
 				-- Every finished run counts, paid or not: stats advance and onboarding retires.
 				self._persistence:RecordRunEnd(player, summary)
+				-- Quests, badges and leaderboards hear about every finished run.
+				if self._onRunEnd then
+					self._onRunEnd(player, summary)
+				end
 				-- Written now, not left for autosave or leave: a payout is the one change whose
 				-- loss really hurts, and this single write carries it with the run's stats.
 				self._persistence:SaveInBackground(player, now)

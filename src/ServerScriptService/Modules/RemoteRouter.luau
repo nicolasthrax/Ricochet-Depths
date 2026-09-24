@@ -23,6 +23,10 @@ function RemoteRouter.new(match, persistence, onProfileChanged, shop, options)
 	return setmetatable({
 		_matchFor = resolve,
 		_onStartRequest = options and options.onStartRequest,
+		-- options.meta (MetaService) and options.onMetaResult(player, kind, result, reason):
+		-- daily rewards, quests and codes. Without them those remotes are never bound.
+		_meta = options and options.meta,
+		_onMetaResult = options and options.onMetaResult,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
 		_shop = shop,
@@ -84,6 +88,24 @@ function RemoteRouter:Bind()
 			self._onProfileChanged(player)
 		end
 	end)
+
+	if self._meta and self._onMetaResult then
+		self:_connect("ClaimDaily", "ClaimDaily", function(player)
+			local result, reason = self._meta:ClaimDaily(player)
+			self._onMetaResult(player, "Daily", result, reason)
+		end)
+		self:_connect("ClaimQuest", "ClaimQuest", function(player, _now, questId)
+			local result, reason = self._meta:ClaimQuest(player, type(questId) == "string" and questId or nil)
+			self._onMetaResult(player, "Quest", result, reason)
+		end)
+		self:_connect("RedeemCode", "RedeemCode", function(player, _now, code)
+			local result, reason = self._meta:RedeemCode(player, type(code) == "string" and code or nil)
+			self._onMetaResult(player, "Code", result, reason)
+		end)
+		self:_connect("RequestMeta", "RequestMeta", function(player)
+			self._onMetaResult(player, "Sync", nil, nil)
+		end)
+	end
 
 	if self._shop then
 		local shopResult = Remotes.Get("ShopResult")

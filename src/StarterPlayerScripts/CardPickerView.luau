@@ -25,7 +25,7 @@ function CardPickerView.new(playerGui, onChoose)
 	backdrop.BorderSizePixel = 0
 	backdrop.Parent = self.gui
 
-	self.title = UiTheme.label("Title", backdrop, "Choose an upgrade", UiConfig.Text.Title)
+	self.title = UiTheme.heading("Title", backdrop, "Choose an upgrade", UiConfig.Text.Title)
 	self.title.Position = UDim2.new(0.5, 0, 0.16, 0)
 	self.title.AnchorPoint = Vector2.new(0.5, 0.5)
 	self.title.Size = UDim2.fromOffset(500, 36)

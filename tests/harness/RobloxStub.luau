@@ -204,6 +204,11 @@ local function makeSequence(typeName)
 		end,
 	}
 end
+NumberRange = {
+	new = function(minimum, maximum)
+		return setmetatable({ Min = minimum, Max = maximum or minimum }, { __robloxType = "NumberRange" })
+	end,
+}
 ColorSequence = makeSequence("ColorSequence")
 NumberSequence = makeSequence("NumberSequence")
 

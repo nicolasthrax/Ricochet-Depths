@@ -745,6 +745,7 @@ function PlayerDataService:RecordRunEnd(player, summary)
 		profile.Stats.EnemiesDefeated += summary.EnemiesDefeated
 		profile.Stats.BestChain = math.max(profile.Stats.BestChain, summary.BestChain)
 		profile.Stats.BestRoomsCleared = math.max(profile.Stats.BestRoomsCleared, summary.RoomsCleared)
+		profile.Stats.CoinsEarned += math.max(tonumber(summary.Reward) or 0, 0)
 		-- Finishing a run, win or lose, counts as having been onboarded.
 		profile.Flags.OnboardingSeen = true
 	end)

@@ -63,7 +63,7 @@ function HudView.new(playerGui)
 	self.bossFill = bossFill
 
 	-- The Store button, shown in the lobby only.
-	local store = UiTheme.button("StoreButton", self.gui, "STORE")
+	local store = UiTheme.button("StoreButton", self.gui, "STORE", "Primary")
 	store.Position = UDim2.new(0, 16, 0, 12)
 	store.Size = UDim2.fromOffset(110, UiConfig.MinTouchTarget)
 	store.Activated:Connect(function()
@@ -93,6 +93,20 @@ function HudView.new(playerGui)
 	xpTrack.Size = UDim2.new(1, 0, 0, 10)
 	xpFill.Size = UDim2.fromScale(0, 1)
 	self.xpFill = xpFill
+	-- The whole badge is a button that opens the profile card.
+	local profileButton = Instance.new("TextButton")
+	profileButton.Name = "ProfileButton"
+	profileButton.Text = ""
+	profileButton.BackgroundTransparency = 1
+	profileButton.Size = UDim2.new(1, 16, 1, 16)
+	profileButton.Position = UDim2.fromOffset(-8, -8)
+	profileButton.ZIndex = 4
+	profileButton.Parent = levelPanel
+	profileButton.Activated:Connect(function()
+		if self._onProfile then
+			self._onProfile()
+		end
+	end)
 
 	-- Shown only when the profile could not be loaded, so nothing earned will be kept.
 	self.saveWarning = UiTheme.label("SaveWarning", self.gui, "Progress is not saving right now. Rejoin to try again.",
@@ -123,7 +137,7 @@ function HudView.new(playerGui)
 	banner.Visible = false
 	UiTheme.padding(banner, 8)
 	self.banner = banner
-	self.bannerLabel = UiTheme.label("BannerLabel", banner, "", UiConfig.Text.Title)
+	self.bannerLabel = UiTheme.heading("BannerLabel", banner, "", UiConfig.Text.Title, UiConfig.Colors.Text)
 	self.bannerLabel.Size = UDim2.fromScale(1, 1)
 	self.bannerLabel.TextXAlignment = Enum.TextXAlignment.Center
 
@@ -298,6 +312,10 @@ end
 
 function HudView:SetReadOnly(readOnly)
 	self.saveWarning.Visible = readOnly == true
+end
+
+function HudView:SetProfileHandler(callback)
+	self._onProfile = callback
 end
 
 function HudView:SetStoreHandler(callback)

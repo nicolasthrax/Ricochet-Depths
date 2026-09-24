@@ -7,9 +7,29 @@ depths take you.
 Original IP. Nothing here copies names, art, layouts, wording, enemies, cards or presentation
 from any existing game.
 
-**Status:** pre-playtest vertical slice. Every result below comes from static checks and a
-headless test suite — the project has not yet been run inside Roblox Studio. See
-[docs/PROGRESS.md](docs/PROGRESS.md) for the honest state of things.
+**Status:** launch candidate (1.2.0). Every check below comes from static checks, a Rojo build
+and a headless test suite of 563 tests. The game has not yet been run end to end in Roblox
+Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
+[docs/PROGRESS.md](docs/PROGRESS.md) gives the honest state of things.
+
+## Features
+
+- **Ricochet combat.** Drag to aim, release to fire; shots bank off walls, reflectors and
+  enemies. Shielded, splitting, phasing and sentinel enemies, and a boss, the Warden Prime.
+- **Roguelite runs.** Three zones (Ruins, Foundry, Abyss), randomised rooms, an upgrade card
+  after each room, room mechanics (sweepers, laser gates, breakable cover, amp pads).
+- **Solo or co-op.** A solo portal and two lobby gates for 2–8 players; several runs play at
+  once on one server, each in its own arena.
+- **Progression.** Coins from kills, a permanent Armory, cosmetic trails, and levels (XP) from
+  every run, with level-up coin rewards.
+- **Come-back loop.** Daily login rewards on a 7-day streak, three daily quests, promo codes,
+  badges, and global leaderboards on the lobby wall.
+- **Presentation.** A title screen, a themed UI with animated menus and toasts, kill-streak and
+  ricochet callouts, sound effects with a volume option, chat level and VIP tags, a dressed
+  lobby with fire, turning crystals and particle ambience, and particle weather in each zone.
+- **Monetization (inert until ids are set).** 2x Coins and VIP passes, coin packs, and a
+  Premium coin bonus.
+- **Store art** in `marketing/`: an icon, three thumbnails and the store description.
 
 ## Setup
 
@@ -42,8 +62,8 @@ re-validated — and otherwise draws what it is told.
 
 ```
 src/ReplicatedStorage/        shared config and data (no logic)
-  *Config.luau                Run, Enemy, Upgrade, Reward, Progression, Projectile, Room, Aim,
-                              Effect, Ui, PlayerData, Debug, plus FeatureFlags
+  *Config.luau                Run, Enemy, Upgrade, Reward, Progression, Meta, Projectile, Room,
+                              Aim, Effect, Ui, Sound, PlayerData, Debug, plus FeatureFlags
   Remotes.luau                the one place remotes are created and looked up
 
 src/ServerScriptService/
@@ -66,6 +86,10 @@ src/ServerScriptService/
     PlayerDataService         versioned profiles, retries, ledger, autosave
     DataStoreProvider         datastore wrapper that degrades cleanly
     RewardService             payout maths (coins and experience) and per-server idempotency
+    Payout                    one way to pay coins + XP under a ledger key, with level-up coins
+    MetaService               daily rewards, daily quests, promo codes, badges
+    LeaderboardService        global boards on the lobby wall (OrderedDataStores)
+    LobbyBuilder / Signage    the Descent Hall, its landmarks, ambience and boards
     Leaderstats / Nameplates  player-list columns and the "Lv N" plate over each character
     TelemetryService          rate-limited, de-identified event logging
     EffectBroadcaster         batches cosmetic impacts
@@ -75,7 +99,12 @@ src/ServerScriptService/
 src/StarterPlayerScripts/     client input and views (display only)
   AimController.client        drag-to-aim for mouse and touch
   ClientMain.client           owns every view and one connection per server event
-  HudView / CardPickerView / ResultsView / OnboardingView / SettingsView / UiTheme
+  HudView / CardPickerView / ResultsView / OnboardingView / SettingsView / ShopView
+  MenuDock / DailyView / QuestsView / CodesView / StatsView / TitleScreen
+  NotificationView / CalloutView   toasts, and kill-streak and ricochet callouts
+  UiTheme                     panels, buttons, modals and tweens shared by every view
+  LobbyAmbience.client        turns and bobs the lobby crystals
+  ChatTags.client             [Lv N] and [VIP] chat prefixes
   ImpactEffects.client        pooled cosmetic bursts
   DebugOverlay.client         developer counters, inert for normal players
 ```

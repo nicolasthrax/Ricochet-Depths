@@ -8,7 +8,10 @@ local ArenaDirector = require(script.Parent.ArenaDirector)
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local LeaderboardService = require(script.Parent.LeaderboardService)
 local Leaderstats = require(script.Parent.Leaderstats)
+local MetaConfig = require(ReplicatedStorage:WaitForChild("MetaConfig"))
+local MetaService = require(script.Parent.MetaService)
 local MonetizationService = require(script.Parent.MonetizationService)
 local Nameplates = require(script.Parent.Nameplates)
 local LobbyBuilder = require(script.Parent.LobbyBuilder)
@@ -72,6 +75,36 @@ function GameBootstrap.Start()
 		print(("[data] scope=%s schema=v%d"):format(scope, PlayerDataConfig.SchemaVersion))
 	end
 
+	-- Daily rewards, quests, codes and badges.
+	local badgeService = game:GetService("BadgeService")
+	local metaService = MetaService.new(persistence, {
+		awardBadge = function(player, badgeId)
+			task.spawn(function()
+				local ok, err = pcall(function()
+					badgeService:AwardBadge(player.UserId, badgeId)
+				end)
+				if not ok then
+					telemetry:LogError("BadgeAwardFailed", tostring(err), os.clock())
+				end
+			end)
+		end,
+	})
+
+	-- Global boards on the lobby wall. They share the profile store's availability and scope.
+	local leaderboards = LeaderboardService.new({
+		boards = lobbyParts.leaderboards,
+		getStore = function(storeName)
+			-- A real DataStore is userdata and has no Available member; only the stand-in table does.
+			if type(store) == "table" and store.Available == false then
+				error("datastore unavailable")
+			end
+			return game:GetService("DataStoreService"):GetOrderedDataStore(storeName, scope)
+		end,
+		getName = function(userId)
+			return Players:GetNameFromUserIdAsync(userId)
+		end,
+	})
+
 	local net = {}
 	for _, name in NET_EVENTS do
 		net[name] = Remotes.Get(name)
@@ -91,12 +124,69 @@ function GameBootstrap.Start()
 	-- Assigned just below; pushProfile only runs once players are about.
 	local monetization
 
+	local metaSync, notify = Remotes.Get("MetaSync"), Remotes.Get("Notify")
+	local function pushMeta(player)
+		if not FeatureFlags.DailyRewards then
+			return
+		end
+		local state = metaService:GetState(player)
+		if state then
+			metaSync:FireClient(player, state)
+		end
+	end
+
 	local function pushProfile(player)
 		local public = refreshLeaderstats(player)
 		if public then
 			public.Passes = monetization and monetization:OwnedList(player) or {}
+			-- Chat shows a VIP tag for pass holders (ChatTags).
+			player:SetAttribute("VIP", table.find(public.Passes, "VIP") ~= nil)
 			profileSync:FireClient(player, public)
+			leaderboards:Submit(player, {
+				Level = public.Progression and public.Progression.Xp or 0,
+				Kills = public.Stats and public.Stats.EnemiesDefeated or 0,
+				Extractions = public.Stats and public.Stats.RunsExtracted or 0,
+			})
 		end
+	end
+
+	-- Player-facing text for why a claim or code did not go through.
+	local META_REASONS = {
+		["profile not loaded"] = "Your data is offline right now. Rejoin to try again.",
+		["already claimed"] = "Already claimed. Come back tomorrow!",
+		["not complete"] = "Finish the quest first.",
+		["unknown quest"] = "That quest has changed. Reopen Quests.",
+		["invalid code"] = "That code does not exist.",
+		["expired"] = "That code has expired.",
+		["already redeemed"] = "You already redeemed that code.",
+	}
+	local function rewardText(result)
+		local parts = {}
+		if result.Coins and result.Coins > 0 then
+			table.insert(parts, string.format("+%d coins", result.Coins))
+		end
+		if result.Xp and result.Xp > 0 then
+			table.insert(parts, string.format("+%d XP", result.Xp))
+		end
+		if result.LevelCoins and result.LevelCoins > 0 then
+			table.insert(parts, string.format("+%d level-up coins", result.LevelCoins))
+		end
+		return table.concat(parts, "  ")
+	end
+	local function onMetaResult(player, kind, result, reason)
+		if kind ~= "Sync" then
+			if result then
+				local headline = kind == "Daily" and string.format("Day %d reward!", result.Streak)
+					or kind == "Quest" and "Quest complete!"
+					or "Code redeemed!"
+				notify:FireClient(player, { Kind = "Reward", Text = headline .. "  " .. rewardText(result) })
+				pushProfile(player)
+				persistence:SaveInBackground(player, os.clock())
+			else
+				notify:FireClient(player, { Kind = "Error", Text = META_REASONS[reason] or "That did not go through." })
+			end
+		end
+		pushMeta(player)
 	end
 
 	monetization = MonetizationService.new({
@@ -130,6 +220,7 @@ function GameBootstrap.Start()
 		onReleased = function(players)
 			for _, player in players do
 				pushProfile(player)
+				pushMeta(player)
 			end
 		end,
 		planeY = planeY,
@@ -141,11 +232,24 @@ function GameBootstrap.Start()
 			world = WorldAdapter,
 			persistence = persistence,
 			runKeyPrefix = GameBootstrap._runKeyPrefix(game.JobId, HttpService:GenerateGUID(false)),
+			-- Every finished run advances quests, may earn badges, and feeds the leaderboards.
+			onRunEnd = function(player, summary)
+				if not FeatureFlags.DailyRewards then
+					return
+				end
+				for _, title in metaService:OnRunEnd(player, summary) do
+					notify:FireClient(player, { Kind = "Quest", Text = "Quest complete: " .. title .. ". Claim it in Quests!" })
+				end
+			end,
 			-- Shop and pass bonuses are read as each run starts.
 			metaProvider = function(player)
 				local meta = FeatureFlags.SalvageShop and shop:GetRunBonuses(player) or { stats = {} }
 				for stat, delta in monetization:GetRunBonuses(player) do
 					meta.stats[stat] = (meta.stats[stat] or 0) + delta
+				end
+				-- Roblox Premium members earn a little more from every run.
+				if GameBootstrap._isPremium(player) then
+					meta.stats.CoinMultiplier = (meta.stats.CoinMultiplier or 0) + MetaConfig.PremiumCoinBonus
 				end
 				return meta
 			end,
@@ -162,7 +266,11 @@ function GameBootstrap.Start()
 
 	local router = RemoteRouter.new(function(player)
 		return director:MatchFor(player)
-	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, { onStartRequest = startSolo })
+	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, {
+		onStartRequest = startSolo,
+		meta = FeatureFlags.DailyRewards and metaService or nil,
+		onMetaResult = onMetaResult,
+	})
 	router:Bind()
 
 	soloPrompt.Triggered:Connect(function(player)
@@ -280,6 +388,17 @@ function GameBootstrap.Start()
 				monetization:RefreshOwnership(player)
 			end
 			pushProfile(player)
+			pushMeta(player)
+			metaService:AwardBadge(player, "Welcome")
+			local dailyReady, questReady = false, false
+			if FeatureFlags.DailyRewards then
+				dailyReady, questReady = metaService:HasClaimable(player)
+			end
+			if dailyReady then
+				notify:FireClient(player, { Kind = "Info", Text = "Your daily reward is ready! Open Daily to claim it." })
+			elseif questReady then
+				notify:FireClient(player, { Kind = "Info", Text = "A quest reward is waiting in Quests." })
+			end
 		end)
 	end
 
@@ -291,6 +410,7 @@ function GameBootstrap.Start()
 		director:RemovePlayer(player, os.clock())
 		router:ClearPlayer(player)
 		monetization:ClearPlayer(player)
+		metaService:ClearPlayer(player)
 		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
@@ -322,6 +442,9 @@ function GameBootstrap.Start()
 		director:Step(deltaTime, now)
 		persistence:StepAutosave(now)
 		stepLobby(now)
+		if FeatureFlags.Leaderboards then
+			leaderboards:Step(now)
+		end
 
 		-- Developer overlay feed. Nothing here reaches a normal player in a published build.
 		if now >= nextDebugPush then
@@ -344,7 +467,16 @@ function GameBootstrap.Start()
 		shop = shop,
 		gates = gates,
 		monetization = monetization,
+		meta = metaService,
+		leaderboards = leaderboards,
 	}
+end
+
+function GameBootstrap._isPremium(player)
+	local ok, premium = pcall(function()
+		return player.MembershipType == Enum.MembershipType.Premium
+	end)
+	return ok and premium == true
 end
 
 -- Payout keys are stored in each profile's run ledger, so their prefix must never repeat across

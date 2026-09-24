@@ -99,12 +99,16 @@ function LobbyBuilder.Build(parent)
 	local gates = LobbyBuilder._buildGates(lobby, signs, origin)
 	local prompts = LobbyBuilder._buildKiosks(lobby, signs, origin)
 	LobbyBuilder._buildHall(lobby, signs, origin)
+	LobbyBuilder._buildLandmarks(lobby, signs, origin)
+	LobbyBuilder._buildAmbience(lobby, origin)
+	local leaderboards = LobbyBuilder._buildLeaderboards(lobby, origin)
 	LobbyBuilder._buildBarrier(lobby, origin)
 
 	return lobby, soloPrompt, {
 		gates = gates,
 		armoryPrompt = prompts.ArmoryKiosk,
 		cosmeticsPrompt = prompts.CosmeticsKiosk,
+		leaderboards = leaderboards,
 	}
 end
 
@@ -316,6 +320,155 @@ function LobbyBuilder._buildHall(lobby, signs, origin)
 	end
 
 	return dressing
+end
+
+local GOLD = Color3.fromRGB(255, 214, 120)
+local EMBER = Color3.fromRGB(255, 140, 60)
+local NORTH = Vector3.new(0, 0, -1)
+
+-- The name over the north wall, a walkway from the spawn to the solo portal, and fire braziers
+-- by the portal, the gates and the shops.
+function LobbyBuilder._buildLandmarks(lobby, signs, origin)
+	local dressing = lobby:FindFirstChild("Dressing")
+	local floorY = RoomConfig.FloorY
+
+	Signage.Board(signs, "TitleSign", Vector3.new(44, 5, 0.3), origin + Vector3.new(0, floorY + 19, -HALF_Z + 0.2),
+		SOUTH, "RICOCHET DEPTHS", GOLD, SIGN_BACK)
+	Signage.Board(signs, "TaglineSign", Vector3.new(26, 1.4, 0.2), origin + Vector3.new(0, floorY + 15, -HALF_Z + 0.4),
+		SOUTH, "BANK YOUR SHOTS  ·  CHAIN YOUR KILLS  ·  ESCAPE THE DEPTHS", SIGN_TEXT, SIGN_BACK)
+
+	-- The walkway: a dark runner edged in light, from the spawn to the well.
+	local runnerStart, runnerEnd = -20, 30
+	local runnerZ, runnerLength = (runnerStart + runnerEnd) / 2, runnerEnd - runnerStart
+	block(dressing, "Runner", Vector3.new(8, 0.06, runnerLength), origin + Vector3.new(0, floorY + 0.03, runnerZ),
+		Color3.fromRGB(32, 34, 48), Enum.Material.Fabric)
+	for side, x in { West = -4.2, East = 4.2 } do
+		block(dressing, "RunnerEdge" .. side, Vector3.new(0.3, 0.08, runnerLength), origin + Vector3.new(x, floorY + 0.04, runnerZ),
+			GATE_GLOW, Enum.Material.Neon)
+	end
+
+	local braziers = {
+		Vector3.new(-12, 0, -30), Vector3.new(12, 0, -30), -- the solo portal
+		Vector3.new(-33, 0, 0), -- between the gates
+		Vector3.new(40, 0, 0), -- between the shops
+	}
+	for index, spot in braziers do
+		local base = origin + spot + Vector3.new(0, floorY, 0)
+		block(dressing, "Brazier" .. index .. "Stand", Vector3.new(1.4, 3, 1.4), base + Vector3.new(0, 1.5, 0),
+			Color3.fromRGB(40, 42, 52), Enum.Material.Metal, true)
+		block(dressing, "Brazier" .. index .. "Bowl", Vector3.new(2.6, 0.6, 2.6), base + Vector3.new(0, 3.3, 0),
+			Color3.fromRGB(70, 60, 50), Enum.Material.Metal, true)
+		local ember = block(dressing, "Brazier" .. index .. "Embers", Vector3.new(2, 0.2, 2), base + Vector3.new(0, 3.65, 0),
+			EMBER, Enum.Material.Neon)
+		local fire = Instance.new("Fire")
+		fire.Size = 4
+		fire.Heat = 8
+		fire.Color = EMBER
+		fire.SecondaryColor = Color3.fromRGB(255, 220, 120)
+		fire.Parent = ember
+		local light = Instance.new("PointLight")
+		light.Color = EMBER
+		light.Range = 18
+		light.Brightness = 1.8
+		light.Parent = ember
+	end
+	return dressing
+end
+
+-- Things that move: crystals turning over the well (animated on each client by LobbyAmbience,
+-- from their Spin and Bob attributes), motes rising from the well and dust drifting in the hall.
+-- All non-solid, and kept apart from Dressing so nothing here counts as a prop.
+function LobbyBuilder._buildAmbience(lobby, origin)
+	local folder = Instance.new("Folder")
+	folder.Name = "Ambience"
+	folder.Parent = lobby
+	local floorY = RoomConfig.FloorY
+	local well = origin + PEDESTAL_OFFSET
+
+	local crystals = {
+		{ Size = Vector3.new(2, 4, 2), Offset = Vector3.new(0, 11, 0), Color = GATE_GLOW, Spin = 45 },
+		{ Size = Vector3.new(1, 2, 1), Offset = Vector3.new(4, 9, 0), Color = Color3.fromRGB(200, 150, 255), Spin = -70 },
+		{ Size = Vector3.new(1, 2, 1), Offset = Vector3.new(-4, 9, 0), Color = Color3.fromRGB(200, 150, 255), Spin = 70 },
+		{ Size = Vector3.new(1, 2, 1), Offset = Vector3.new(0, 9, 4), Color = GOLD, Spin = 60 },
+		{ Size = Vector3.new(1, 2, 1), Offset = Vector3.new(0, 9, -4), Color = GOLD, Spin = -60 },
+	}
+	for index, spec in crystals do
+		local crystal = block(folder, "Crystal" .. index, spec.Size, well + spec.Offset + Vector3.new(0, floorY, 0),
+			spec.Color, Enum.Material.Neon)
+		crystal.CastShadow = false
+		crystal:SetAttribute("Spin", spec.Spin)
+		crystal:SetAttribute("Bob", index == 1 and 0.8 or 0.5)
+		if index == 1 then
+			local light = Instance.new("PointLight")
+			light.Color = spec.Color
+			light.Range = 24
+			light.Brightness = 2
+			light.Parent = crystal
+		end
+	end
+
+	local function emitterPart(name, size, position)
+		local part = block(folder, name, size, position, Color3.new(0, 0, 0), Enum.Material.SmoothPlastic)
+		part.Transparency = 1
+		part.CastShadow = false
+		return part
+	end
+
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "Motes"
+	motes.Color = ColorSequence.new(GATE_GLOW, Color3.fromRGB(200, 150, 255))
+	motes.LightEmission = 1
+	motes.Rate = 14
+	motes.Lifetime = NumberRange.new(2.5, 4.5)
+	motes.Speed = NumberRange.new(3, 6)
+	motes.Size = NumberSequence.new(0.35, 0)
+	motes.Transparency = NumberSequence.new(0.1, 1)
+	motes.Parent = emitterPart("WellMotes", Vector3.new(10, 0.2, 10), well + Vector3.new(0, floorY + 0.2, 0))
+
+	local dust = Instance.new("ParticleEmitter")
+	dust.Name = "Dust"
+	dust.Color = ColorSequence.new(Color3.fromRGB(255, 236, 200))
+	dust.LightEmission = 0.4
+	dust.Rate = 18
+	dust.Lifetime = NumberRange.new(8, 12)
+	dust.Speed = NumberRange.new(0.3, 0.8)
+	dust.EmissionDirection = Enum.NormalId.Bottom
+	dust.Size = NumberSequence.new(0.12, 0.05)
+	dust.Transparency = NumberSequence.new(0.5, 1)
+	dust.Parent = emitterPart("HallDust", Vector3.new(SIZE.X - 8, 0.2, SIZE.Z - 8), origin + Vector3.new(0, floorY + 14, 0))
+	return folder
+end
+
+-- Three global leaderboards on the south wall, printed by LeaderboardService. Returns
+-- board id -> the part whose sign shows the rows.
+local LEADERBOARDS = {
+	{ Id = "Level", Title = "TOP LEVELS", X = -30, Color = GOLD },
+	{ Id = "Kills", Title = "MOST DEFEATED", X = 0, Color = Color3.fromRGB(240, 118, 118) },
+	{ Id = "Extractions", Title = "MOST EXTRACTIONS", X = 30, Color = Color3.fromRGB(122, 224, 146) },
+}
+
+function LobbyBuilder._buildLeaderboards(lobby, origin)
+	local folder = Instance.new("Folder")
+	folder.Name = "Leaderboards"
+	folder.Parent = lobby
+	local floorY = RoomConfig.FloorY
+	local z = HALF_Z - 0.3
+	local boards = {}
+	for _, spec in LEADERBOARDS do
+		local centre = origin + Vector3.new(spec.X, floorY, z)
+		Signage.Board(folder, spec.Id .. "Header", Vector3.new(16, 2.2, 0.2), centre + Vector3.new(0, 15, 0),
+			NORTH, spec.Title, spec.Color, SIGN_BACK)
+		boards[spec.Id] = Signage.Board(folder, "Leaderboard" .. spec.Id, Vector3.new(16, 11, 0.2), centre + Vector3.new(0, 8, 0),
+			NORTH, "Loading...", SIGN_TEXT, SIGN_BACK)
+		-- A lit frame round the board.
+		for side, x in { Left = -8.3, Right = 8.3 } do
+			block(folder, spec.Id .. "Frame" .. side, Vector3.new(0.4, 13.6, 0.4), centre + Vector3.new(x, 9.2, -0.1),
+				spec.Color, Enum.Material.Neon)
+		end
+		block(folder, spec.Id .. "FrameBase", Vector3.new(17, 0.4, 0.4), centre + Vector3.new(0, 2.3, -0.1),
+			spec.Color, Enum.Material.Neon)
+	end
+	return boards
 end
 
 -- Invisible walls well above anything climbable, and a ceiling, so nobody leaves the hall.

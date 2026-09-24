@@ -39,7 +39,7 @@ function ResultsView.new(playerGui, onDismiss)
 	constraint.MaxSize = Vector2.new(460, 520)
 	constraint.Parent = panel
 
-	self.title = UiTheme.label("Title", panel, "", UiConfig.Text.Title)
+	self.title = UiTheme.heading("Title", panel, "", UiConfig.Text.Title)
 	self.title.Size = UDim2.new(1, 0, 0, 36)
 	self.title.TextXAlignment = Enum.TextXAlignment.Center
 
@@ -61,7 +61,7 @@ function ResultsView.new(playerGui, onDismiss)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = self.lines
 
-	self.button = UiTheme.button("Return", panel, "Return to Lobby")
+	self.button = UiTheme.button("Return", panel, "Return to Lobby", "Primary")
 	self.button.AnchorPoint = Vector2.new(0.5, 1)
 	self.button.Position = UDim2.new(0.5, 0, 1, 0)
 	self.button.Size = UDim2.new(0.8, 0, 0, UiConfig.MinTouchTarget)

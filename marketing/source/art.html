@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: Russo; src: url(russo.ttf); }
+@font-face { font-family: Raj; src: url(rajdhani.ttf); }
+html, body { margin: 0; padding: 0; background: #05060d; overflow: hidden; }
+svg { display: block; }
+</style>
+</head>
+<body>
+<svg id="art" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+const params = new URLSearchParams(location.search);
+const mode = params.get('mode') || 'thumb1';
+const W = mode === 'icon' ? 512 : 1920;
+const H = mode === 'icon' ? 512 : 1080;
+const svg = document.getElementById('art');
+svg.setAttribute('width', W); svg.setAttribute('height', H);
+svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) {
+  const node = document.createElementNS(NS, tag);
+  for (const k in attrs) node.setAttribute(k, attrs[k]);
+  (parent || svg).appendChild(node);
+  return node;
+}
+
+const defs = el('defs', {});
+defs.innerHTML = `
+  <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+    <stop offset="0" stop-color="#2a1a5c"/>
+    <stop offset="0.55" stop-color="#120c2c"/>
+    <stop offset="1" stop-color="#04040b"/>
+  </radialGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff3c4"/>
+    <stop offset="0.45" stop-color="#ffd166"/>
+    <stop offset="1" stop-color="#ff9a1f"/>
+  </linearGradient>
+  <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#1b1640" stop-opacity="0"/>
+    <stop offset="1" stop-color="#241a58" stop-opacity="0.9"/>
+  </linearGradient>
+  <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
+    <feGaussianBlur stdDeviation="${W / 240}" result="b1"/>
+    <feGaussianBlur stdDeviation="${W / 80}" result="b2"/>
+    <feMerge><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="softglow" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
+    <feGaussianBlur stdDeviation="${W / 60}"/>
+  </filter>
+  <filter id="titleshadow" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
+    <feDropShadow dx="0" dy="${W / 200}" stdDeviation="${W / 180}" flood-color="#000" flood-opacity="0.9"/>
+    <feDropShadow dx="0" dy="0" stdDeviation="${W / 70}" flood-color="#ff9a1f" flood-opacity="0.55"/>
+  </filter>
+`;
+
+el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#bg)' });
+
+// Perspective grid floor.
+const horizon = H * (mode === 'icon' ? 0.36 : 0.44);
+el('rect', { x: 0, y: horizon, width: W, height: H - horizon, fill: 'url(#floor)' });
+const grid = el('g', { stroke: '#6b4cff', 'stroke-opacity': 0.35, 'stroke-width': Math.max(1, W / 900) });
+const vx = W / 2;
+for (let i = -14; i <= 14; i++) {
+  const xb = vx + i * W / 9;
+  el('line', { x1: vx + i * W / 90, y1: horizon, x2: xb, y2: H }, grid);
+}
+for (let k = 1; k <= 12; k++) {
+  const t = Math.pow(k / 12, 2.1);
+  const y = horizon + (H - horizon) * t;
+  el('line', { x1: 0, y1: y, x2: W, y2: y }, grid);
+}
+
+// Floating motes.
+let seed = 7;
+function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+for (let i = 0; i < (mode === 'icon' ? 30 : 90); i++) {
+  el('circle', {
+    cx: rnd() * W, cy: rnd() * H * 0.9, r: (0.6 + rnd() * 2.2) * W / 1000,
+    fill: rnd() > 0.5 ? '#9ef1ff' : '#d6a8ff', opacity: 0.25 + rnd() * 0.5,
+  });
+}
+
+// The arena: a glowing box the shot banks around, drawn in perspective.
+function arena(cx, cy, w, h) {
+  const tilt = 0.18 * w;
+  const pts = [
+    [cx - w / 2 + tilt, cy - h / 2], [cx + w / 2 - tilt, cy - h / 2],
+    [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2],
+  ];
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ') + ' Z';
+  el('path', { d, fill: '#140f33', 'fill-opacity': 0.75, stroke: '#78ebff', 'stroke-width': W / 260, filter: 'url(#glow)' });
+  return pts;
+}
+
+// A shot: a polyline with a glowing trail, bursts at each bounce, an orb at the head.
+function shot(points, color) {
+  const d = points.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+  el('path', { d, fill: 'none', stroke: color, 'stroke-width': W / 90, 'stroke-opacity': 0.35, filter: 'url(#softglow)' });
+  el('path', { d, fill: 'none', stroke: color, 'stroke-width': W / 260, 'stroke-linecap': 'round',
+    'stroke-linejoin': 'round', 'stroke-dasharray': `${W / 60} ${W / 140}`, filter: 'url(#glow)' });
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i];
+    el('circle', { cx: x, cy: y, r: W / 70, fill: '#ffffff', opacity: 0.9, filter: 'url(#glow)' });
+    for (let s = 0; s < 8; s++) {
+      const a = s * Math.PI / 4 + i;
+      el('line', { x1: x, y1: y, x2: x + Math.cos(a) * W / 40, y2: y + Math.sin(a) * W / 40,
+        stroke: '#fff4c2', 'stroke-width': W / 500, opacity: 0.8 });
+    }
+  }
+  const [hx, hy] = points[points.length - 1];
+  el('circle', { cx: hx, cy: hy, r: W / 45, fill: color, filter: 'url(#glow)' });
+  el('circle', { cx: hx, cy: hy, r: W / 110, fill: '#ffffff' });
+}
+
+// An enemy crystal, shattering.
+function enemy(x, y, size, color, broken) {
+  const g = el('g', { filter: 'url(#glow)' });
+  const pts = [[0, -1], [0.62, -0.2], [0.4, 0.9], [-0.4, 0.9], [-0.62, -0.2]]
+    .map(([a, b]) => `${x + a * size},${y + b * size}`).join(' ');
+  el('polygon', { points: pts, fill: color, 'fill-opacity': 0.85, stroke: '#ffffff', 'stroke-width': W / 700 }, g);
+  el('circle', { cx: x, cy: y + size * 0.1, r: size * 0.18, fill: '#ffffff' }, g);
+  if (broken) {
+    for (let s = 0; s < 10; s++) {
+      const a = s * 0.63 + 0.3, r = size * (1.2 + (s % 3) * 0.35);
+      const fx = x + Math.cos(a) * r, fy = y + Math.sin(a) * r;
+      el('polygon', { points: `${fx},${fy} ${fx + size * 0.14},${fy + size * 0.05} ${fx + size * 0.03},${fy + size * 0.16}`,
+        fill: color, opacity: 0.8 }, g);
+    }
+  }
+}
+
+// A shielded enemy: a body with an arc in front of it.
+function shielded(x, y, size) {
+  const g = el('g', { filter: 'url(#glow)' });
+  el('circle', { cx: x, cy: y, r: size * 0.55, fill: '#c896ff', 'fill-opacity': 0.8, stroke: '#fff', 'stroke-width': W / 700 }, g);
+  el('path', { d: `M ${x - size} ${y + size * 0.2} A ${size} ${size} 0 0 1 ${x + size} ${y + size * 0.2}`,
+    fill: 'none', stroke: '#e3c6ff', 'stroke-width': W / 150 }, g);
+}
+
+function title(x, y, size, lines, anchor) {
+  const g = el('g', { filter: 'url(#titleshadow)' });
+  lines.forEach((line, i) => {
+    const t = el('text', { x, y: y + i * size * 0.98, 'font-family': 'Russo', 'font-size': size,
+      'text-anchor': anchor || 'middle', fill: 'url(#gold)', stroke: '#2a1400', 'stroke-width': size / 16,
+      'paint-order': 'stroke', 'letter-spacing': size * 0.02 }, g);
+    t.textContent = line;
+  });
+}
+
+function caption(x, y, size, text, color, anchor) {
+  const t = el('text', { x, y, 'font-family': 'Raj', 'font-weight': 700, 'font-size': size,
+    'text-anchor': anchor || 'middle', fill: color || '#dff8ff', stroke: '#05060d', 'stroke-width': size / 10,
+    'paint-order': 'stroke', 'letter-spacing': size * 0.08 });
+  t.textContent = text;
+  return t;
+}
+
+function pill(x, y, w, h, text, color) {
+  el('rect', { x: x - w / 2, y: y - h / 2, width: w, height: h, rx: h / 2, fill: '#0c0a22', 'fill-opacity': 0.85,
+    stroke: color, 'stroke-width': W / 500, filter: 'url(#glow)' });
+  caption(x, y + h * 0.18, h * 0.5, text, color);
+}
+
+if (mode === 'icon') {
+  const pts = arena(256, 200, 380, 250);
+  shot([[120, 290], [196, 90], [300, 300], [396, 140], [338, 120]], '#78ebff');
+  enemy(330, 150, 34, '#ff5a6e', true);
+  shielded(160, 180, 30);
+  title(256, 400, 72, ['RICOCHET']);
+  caption(256, 470, 50, 'DEPTHS', '#9ef1ff');
+} else if (mode === 'thumb1') {
+  arena(960, 620, 1500, 480);
+  shot([[330, 810], [640, 400], [990, 840], [1300, 400], [1570, 680], [1420, 750]], '#78ebff');
+  enemy(1410, 740, 70, '#ff5a6e', true);
+  enemy(760, 540, 48, '#ffb347', false);
+  shielded(1150, 620, 62);
+  title(960, 200, 170, ['RICOCHET DEPTHS']);
+  caption(960, 300, 58, 'BANK YOUR SHOTS  ·  CHAIN YOUR KILLS  ·  ESCAPE THE DEPTHS');
+  pill(960, 985, 620, 86, 'CO-OP  1–8 PLAYERS', '#ffd166');
+} else if (mode === 'thumb2') {
+  arena(1180, 600, 1200, 560);
+  shot([[720, 820], [900, 360], [1260, 830], [1560, 380], [1380, 520]], '#9dff9a');
+  enemy(1370, 525, 64, '#ff5a6e', true);
+  enemy(1000, 650, 46, '#c896ff', false);
+  shielded(1590, 700, 56);
+  title(110, 260, 150, ['BANK', 'SHOTS.'], 'start');
+  caption(110, 600, 64, 'BOUNCE IT.', '#9dff9a', 'start');
+  caption(110, 680, 64, 'CHAIN IT.', '#9dff9a', 'start');
+  caption(110, 760, 64, 'ESCAPE.', '#9dff9a', 'start');
+} else if (mode === 'thumb3') {
+  arena(960, 800, 1500, 400);
+  shot([[380, 960], [700, 630], [1040, 980], [1380, 630], [1560, 850]], '#ffd166');
+  enemy(1550, 840, 60, '#ff5a6e', true);
+  shielded(900, 780, 50);
+  title(960, 190, 130, ['LEVEL UP EVERY RUN']);
+  pill(420, 330, 520, 96, 'DAILY REWARDS', '#ffd166');
+  pill(960, 330, 440, 96, 'QUESTS', '#9dff9a');
+  pill(1500, 330, 560, 96, 'LEADERBOARDS', '#78ebff');
+  pill(700, 470, 560, 96, 'UPGRADE CARDS', '#c896ff');
+  pill(1240, 470, 440, 96, 'BOSS FIGHTS', '#ff5a6e');
+}
+document.body.setAttribute('data-ready', '1');
+</script>
+</body>
+</html>

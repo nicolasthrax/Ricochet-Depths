@@ -244,6 +244,32 @@ with 2–4 players; V9.12 needs a published test experience with real Robux ids.
 
 ---
 
+## V10 — Polish build: menus, daily rewards, quests, codes, leaderboards, audio (1.2.0)
+
+Built and tested headlessly only. 10.6 and 10.7 need a published test experience with API
+services on (leaderboards and saved claims need a real DataStore).
+
+| # | Do this | Expect |
+|---|---|---|
+| 10.1 | Join. | A full-screen title card: `RICOCHET DEPTHS`, a tagline and a gold PLAY button. PLAY fades it out. A toast says your daily reward is ready. |
+| 10.2 | Look round the lobby. | `RICOCHET DEPTHS` over the north wall; three framed leaderboards on the south wall; fire braziers by the portal, gates and shops; crystals turning and bobbing over the well; motes rising from the well and dust drifting in the hall; a lit walkway from the spawn. You never see a spawn pad. |
+| 10.3 | Press every button. | Every button clicks and presses in. **Listen:** shots zap, bounces ping (rising in pitch along a chain), kills shatter glass, shields clank, a room clear plays a fanfare. If any cue is silent, its built-in id is missing on your client; replace it in `SoundConfig`. |
+| 10.4 | Options → Sound volume → Off, Low, Full. | Sound goes silent, quieter, full. |
+| 10.5 | Open DAILY, CLAIM. | Day 1 tile turns CLAIMED; a toast shows `+50 coins`; the dot on DAILY clears; the balance rises. Reopen: `Next reward in …`. |
+| 10.6 | Rejoin the same day (published place). | DAILY still says claimed. Nothing pays twice. |
+| 10.7 | Open QUESTS; play runs until one completes; CLAIM it. | Three quests with bars. A toast at the end of the run names the finished quest; the dot shows on QUESTS; CLAIM pays once, then says DONE. |
+| 10.8 | CODES → type `ricochet` → REDEEM, twice. | First: toast `Code redeemed! +150 coins`. Second: `You already redeemed that code.` A made-up code says it does not exist. |
+| 10.9 | Tap the LEVEL badge. | Your profile card: level, XP bar and six lifetime stats. |
+| 10.10 | Kill two enemies within two seconds; kill one off 3+ bounces. | `DOUBLE KILL` / `RICOCHET x3` pop up mid-screen with a sound. |
+| 10.11 | Chat. | Your message is prefixed with `[Lv N]`; a VIP pass holder also gets a gold `[VIP]`. |
+| 10.12 | Watch the leaderboards (published place, a few minutes after a run). | Your name appears with your level, kills and extractions. In Studio without API access they read `Leaderboards go live once the game is published`. |
+| 10.13 | Watch a room in each zone. | Dust falls in the Ruins, embers in the Foundry, violet motes in the Abyss. |
+| 10.14 | Tap INVITE. | The Roblox invite prompt opens (on a published place). |
+
+**Pass:** 10.2, 10.3, 10.5 and 10.7 are the must-haves.
+
+---
+
 ## Record your results
 
 | Step | Pass / Fail | Notes |

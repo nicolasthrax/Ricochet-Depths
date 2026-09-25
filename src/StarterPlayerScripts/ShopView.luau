@@ -1,5 +1,5 @@
--- The lobby shop, in three tabs: the Armory (permanent upgrades), Cosmetics (trails) and the
--- Store (Robux passes and coin packs). Display only: it shows the catalogue against the levels,
+-- The lobby shop, in two tabs: Cosmetics (bought with coins) and the Store (Robux passes and
+-- products). Display only: it shows the catalogue against the levels,
 -- balance and passes the server last sent, and asks the server (or Roblox, for Robux) to buy.
 -- It never assumes a request succeeded; the next ProfileSync is the truth.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,7 +13,7 @@ local ShopView = {}
 ShopView.__index = ShopView
 
 local ROW_HEIGHT = 74
-local TABS = { "Armory", "Cosmetics", "Store" }
+local TABS = { "Cosmetics", "Store" }
 
 -- Player-facing text for the reasons ShopService gives.
 local REASONS = {
@@ -36,7 +36,7 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	self._equipped = ""
 	self._passes = {}
 	self._rows = {}
-	self._tab = "Armory"
+	self._tab = "Cosmetics"
 
 	self.gui = UiTheme.screenGui("RicochetShop", playerGui, 30)
 
@@ -52,7 +52,7 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	limit.Parent = panel
 	self.panel = panel
 
-	self.title = UiTheme.heading("Title", panel, "Armory", UiConfig.Text.Title)
+	self.title = UiTheme.heading("Title", panel, "Cosmetics", UiConfig.Text.Title)
 	self.title.Size = UDim2.new(1, -60, 0, 32)
 
 	self.balanceLabel = UiTheme.label("Balance", panel, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
@@ -128,7 +128,7 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	self.status.Position = UDim2.new(0, 0, 1, 0)
 	self.status.Size = UDim2.new(1, 0, 0, 24)
 
-	self:SetTab("Armory")
+	self:SetTab("Cosmetics")
 	return self
 end
 
@@ -278,7 +278,7 @@ function ShopView:ShowResult(payload)
 	end
 end
 
--- Opens on `tab` (Armory, Cosmetics or Store); the kiosk the player used decides.
+-- Opens on `tab` (Cosmetics or Store).
 function ShopView:Open(tab)
 	self.status.Text = ""
 	self:SetTab(table.find(TABS, tab) and tab or self._tab)

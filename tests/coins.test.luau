@@ -232,7 +232,7 @@ describe("run payout", function()
 		expect(RewardService.Compute(stateWith(40, 0), "Defeated", false)).toBe(40)
 	end)
 
-	it("doubles with 2x Coins and grows with Fortune, within the cap", function()
+	it("multiplies with the coin and reward multipliers, within the cap", function()
 		local state = stateWith(50, 0)
 		local plain = RewardService.Compute(state, "Defeated", false)
 		state.stats.CoinMultiplier = 2

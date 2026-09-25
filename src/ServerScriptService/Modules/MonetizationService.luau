@@ -93,6 +93,16 @@ function MonetizationService:GetRunBonuses(player)
 	return { CoinMultiplier = bonus }
 end
 
+-- Offline storage hours passes add to the Salvage Yard's cap.
+function MonetizationService:GetExtraCapHours(player)
+	local hours = 0
+	for key in self._owned[player] or {} do
+		local pass = self._config.Passes[key]
+		hours += pass and pass.ExtraCapHours or 0
+	end
+	return hours
+end
+
 function MonetizationService:_productFor(productId)
 	for _, product in self._config.Products do
 		if configured(product) and product.Id == productId then

@@ -46,6 +46,56 @@ BaseConfig.Plots = {
 	RowGap = 90,
 }
 
+-- How a plot looks. Profile.Base.Theme and Profile.Base.Sign hold one of these ids ("" is the
+-- default); the cosmetics that unlock them are sold in ShopConfig (Kind "Theme" / "Sign").
+BaseConfig.Themes = {
+	Default = {
+		Title = "Frontier",
+		Ground = Color3.fromRGB(84, 96, 70),
+		Path = Color3.fromRGB(120, 108, 88),
+		Fence = Color3.fromRGB(96, 72, 52),
+		Trim = Color3.fromRGB(255, 196, 120),
+	},
+	Moss = {
+		Title = "Mossy Ruins",
+		Ground = Color3.fromRGB(58, 92, 62),
+		Path = Color3.fromRGB(96, 110, 96),
+		Fence = Color3.fromRGB(80, 90, 82),
+		Trim = Color3.fromRGB(140, 236, 168),
+	},
+	Frost = {
+		Title = "Frost Camp",
+		Ground = Color3.fromRGB(196, 214, 230),
+		Path = Color3.fromRGB(150, 170, 196),
+		Fence = Color3.fromRGB(110, 130, 160),
+		Trim = Color3.fromRGB(170, 230, 255),
+	},
+	Gilded = {
+		Title = "Gilded Outpost",
+		Ground = Color3.fromRGB(70, 56, 40),
+		Path = Color3.fromRGB(150, 120, 70),
+		Fence = Color3.fromRGB(200, 160, 70),
+		Trim = Color3.fromRGB(255, 214, 90),
+	},
+}
+
+BaseConfig.Signs = {
+	Default = { Title = "Plank", Back = Color3.fromRGB(70, 52, 38), Text = Color3.fromRGB(250, 236, 210) },
+	Slate = { Title = "Slate", Back = Color3.fromRGB(34, 38, 50), Text = Color3.fromRGB(150, 220, 255) },
+	Banner = { Title = "Explorer Banner", Back = Color3.fromRGB(28, 70, 120), Text = Color3.fromRGB(255, 222, 120) },
+}
+
+function BaseConfig.ThemeOf(themeId)
+	return BaseConfig.Themes[themeId] or BaseConfig.Themes.Default
+end
+
+function BaseConfig.SignOf(signId)
+	return BaseConfig.Signs[signId] or BaseConfig.Signs.Default
+end
+
+-- The Trophy Hall shows one pillar per claimed achievement, up to this many.
+BaseConfig.MaxTrophies = 8
+
 -- Hearth level gates what can be built: HearthLevels[n] is the Hearth level building level n
 -- needs. Role groups buildings in the panel: Power (run stats), Economy, Heart.
 BaseConfig.Buildings = {

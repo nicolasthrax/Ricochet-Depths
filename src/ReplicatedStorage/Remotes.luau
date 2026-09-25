@@ -22,6 +22,12 @@ local REMOTE_NAMES = {
 	"Dash", -- the dash's heading; the client moves itself, the server grants i-frames and effects
 	"ChooseSurge", -- surge offer id + perk id
 	"ChooseDoor", -- door id, a vote for the next room
+	"UpgradeBuilding", -- building id (+ a tile for a new one); price and gates checked server-side
+	"MoveBuilding", -- building id + tile; swaps with whatever stands there
+	"ClaimBase", -- empty the Salvage Yard
+	"VisitBase", -- a player's user id, or nil for your own plot (lobby only)
+	"CheerBase", -- the user id of the base being cheered
+	"RequestBase", -- ask for a fresh BaseSync (opening the base panel)
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -37,6 +43,7 @@ local REMOTE_NAMES = {
 	"LobbyReadyState", -- ready pads: how many are ready and the start countdown
 	"DebugStats", -- developer overlay only; sent to allowlisted users
 	"MetaSync", -- daily streak and today's quests for this player
+	"BaseSync", -- this player's base: levels, layout, the yard, what to build next
 	"Notify", -- a toast: { Text, Kind = "Reward" | "Quest" | "Info" | "Error" }; "Callout" is a big centre call
 	"SurgeOffer", -- three Surge perks to pick from mid-fight
 	"SurgeResolved", -- which perk was taken

@@ -1,4 +1,4 @@
--- Authoritative lobby shop (Armory and Cosmetics). The client only ever names an item; price, level, affordability
+-- Authoritative Cosmetics shop. The client only ever names an item; price, level, affordability
 -- and whether the shop is open are all decided here, and the money moves through
 -- PlayerDataService's purchase path, which re-checks the stored balance when the save commits.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -98,17 +98,17 @@ function ShopService:Equip(player, itemId, now)
 	return true
 end
 
--- What a run starting now gets from the shop: { stats = { [stat] = delta }, trail = def|nil }.
-function ShopService:GetRunBonuses(player)
+-- The trail a run starting now draws behind this player's shots: an owned, equipped trail's
+-- definition, or nil. The shop sells nothing else a run can see.
+function ShopService:GetTrail(player)
 	local levels = self._persistence:GetMetaLevels(player)
-	local trail = nil
 	local profile = self._persistence:GetPublicProfile(player)
 	local equipped = profile and profile.EquippedTrail or ""
 	local item = equipped ~= "" and ShopConfig.Get(equipped) or nil
 	if item and item.Kind == "Trail" and (levels[item.Id] or 0) >= 1 then
-		trail = item.Trail
+		return item.Trail
 	end
-	return { stats = ShopConfig.ComputeBonuses(levels), trail = trail }
+	return nil
 end
 
 -- Tells the player about any purchase the store refused at commit time (another server spent

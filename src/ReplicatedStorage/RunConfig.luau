@@ -80,6 +80,12 @@ RunConfig.RemoteRules = {
 	Dash = { Cooldown = 0.25, Burst = 2 },
 	ChooseSurge = { Cooldown = 0.2, Burst = 3 },
 	ChooseDoor = { Cooldown = 0.2, Burst = 4 },
+	UpgradeBuilding = { Cooldown = 0.4, Burst = 3 },
+	MoveBuilding = { Cooldown = 0.2, Burst = 4 },
+	ClaimBase = { Cooldown = 1, Burst = 2 },
+	VisitBase = { Cooldown = 1, Burst = 2 },
+	CheerBase = { Cooldown = 0.5, Burst = 3 },
+	RequestBase = { Cooldown = 0.5, Burst = 4 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,

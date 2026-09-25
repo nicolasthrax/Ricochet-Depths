@@ -5,6 +5,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local ArenaDirector = require(script.Parent.ArenaDirector)
+local BaseBuilder = require(script.Parent.BaseBuilder)
+local BaseConfig = require(ReplicatedStorage:WaitForChild("BaseConfig"))
+local BaseService = require(script.Parent.BaseService)
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
@@ -224,6 +227,43 @@ function GameBootstrap.Start()
 		onChanged = pushProfile,
 	})
 
+	-- The home base: the service that builds, claims and cheers, and the Outpost's plots that
+	-- show it. Managed in the lobby only, like the shop.
+	local baseSync = Remotes.Get("BaseSync")
+	local builder
+	local pushBase
+	local base = BaseService.new(persistence, {
+		canManage = function(player)
+			return director ~= nil and director:MatchFor(player) == nil
+		end,
+		extraCapHours = function(player)
+			return monetization:GetExtraCapHours(player)
+		end,
+		onChanged = function(player)
+			pushProfile(player)
+			pushBase(player)
+		end,
+		onFirstBuild = function()
+			telemetry:Log("FirstBaseUpgrade", {}, os.clock())
+		end,
+	})
+	-- Sends the player their base and rebuilds their plot to match. open asks the client to show
+	-- the panel (the Hearth's "Manage base" prompt).
+	pushBase = function(player, open)
+		if not FeatureFlags.BaseBuilding then
+			return
+		end
+		local state = base:GetState(player)
+		if state then
+			state.Open = open == true
+			state.PlotIndex = player:GetAttribute("PlotIndex")
+			baseSync:FireClient(player, state)
+			if builder then
+				builder:Refresh(player, state)
+			end
+		end
+	end
+
 	director = ArenaDirector.new({
 		parent = arenas,
 		-- A finished run paid out: show the new balance straight away.
@@ -251,9 +291,14 @@ function GameBootstrap.Start()
 					notify:FireClient(player, { Kind = "Quest", Text = "Quest complete: " .. title .. ". Claim it in Quests!" })
 				end
 			end,
-			-- Shop and pass bonuses are read as each run starts.
+			-- Building, pass and rig bonuses, and the equipped trail, are read as each run starts.
 			metaProvider = function(player)
-				local meta = FeatureFlags.SalvageShop and shop:GetRunBonuses(player) or { stats = {} }
+				local meta = { stats = {}, trail = FeatureFlags.SalvageShop and shop:GetTrail(player) or nil }
+				if FeatureFlags.BaseBuilding then
+					for stat, delta in base:GetRunBonuses(player) do
+						meta.stats[stat] = (meta.stats[stat] or 0) + delta
+					end
+				end
 				for stat, delta in monetization:GetRunBonuses(player) do
 					meta.stats[stat] = (meta.stats[stat] or 0) + delta
 				end
@@ -261,7 +306,7 @@ function GameBootstrap.Start()
 				if GameBootstrap._isPremium(player) then
 					meta.stats.CoinMultiplier = (meta.stats.CoinMultiplier or 0) + MetaConfig.PremiumCoinBonus
 				end
-				-- The chosen rig bends the starting stats the same way the Armory does.
+				-- The chosen rig bends the starting stats the same way the buildings do.
 				if FeatureFlags.Loadouts then
 					local rig = loadout:GetRig(player)
 					for stat, delta in rig.Stats do
@@ -307,6 +352,84 @@ function GameBootstrap.Start()
 		pushProfile(player)
 	end
 
+	local BASE_REASONS = {
+		["profile not loaded"] = "Your data is offline right now. Rejoin to try again.",
+		["in a run"] = "You can build between runs.",
+		["base disabled"] = "The Outpost is closed right now.",
+		["hearth too low"] = "Raise your Camp Hearth first.",
+		["insufficient salvage"] = "Not enough coins yet. Descend for more!",
+		["max level"] = "That building is fully upgraded.",
+		["tile taken"] = "Something already stands there.",
+		["invalid tile"] = "Pick a tile on your grid.",
+		["no free tile"] = "Your grid is full.",
+		["nothing to claim"] = "Your Salvage Yard is empty. Come back later!",
+		["not built"] = "Build it first.",
+		["unknown building"] = "That building has changed. Reopen the base.",
+		["already cheered"] = "You already cheered this base today.",
+		["own base"] = "That is your own base!",
+	}
+	local function onBaseResult(player, kind, ok, result)
+		if kind == "Sync" then
+			pushBase(player)
+		elseif not ok then
+			notify:FireClient(player, { Kind = "Error", Text = BASE_REASONS[result] or "That did not go through." })
+			pushBase(player)
+		elseif kind == "Upgrade" then
+			local building = BaseConfig.Get(result.Id)
+			local verb = result.Level == 1 and building.StartLevel == 0 and "built" or "upgraded to Lv" .. result.Level
+			notify:FireClient(player, { Kind = "Reward", Text = string.format("%s %s!", building.Title, verb) })
+		elseif kind == "Claim" then
+			notify:FireClient(player, { Kind = "Reward", Text = string.format("+%d coins from the Salvage Yard", result.Coins) })
+		end
+	end
+
+	-- Visiting: your own plot (userId nil) or another player's on this server. Lobby only.
+	local function visitBase(player, userId)
+		if not FeatureFlags.BaseBuilding then
+			return
+		end
+		if director:MatchFor(player) then
+			notify:FireClient(player, { Kind = "Error", Text = "You can visit the Outpost between runs." })
+			return
+		end
+		local target = userId and Players:GetPlayerByUserId(userId) or player
+		local _, index = builder:PlotFor(target or player)
+		if not target or not index then
+			notify:FireClient(player, { Kind = "Error", Text = "That base has no plot on this server." })
+			return
+		end
+		WorldAdapter.Teleport(player, builder:EntryPosition(index))
+		if target ~= player then
+			notify:FireClient(player, { Kind = "Info", Text = string.format("%s's outpost. Cheer at their Hearth!", target.Name) })
+		end
+	end
+
+	local function cheerBase(player, owner)
+		local ok, result = base:Cheer(player, owner)
+		if not ok then
+			notify:FireClient(player, { Kind = "Error", Text = BASE_REASONS[result] or "That did not go through." })
+			return
+		end
+		local mine = result.VisitorCoins > 0 and string.format("  +%d coins", result.VisitorCoins) or ""
+		notify:FireClient(player, { Kind = "Reward", Text = string.format("You cheered %s's base!%s", owner.Name, mine) })
+		local theirs = result.OwnerCoins > 0 and string.format("  +%d coins", result.OwnerCoins) or ""
+		notify:FireClient(owner, { Kind = "Reward", Text = string.format("%s cheered your base!%s", player.Name, theirs) })
+	end
+
+	builder = BaseBuilder.new(workspace, RunConfig.LobbyPosition, {
+		onManage = function(player, owner)
+			if owner == player then
+				pushBase(player, true)
+			elseif owner then
+				notify:FireClient(player, { Kind = "Info", Text = string.format("This is %s's outpost. Cheer them on!", owner.Name) })
+			end
+		end,
+		onCheer = cheerBase,
+		onReturn = function(player)
+			WorldAdapter.Teleport(player, RunConfig.LobbyReturnPosition)
+		end,
+	})
+
 	local router = RemoteRouter.new(function(player)
 		return director:MatchFor(player)
 	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, {
@@ -315,6 +438,15 @@ function GameBootstrap.Start()
 		onMetaResult = onMetaResult,
 		loadout = FeatureFlags.Loadouts and loadout or nil,
 		onLoadoutResult = onLoadoutResult,
+		base = FeatureFlags.BaseBuilding and base or nil,
+		onBaseResult = onBaseResult,
+		onVisitBase = visitBase,
+		onCheerBase = function(player, userId)
+			local owner = Players:GetPlayerByUserId(userId)
+			if owner then
+				cheerBase(player, owner)
+			end
+		end,
 	})
 	router:Bind()
 
@@ -322,18 +454,24 @@ function GameBootstrap.Start()
 		startSolo(player, os.clock())
 	end)
 
-	-- The kiosks only open the view on their tab; every purchase still goes through ShopService.
+	-- The Cosmetics kiosk only opens the view; every purchase still goes through ShopService.
 	-- With the shop off there is no entry point at all.
 	local shopOpen, shopResult = Remotes.Get("ShopOpen"), Remotes.Get("ShopResult")
-	for prompt, tab in { [lobbyParts.armoryPrompt] = "Armory", [lobbyParts.cosmeticsPrompt] = "Cosmetics" } do
-		if FeatureFlags.SalvageShop then
-			prompt.Triggered:Connect(function(player)
-				pushProfile(player)
-				shopOpen:FireClient(player, tab)
-			end)
-		else
-			prompt.Enabled = false
-		end
+	if FeatureFlags.SalvageShop then
+		lobbyParts.cosmeticsPrompt.Triggered:Connect(function(player)
+			pushProfile(player)
+			shopOpen:FireClient(player, "Cosmetics")
+		end)
+	else
+		lobbyParts.cosmeticsPrompt.Enabled = false
+	end
+	-- The Outpost kiosk takes you to your own plot.
+	if FeatureFlags.BaseBuilding then
+		lobbyParts.outpostPrompt.Triggered:Connect(function(player)
+			visitBase(player, nil)
+		end)
+	else
+		lobbyParts.outpostPrompt.Enabled = false
 	end
 
 	-- Multiplayer gates: a gate's party descends together when its countdown ends.
@@ -432,8 +570,12 @@ function GameBootstrap.Start()
 			if FeatureFlags.Monetization then
 				monetization:RefreshOwnership(player)
 			end
+			if FeatureFlags.BaseBuilding then
+				builder:Assign(player)
+			end
 			pushProfile(player)
 			pushMeta(player)
+			pushBase(player)
 			metaService:AwardBadge(player, "Welcome")
 			local dailyReady, questReady = false, false
 			if FeatureFlags.DailyRewards then
@@ -456,6 +598,7 @@ function GameBootstrap.Start()
 		router:ClearPlayer(player)
 		monetization:ClearPlayer(player)
 		metaService:ClearPlayer(player)
+		builder:Release(player)
 		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
@@ -515,6 +658,8 @@ function GameBootstrap.Start()
 		meta = metaService,
 		leaderboards = leaderboards,
 		loadout = loadout,
+		base = base,
+		builder = builder,
 	}
 end
 

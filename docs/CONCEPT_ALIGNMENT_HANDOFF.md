@@ -67,9 +67,27 @@ point the `LUAU_BIN` / `LUAU_COMPILE_BIN` / `LUAU_ANALYZE_BIN` / `ROJO_BIN` vari
   `RewardService.Experience`.
 - `FeatureFlags.BaseBuilding = true`. No UI or remote reaches it yet.
 
+### 3. Section A: base finished (server side)
+- `tests/base.test.luau`: every case listed under A.1, plus BaseBuilder plots and the base remotes.
+- `BaseBuilder` (server): the Outpost (ground, barrier, 8 plots). Hearth prompts ("Manage base",
+  "Cheer") are created with the Hearth model on every `Refresh`. The stub cannot reparent an
+  instance that already has a parent, so nothing is moved between parents.
+- `GameBootstrap`: `BaseService` + `BaseBuilder` wired in; `pushBase` fires `BaseSync` and rebuilds
+  the plot; plot assigned after profile load and released on leave; `metaProvider` reads building
+  bonuses plus `shop:GetTrail`. `systems.base` / `systems.builder` returned for tests.
+- Remotes `UpgradeBuilding`, `MoveBuilding`, `ClaimBase`, `VisitBase`, `CheerBase`, `RequestBase`
+  (C->S) and `BaseSync` (S->C), with rate rules and sanitising in `RemoteRouter:_bindBase`.
+- Armory removed: no `Kind = "Stat"` items, `ShopConfig.ComputeBonuses` and
+  `ShopService:GetRunBonuses` gone (`GetTrail` instead). The lobby's Armory kiosk is now the
+  **Outpost kiosk** (`OpenOutpostPrompt`, teleports to your plot), which covers B's "hub portal".
+  `ShopView` tabs are Cosmetics + Store. `shop.test` moved its multi-level cases onto buildings.
+- `MonetizationService:GetExtraCapHours` (sums `ExtraCapHours` on owned passes; used by D).
+- Harness: `Players:GetPlayerByUserId` added to the stub.
+- Still to come for the base: the client `BaseView` (F).
+
 ## Remaining work, in order
 
-### A. Finish the base (task 2)
+### A. Finish the base (task 2): DONE, see "Done" 3 above
 1. **Tests** in `tests/base.test.luau`:
    - Build / upgrade / Hearth gate / max level / insufficient coins / read-only refusal
      / in-run refusal.

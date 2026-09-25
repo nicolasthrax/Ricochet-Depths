@@ -51,6 +51,14 @@ function BaseService:_changed(player, now)
 	end
 end
 
+local function countKeys(map)
+	local count = 0
+	for _ in type(map) == "table" and map or {} do
+		count += 1
+	end
+	return count
+end
+
 -- Building id -> shown level, for every building.
 function BaseService:GetLevels(player)
 	local stored = self._persistence:GetMetaLevels(player)
@@ -114,6 +122,8 @@ function BaseService:GetState(player, now)
 		Theme = profile.Base.Theme,
 		Sign = profile.Base.Sign,
 		CheersReceived = profile.Base.Cheers.Day == MetaConfig.DayOf(now) and profile.Base.Cheers.Received or 0,
+		-- Claimed achievements, shown as pillars in the Trophy Hall.
+		Trophies = countKeys(profile.Achievements),
 	}
 end
 

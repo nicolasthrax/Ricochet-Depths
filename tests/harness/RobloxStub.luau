@@ -689,6 +689,15 @@ rawset(playersStub, "GetPlayers", function(self)
 	return out
 end)
 
+rawset(playersStub, "GetPlayerByUserId", function(self, userId)
+	for _, child in rawget(self, "_children") do
+		if rawget(child, "ClassName") == "Player" and rawget(child, "UserId") == userId then
+			return child
+		end
+	end
+	return nil
+end)
+
 makeService("ReplicatedStorage")
 makeService("ServerScriptService")
 makeService("ServerStorage")

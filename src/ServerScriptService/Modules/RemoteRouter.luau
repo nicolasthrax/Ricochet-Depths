@@ -31,6 +31,13 @@ function RemoteRouter.new(match, persistence, onProfileChanged, shop, options)
 		-- rigs, the Depth Pact and achievements. Without them those remotes are never bound.
 		_loadout = options and options.loadout,
 		_onLoadoutResult = options and options.onLoadoutResult,
+		-- options.base (BaseService) and options.onBaseResult(player, kind, ok, result): the home
+		-- base. options.onVisitBase(player, userId|nil) and options.onCheerBase(player, userId)
+		-- resolve the other player and do the teleport or cheer. Without base none are bound.
+		_base = options and options.base,
+		_onBaseResult = options and options.onBaseResult,
+		_onVisitBase = options and options.onVisitBase,
+		_onCheerBase = options and options.onCheerBase,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
 		_shop = shop,
@@ -148,6 +155,10 @@ function RemoteRouter:Bind()
 		end)
 	end
 
+	if self._base and self._onBaseResult then
+		self:_bindBase()
+	end
+
 	if self._shop then
 		local shopResult = Remotes.Get("ShopResult")
 		self:_connect("PurchaseShopItem", "PurchaseShopItem", function(player, now, itemId)
@@ -168,6 +179,51 @@ function RemoteRouter:Bind()
 				ItemId = type(itemId) == "string" and itemId or nil,
 				Reason = reason,
 			})
+		end)
+	end
+end
+
+-- A whole number in range, or nil: tiles and user ids arrive from the client.
+local function wholeNumber(value, low, high)
+	if type(value) ~= "number" or value ~= value or value ~= math.floor(value) then
+		return nil
+	end
+	if value < low or (high and value > high) then
+		return nil
+	end
+	return value
+end
+
+function RemoteRouter:_bindBase()
+	local base = self._base
+	self:_connect("UpgradeBuilding", "UpgradeBuilding", function(player, now, buildingId, tile)
+		local id = type(buildingId) == "string" and buildingId or nil
+		local ok, result = base:Upgrade(player, id, tile ~= nil and (wholeNumber(tile, 1) or 0) or nil, now)
+		self._onBaseResult(player, "Upgrade", ok, result)
+	end)
+	self:_connect("MoveBuilding", "MoveBuilding", function(player, now, buildingId, tile)
+		local id = type(buildingId) == "string" and buildingId or nil
+		local ok, result = base:Move(player, id, wholeNumber(tile, 1), now)
+		self._onBaseResult(player, "Move", ok, result)
+	end)
+	self:_connect("ClaimBase", "ClaimBase", function(player, now)
+		local ok, result = base:Claim(player, now)
+		self._onBaseResult(player, "Claim", ok, result)
+	end)
+	self:_connect("RequestBase", "RequestBase", function(player)
+		self._onBaseResult(player, "Sync", true, nil)
+	end)
+	if self._onVisitBase then
+		self:_connect("VisitBase", "VisitBase", function(player, _now, userId)
+			self._onVisitBase(player, wholeNumber(userId, 1))
+		end)
+	end
+	if self._onCheerBase then
+		self:_connect("CheerBase", "CheerBase", function(player, _now, userId)
+			local target = wholeNumber(userId, 1)
+			if target then
+				self._onCheerBase(player, target)
+			end
 		end)
 	end
 end

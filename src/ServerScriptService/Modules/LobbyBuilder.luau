@@ -1,6 +1,6 @@
 -- The Descent Hall, where players gather between runs. North: the solo portal (a pedestal) in
--- front of the zone banners. West: two multiplayer gates of 2-8 players. East: the Armory and
--- Cosmetics kiosks. South: the (invisible) spawn. An invisible barrier and ceiling keep everyone inside.
+-- front of the zone banners. West: two multiplayer gates of 2-4 players. East: the Outpost portal
+-- (to your home base) and the Cosmetics kiosk. South: the (invisible) spawn. An invisible barrier and ceiling keep everyone inside.
 -- Built at runtime; nothing here is a binary model.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -25,8 +25,10 @@ local GATE_NAMES = { "GATE I", "GATE II" }
 local KIOSK_SIZE = Vector3.new(4, 7, 6) -- thin side faces west, towards the hall
 local KIOSK_X = 46
 local KIOSKS = {
-	{ Name = "ArmoryKiosk", Z = -14, Title = "ARMORY", Prompt = "OpenArmoryPrompt", Object = "Armory", Color = Color3.fromRGB(226, 196, 120) },
-	{ Name = "CosmeticsKiosk", Z = 14, Title = "COSMETICS", Prompt = "OpenCosmeticsPrompt", Object = "Cosmetics", Color = Color3.fromRGB(200, 150, 255) },
+	{ Name = "OutpostKiosk", Z = -14, Title = "YOUR OUTPOST", Prompt = "OpenOutpostPrompt", Object = "Outpost",
+		Action = "Go to your base", Color = Color3.fromRGB(255, 196, 120) },
+	{ Name = "CosmeticsKiosk", Z = 14, Title = "COSMETICS", Prompt = "OpenCosmeticsPrompt", Object = "Cosmetics",
+		Action = "Browse", Color = Color3.fromRGB(200, 150, 255) },
 }
 
 local HALL_HEIGHT = 16
@@ -106,7 +108,7 @@ function LobbyBuilder.Build(parent)
 
 	return lobby, soloPrompt, {
 		gates = gates,
-		armoryPrompt = prompts.ArmoryKiosk,
+		outpostPrompt = prompts.OutpostKiosk,
 		cosmeticsPrompt = prompts.CosmeticsKiosk,
 		leaderboards = leaderboards,
 	}
@@ -196,7 +198,7 @@ function LobbyBuilder.SetGateStatus(gate, count, countdown)
 	end
 end
 
--- The Armory and Cosmetics kiosks on the east side, facing the hall, each under a canopy with
+-- The Outpost and Cosmetics kiosks on the east side, facing the hall, each under a canopy with
 -- its name on a board above.
 function LobbyBuilder._buildKiosks(lobby, signs, origin)
 	local floorY = RoomConfig.FloorY
@@ -219,7 +221,7 @@ function LobbyBuilder._buildKiosks(lobby, signs, origin)
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = spec.Prompt
-		prompt.ActionText = "Browse"
+		prompt.ActionText = spec.Action
 		prompt.ObjectText = spec.Object
 		prompt.HoldDuration = 0
 		prompt.MaxActivationDistance = 12

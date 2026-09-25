@@ -74,11 +74,18 @@ function MatchService.new(deps)
 	-- door choices need to find alternative rooms.
 	self._planFollowsShape = deps.planRun == nil
 	self._plan = {}
-	-- Doors, challenges and room events: { doors, challenges, events }. Off unless asked for.
+	-- Doors, challenges, room events and depth pressure: { doors, challenges, events, pressure }.
+	-- Off unless asked for.
 	self._route = deps.route or {}
 	self._roomRewards = {}
 	if self._route.events and self._rooms.SetEvents then
 		self._rooms:SetEvents({ runners = true })
+	end
+	if self._route.pressure and self._rooms.SetPressure then
+		self._rooms:SetPressure(RunConfig.Pressure)
+		self._rooms.OnPressure = function()
+			self:_fireAll("Notify", { Kind = "Callout", Text = "THE DEPTHS STIR. HUNTERS COMING!", Tone = "Warning" })
+		end
 	end
 
 	-- 3.0: today's biome modifier (DailyModifierConfig) on every run started here. Off unless

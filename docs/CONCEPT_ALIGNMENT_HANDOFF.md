@@ -5,7 +5,7 @@ Roblox Playbook, Concept MVP sheets) in full. Branch: `claude/concept-alignment`
 `claude/vigilant-keller-xt8dly` at `04e2266` (2.0.0).
 
 **State now: sections A–G are all done** (3.0.0). `./scripts/check.sh` is green: syntax, lint,
-Rojo build (7.7.0 works as well as 7.4.4), and 806 headless tests. Every commit is on
+Rojo build (7.7.0 works as well as 7.4.4), and 815 headless tests. Every commit is on
 `origin/claude/concept-alignment`; no PR has been opened. **Nothing on this branch has been run
 in Roblox Studio.** The next step is the Studio pass in `docs/RELEASE_CHECKLIST.md` §2d, then
 the Creator Hub steps in §8 (new pass/product ids, regional pricing, private server price).
@@ -352,6 +352,15 @@ Original notes:
   (new Creator Hub ids, max players 8, private server price, regional pricing, Studio checks for
   plots and the tutorial).
 - Bump `RunConfig.Version` to "3.0.0".
+
+### Merge with PR #13 (after G)
+The base branch gained PR #13 (the haul at risk, the Surface Lift, depth pressure and Deepen)
+while this branch was open. Resolved with the concept winning on the overlaps: Bank loot, the
+50% share and base buildings stay; the Surface Lift, the 40% share, Deep Quiver and Deepen are
+dropped. Depth pressure is kept (`RoomService:SetPressure`, `RunConfig.Pressure`,
+`FeatureFlags.Pressure`, HUD countdown, `tests/pressure.test.luau`). Both branches had called
+their profile v9, so the schema is now v10: its migration drops DepthRank and refunds any
+Armory levels a haul-build profile still holds.
 
 ## Notes
 - Anything that moves money must go through `PlayerDataService` grants or spends. `Update()`

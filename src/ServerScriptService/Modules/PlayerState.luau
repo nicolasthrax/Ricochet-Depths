@@ -298,7 +298,8 @@ function PlayerState:RecordKill(enemy)
 	if archetypeId then
 		self.killsByArchetype[archetypeId] = (self.killsByArchetype[archetypeId] or 0) + 1
 	end
-	if enemy and enemy.champion then
+	-- Pressure hunters wear a champion's affix but earn none of a champion's credit.
+	if enemy and enemy.champion and not enemy.hunter then
 		self.championKills += 1
 	end
 	if enemy and enemy.archetype and enemy.archetype.IsBoss then

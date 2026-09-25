@@ -86,6 +86,7 @@ function ArenaDirector:_createSlot(index)
 		doors = FeatureFlags.IsEnabled("Doors"),
 		challenges = FeatureFlags.IsEnabled("Challenges"),
 		events = FeatureFlags.IsEnabled("RoomEvents"),
+		pressure = FeatureFlags.IsEnabled("Pressure"),
 	}
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
 	-- 3.0: the daily biome modifier.

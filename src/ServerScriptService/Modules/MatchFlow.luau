@@ -120,6 +120,20 @@ end
 
 function Flow.methods:_onRoomCleared(now)
 	local definition = self._plan[self._roomIndex]
+	local current = self._rooms:GetCurrent()
+	-- Under depth pressure, a normal room the clock had to clear forfeits its door's reward and
+	-- any Trial: dragging a room out should never pay.
+	if self._route.pressure and current and current.timedOut and definition and definition.Kind == "Normal" then
+		self._activeReward = nil
+		if self._failChallenge then
+			self:_failChallenge("out of time")
+		end
+		self:_fireAll("Notify", { Kind = "Error", Text = "The depths drove you on. The door's reward is lost." })
+	end
+	-- Hunters leave with the room.
+	if self._rooms.EndPressure then
+		self._rooms:EndPressure()
+	end
 	-- The door's reward, challenge payouts and gallery scores land before the coins are swept.
 	local armoury = self._activeReward == "Arsenal"
 	self:_leaveRoom(definition, now)

@@ -12,10 +12,10 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 
 | Check | State | Notes |
 |---|---|---|
-| `luau-compile` on all sources | PASS | 127 sources + 43 test files |
+| `luau-compile` on all sources | PASS | 127 sources + 44 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` or `tests/` |
 | `rojo build` | PASS | Rojo 7.7.0 |
-| Headless test suite | PASS | 806 tests, 0 failures |
+| Headless test suite | PASS | 815 tests, 0 failures |
 | 3.0 home base | PASS | build/upgrade through the purchase path, Hearth gates, tiles and swaps, layouts cleaned against what is built, offline claims (math, cap, two-server idempotency, auto-claim before a yard upgrade), cheers (daily, caps), 8 plots, remotes sanitised |
 | 3.0 run changes | PASS | haul share on defeat and leaving, Bank loot door after extract points (depth bonus, tie keeps descending), 7 daily modifiers and the once-a-day bonus, the first descent (clustered opener, forced Split Shot, fusion "try it now", Hoard Keeper, flag set on finish), card labels/icons, RECOMMENDED + auto-pick, reroll (free, then tokens), respec, unlock levels, party and friend bonus, party enemy scaling |
 | 3.0 economy | PASS | no coins or stats sold (Premium coin bonus removed), passes as entitlements, Revive/Reroll receipts as tokens, revive tokens (once a run, grace window), cosmetics by coins/level/pass, presets, rewarded video (flagged off), private server feature |

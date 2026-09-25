@@ -42,6 +42,8 @@ FeatureFlags.Doors = true
 FeatureFlags.Challenges = true
 -- Random room events (Treasure Runners).
 FeatureFlags.RoomEvents = true
+-- Depth pressure: hunters arrive in a normal room that drags on.
+FeatureFlags.Pressure = true
 
 -- The home base: twelve buildings on a grid, offline workers and friend visits (BaseService).
 FeatureFlags.BaseBuilding = true

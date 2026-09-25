@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 9
+PlayerDataConfig.SchemaVersion = 10
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -46,6 +46,8 @@ PlayerDataConfig.LegacyArmoryCosts = {
 	Mending = { 120, 240, 400, 600 },
 	CoinMagnet = { 100, 220, 380 },
 	Fortune = { 250, 500, 900 },
+	-- Sold only by the 2.x haul build (its schema v9), never alongside the rest; see [9] below.
+	Quiver = { 1500, 4000 },
 }
 
 -- Every field a profile may contain, with its safe default. Load fills in anything missing,
@@ -259,6 +261,14 @@ PlayerDataConfig.Migrations = {
 		flags.FirstDescentDone = flags.FirstDescentDone == true or flags.OnboardingSeen == true
 		profile.Flags = flags
 		return profile
+	end,
+	-- v9 -> v10: a profile saved by the 2.x haul build also called itself v9, but that v9 kept
+	-- the Armory (with Deep Quiver) and added DepthRank. Deepen is retired with the Armory, so
+	-- the rank is dropped and any Armory levels still held are refunded by re-running the v9
+	-- step, which leaves a profile that was already this build's v9 unchanged.
+	[9] = function(profile)
+		profile.DepthRank = nil
+		return PlayerDataConfig.Migrations[8](profile)
 	end,
 }
 

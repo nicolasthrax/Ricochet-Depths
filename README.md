@@ -10,7 +10,7 @@ from any existing game.
 **Status:** 3.0.0, concept alignment: the game now matches the original concept (home base,
 haul at risk, daily modifiers, the first 60 seconds, the launch economy with no paid power,
 onboarding telemetry). Every check below comes from static checks, a Rojo build and a
-headless test suite of 806 tests. **Nothing in 3.0 has been run in Roblox Studio yet.**
+headless test suite of 815 tests. **Nothing in 3.0 has been run in Roblox Studio yet.**
 `docs/RELEASE_CHECKLIST.md` lists what is left before going public,
 [docs/PROGRESS.md](docs/PROGRESS.md) gives the honest state of things, and
 [docs/CONCEPT_TRACEABILITY.md](docs/CONCEPT_TRACEABILITY.md) maps every concept item to code.
@@ -34,6 +34,8 @@ headless test suite of 806 tests. **Nothing in 3.0 has been run in Roblox Studio
 - **Haul at risk.** A lost run keeps only half the coins you picked up. After each mini-boss an
   extract point offers a **Bank loot** door: climb out now with everything, plus a bonus that
   grows with depth, or descend for more.
+- **Depth pressure.** A normal room that drags past 60 seconds starts sending Swift hunters that
+  drop nothing; a room the clock has to clear loses its door reward and its Trial.
 - **The first 60 seconds.** No title screen: a new player spawns facing the pit and drops into
   a scripted first descent (a pack of easy targets, a duplicate card that makes a fusion
   obvious, a mini-elite that bursts into coins, the first Bank loot choice).
@@ -190,7 +192,7 @@ model the physics solver, replication, character controllers, rendering, input o
 a green suite means the logic is consistent with those assumptions — not that the game works in
 Roblox.
 
-806 tests cover projectile physics and containment, the reflection law across heading and
+815 tests cover projectile physics and containment, the reflection law across heading and
 incidence sweeps, moving-target and same-frame collisions, pool integrity, enemy lifecycle and
 shielding, upgrade offers and stacking, the full run loop, soft-lock guards, co-op membership,
 persistence and migration, reward idempotency, soak runs, config cross-references, the remote

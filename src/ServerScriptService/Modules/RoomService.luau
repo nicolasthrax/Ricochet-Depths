@@ -71,6 +71,12 @@ function RoomService:_markers()
 	return self._markerPool
 end
 
+-- Depth pressure (RunConfig.Pressure), or nil to switch it off. OnPressure(), when set, is
+-- called once per room as the first hunter arrives.
+function RoomService:SetPressure(config)
+	self._pressure = type(config) == "table" and config or nil
+end
+
 function RoomService:SetChampionBonus(bonus)
 	self._championBonus = math.max(tonumber(bonus) or 0, 0)
 end
@@ -188,8 +194,16 @@ function RoomService:Load(roomDefinition, now)
 		nextWave = 1,
 		waveStartedAt = now,
 		waveTelegraph = nil,
+		-- Depth pressure: when the first hunter comes, if this room gets any (see _stepPressure).
+		pressureAt = nil,
+		hunters = {},
 	}
 	local current = self._current
+	local pressure = self._pressure
+	if pressure and roomDefinition.Kind == "Normal" and not roomDefinition.Objective then
+		current.pressureAt = now + pressure.After
+		current.hunterNextAt = current.pressureAt
+	end
 	self:_spawnGroup(roomDefinition.Spawns, layout, roomDefinition)
 	if roomDefinition.Objective then
 		current.objective = RoomObjectives.new(room, roomDefinition.Objective, self._origin, bounds.center.Y, now, self._championRandom)
@@ -364,6 +378,7 @@ function RoomService:Step(deltaTime, now, positions)
 		current.objective:Step(deltaTime, now, positions)
 	end
 	self:_stepWaves(now)
+	self:_stepPressure(now)
 
 	local respawn = current.definition.EscortRespawn
 	if not respawn or not current.elite or current.elite.dead then
@@ -383,6 +398,67 @@ function RoomService:Step(deltaTime, now, positions)
 	if escorts < respawn.MaxAlive then
 		self._enemies:Spawn(respawn.Archetype, self:_spawnPositionFor(current.layout, escorts + 1))
 	end
+end
+
+-- A room past its pressure time sends a hunter every Delay seconds, while fewer than MaxAlive
+-- are about. They take the spawn markers in turn, so no randomness moves a seeded room.
+function RoomService:_stepPressure(now)
+	local current = self._current
+	local pressure = self._pressure
+	if not pressure or not current.pressureAt or now < current.pressureAt or now < current.hunterNextAt then
+		return
+	end
+	current.hunterNextAt = now + pressure.Delay
+	local alive = 0
+	for _, hunter in current.hunters do
+		if not hunter.dead then
+			alive += 1
+		end
+	end
+	if alive >= pressure.MaxAlive then
+		return
+	end
+	local marker = (#current.hunters % #current.layout.EnemySpawns) + 1
+	local hunter = self._enemies:Spawn(pressure.Archetype, self:_spawnPositionFor(current.layout, marker), {
+		champion = pressure.Champion,
+		optional = true,
+		coins = 0,
+		hunter = true,
+	})
+	if hunter then
+		table.insert(current.hunters, hunter)
+		if #current.hunters == 1 and self.OnPressure then
+			self.OnPressure()
+		end
+	end
+end
+
+-- The room is over: any hunters still about go with it, and no more come.
+function RoomService:EndPressure()
+	local current = self._current
+	if not current then
+		return
+	end
+	current.pressureAt = nil
+	for _, hunter in current.hunters do
+		if not hunter.dead then
+			self._enemies:Despawn(hunter, "RoomCleared")
+		end
+	end
+	table.clear(current.hunters)
+end
+
+-- For the HUD: { In = seconds } before the first hunter, { Active = true } once they come, or
+-- nil in a room without pressure.
+function RoomService:GetPressureInfo(now)
+	local current = self._current
+	if not current or not current.pressureAt then
+		return nil
+	end
+	if now < current.pressureAt then
+		return { In = math.ceil(current.pressureAt - now) }
+	end
+	return { Active = true }
 end
 
 local SPAWN_HEIGHT = 4

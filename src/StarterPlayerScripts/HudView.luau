@@ -479,8 +479,19 @@ function HudView:UpdateRun(snapshot)
 			self.objectiveLabel.Text = string.format("Wave %d / %d  -  %s", math.min(wave.Wave, wave.Waves), wave.Waves, targets)
 			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
 		else
-			self.objectiveLabel.Text = targets
-			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+			-- Depth pressure: a countdown as it nears, then a warning while hunters come.
+			local pressure = type(snapshot.Pressure) == "table" and snapshot.Pressure or nil
+			local warnAt = RunConfig.Pressure and RunConfig.Pressure.WarnSeconds or 0
+			if pressure and pressure.Active then
+				self.objectiveLabel.Text = "HUNTED!  -  " .. targets
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.Danger
+			elseif pressure and tonumber(pressure.In) and pressure.In <= warnAt then
+				self.objectiveLabel.Text = string.format("%s  -  hunters in %ds", targets, pressure.In)
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.Warning
+			else
+				self.objectiveLabel.Text = targets
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+			end
 		end
 	elseif snapshot.State == RunConfig.States.Lobby then
 		self:_renderLobbyObjective()

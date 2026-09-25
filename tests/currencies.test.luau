@@ -121,7 +121,7 @@ describe("schema v9 migration", function()
 			MetaUpgrades = { Vitality = 2, Fortune = 1, TrailEmber = 1 },
 			Flags = { OnboardingSeen = true },
 		})
-		expect(profile.SchemaVersion).toBe(9)
+		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
 		expect(profile.Currency.Salvage).toBe(100 + 80 + 160 + 250)
 		expect(profile.MetaUpgrades.Vitality).toBeNil()
 		expect(profile.MetaUpgrades.Fortune).toBeNil()
@@ -138,6 +138,33 @@ describe("schema v9 migration", function()
 			MetaUpgrades = { Stride = 99 },
 		})
 		expect(profile.Currency.Salvage).toBe(60 + 140 + 240)
+	end)
+
+	it("cleans up a profile the 2.x haul build saved as its own v9", function()
+		local profile = PlayerDataService.Normalise({
+			SchemaVersion = 9,
+			Currency = { Salvage = 10 },
+			MetaUpgrades = { Quiver = 1, Stride = 1, TrailEmber = 1 },
+			DepthRank = 3,
+		})
+		expect(profile.SchemaVersion).toBe(PlayerDataConfig.SchemaVersion)
+		expect(profile.Currency.Salvage).toBe(10 + 1500 + 60)
+		expect(profile.MetaUpgrades.Quiver).toBeNil()
+		expect(profile.MetaUpgrades.TrailEmber).toBe(1)
+		expect(profile.DepthRank).toBeNil()
+		expect(profile.Currency.Rerolls).toBe(0)
+	end)
+
+	it("leaves a profile already on this build's v9 as it was", function()
+		local profile = PlayerDataService.Normalise({
+			SchemaVersion = 9,
+			Currency = { Salvage = 42, Rerolls = 3 },
+			MetaUpgrades = { TrailEmber = 1 },
+			Flags = { FirstDescentDone = true },
+		})
+		expect(profile.Currency.Salvage).toBe(42)
+		expect(profile.Currency.Rerolls).toBe(3)
+		expect(profile.Flags.FirstDescentDone).toBe(true)
 	end)
 
 	it("refunds exactly once: the migrated profile written back does not migrate again", function()

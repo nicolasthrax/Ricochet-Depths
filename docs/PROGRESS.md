@@ -11,7 +11,7 @@ at risk with "Bank loot" extract points; 7 daily modifiers; the first-60-seconds
 descent; card labels, a recommended card, reroll and early respec; the party and friend bonus;
 the launch economy with no paid power; a forgiving 7-day track; onboarding-funnel and economy
 telemetry; and the UI for all of it. Green on every gate: syntax, lint, Rojo build and
-806 headless tests. Nothing in 3.0 has run in Studio yet; see section 2d of the release
+815 headless tests. Nothing in 3.0 has run in Studio yet; see section 2d of the release
 checklist. `docs/CONCEPT_TRACEABILITY.md` maps every concept item to code and tests.**
 
 Before it: **2.0.0: the redesign. Orbs, bounce power, the dash, combo, Surge, waves and swarms, ricochet-
@@ -241,7 +241,8 @@ fixed rooms (the dry run seeds its plans, so these repeat exactly).
 ### 3.0.0
 
 Nine rooms, with the Colossus and Forge halls as mid-run bosses. The bots never take the Bank
-loot door, so every run shown goes the full depth. "Reached the end" counts runs that cleared the
+loot door, so every run shown goes the full depth. The dry run does not switch on depth pressure
+(merged from PR #13 after this table was measured), which makes a room that drags more dangerous but does not change when it clears. "Reached the end" counts runs that cleared the
 Throne; the rest were defeated.
 
 | Bot | R1 | R2 | Colossus | F1 | F2 | Forge | A1 | Vault | Throne | Full run (median) | Floor | Reached the end |
@@ -311,9 +312,15 @@ soft-lock guard is doing real work.
 Goal: match everything in the original concept (the Overview, Roblox Playbook and Concept MVP
 sheets). Built in sections A–G; `docs/CONCEPT_ALIGNMENT_HANDOFF.md` has the detail.
 
-- **Schema v9** (`PlayerDataConfig`): Rerolls and ReviveTokens balances beside coins, all
+- **Schema v10** (`PlayerDataConfig`): Rerolls and ReviveTokens balances beside coins, all
   store-owned and ledgered; base, presets, nameplate, daily limits and funnel flags; the v8 → v9
-  migration refunds every Armory level in coins, exactly once.
+  migration refunds every Armory level in coins, exactly once. v9 → v10 cleans up a profile
+  saved by the 2.x haul build (PR #13), which also called itself v9: it drops DepthRank and
+  refunds any Armory levels still held, Deep Quiver included.
+- **Merged with PR #13** (the haul, Surface Lift, depth pressure and Deepen). Depth pressure is
+  kept (`RunConfig.Pressure`, `FeatureFlags.Pressure`, `tests/pressure.test.luau`). The Surface
+  Lift, the 40% haul share, Deep Quiver and Deepen are replaced by this release's Bank loot, 50%
+  share and base buildings, since the concept puts earnable power in the base.
 - **The Outpost** (`BaseConfig`, `BaseService`, `BaseBuilder`, `BaseView`): a 4x4 plot per player
   (8 plots; max players is now 8), 12 buildings bought through the purchase path and gated by
   the Camp Hearth, where earnable power now lives (the Armory is gone); a Salvage Yard with an

@@ -12,14 +12,21 @@ function WorldAdapter.GetPosition(player)
 	return root and root.Position or nil
 end
 
-function WorldAdapter.Teleport(player, position)
+-- lookAt (optional) turns the character to face that point on arrival.
+function WorldAdapter.Teleport(player, position, lookAt)
 	local root = rootOf(player)
 	if not root then
 		return false
 	end
 	-- Lifted clear of the floor so the character does not spawn embedded in geometry, and
 	-- stopped, so a fall's speed is not carried into the landing.
-	root.CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
+	local at = position + Vector3.new(0, 3, 0)
+	local flat = lookAt and Vector3.new(lookAt.X, at.Y, lookAt.Z) or nil
+	if flat and (flat - at).Magnitude > 0.1 then
+		root.CFrame = CFrame.lookAt(at, flat)
+	else
+		root.CFrame = CFrame.new(at)
+	end
 	root.AssemblyLinearVelocity = Vector3.zero
 	return true
 end

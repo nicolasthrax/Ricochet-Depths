@@ -58,11 +58,11 @@ function MetaService:GetState(player)
 	local today = MetaConfig.DayOf(now)
 	local daily = profile.Daily
 	local canClaim = daily.LastClaimDay ~= today
-	-- While a claim is waiting, show the streak it would continue (0 once a day was missed) and
-	-- the reward it would pay; after claiming, the streak and reward just earned.
+	-- While a claim is waiting, show the step it continues from (the track never resets) and the
+	-- reward it would pay; after claiming, the step and reward just earned.
 	local streak, dayIndex, _
 	if canClaim then
-		streak = daily.LastClaimDay == today - 1 and daily.Streak or 0
+		streak = daily.Streak
 		_, dayIndex = MetaConfig.DailyRewardFor(streak + 1)
 	else
 		streak = daily.Streak
@@ -122,17 +122,18 @@ function MetaService:ClaimDaily(player)
 	if daily.LastClaimDay == today then
 		return nil, "already claimed"
 	end
-	local streak = daily.LastClaimDay == today - 1 and daily.Streak + 1 or 1
+	-- The forgiving track: every claim is the next step, however long since the last.
+	local streak = daily.Streak + 1
 	local reward = MetaConfig.DailyRewardFor(streak)
 	local coins, xp, levelCoins, _, _, reason =
-		Payout.Grant(self._persistence, player, "daily:" .. today, reward.Coins or 0, reward.Xp or 0)
+		Payout.Grant(self._persistence, player, "daily:" .. today, reward.Coins or 0, reward.Xp or 0, reward.Extras)
 	if reason and reason ~= "already granted" then
 		return nil, reason
 	end
 	self._persistence:Update(player, function(stored)
 		stored.Daily = { LastClaimDay = today, Streak = streak }
 	end)
-	return { Coins = coins, Xp = xp, LevelCoins = levelCoins, Streak = streak }
+	return { Coins = coins, Xp = xp, LevelCoins = levelCoins, Streak = streak, Extras = reward.Extras }
 end
 
 -- Returns { Coins, Xp, LevelCoins, Title } or nil and a reason.

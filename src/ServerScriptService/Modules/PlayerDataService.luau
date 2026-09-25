@@ -13,6 +13,9 @@ PlayerDataService.__index = PlayerDataService
 -- options.wallClock returns the time grants are stamped with. It must mean the same thing on
 -- every server, which is why it is wall-clock time (os.time) and never os.clock, which is
 -- per-process and unrelated across servers.
+-- options.onEconomy(player, flow, currencyId, amount, balance, detail), optional, hears every
+-- grant ("Source", detail = ledger key) and spend ("Sink", detail = item id) as it is applied,
+-- for economy analytics. It must not yield or throw.
 function PlayerDataService.new(store, options)
 	options = options or {}
 	return setmetatable({
@@ -656,6 +659,13 @@ function PlayerDataService:GrantReward(player, runKey, amount, xp, extras)
 	markChanged(session)
 
 	pruneLedger(profile.GrantedRuns)
+	local onEconomy = self._options.onEconomy
+	if onEconomy then
+		onEconomy(player, "Source", "Salvage", grant.Amount, profile.Currency.Salvage, runKey)
+		for currencyId, extra in cleanExtras or {} do
+			onEconomy(player, "Source", currencyId, extra, profile.Currency[currencyId], runKey)
+		end
+	end
 	return grant.Amount, nil, grant.Xp
 end
 
@@ -713,6 +723,9 @@ function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost, currencyI
 	profile.Currency[currencyId] = (profile.Currency[currencyId] or 0) - cost
 	profile.MetaUpgrades[itemId] = level
 	markChanged(session)
+	if self._options.onEconomy then
+		self._options.onEconomy(player, "Sink", currencyId, cost, profile.Currency[currencyId], itemId)
+	end
 	return profile.Currency[currencyId]
 end
 

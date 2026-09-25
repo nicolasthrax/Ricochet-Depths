@@ -55,6 +55,9 @@ function Flow.methods:_beginRoom(index, now)
 	self:_enterRoom(index, definition, now)
 
 	local spawnPoint = self._rooms:GetSpawnPoint()
+	-- Everyone lands facing into the room, at the fight (the concept's "spawn facing the pit").
+	local current = self._rooms:GetCurrent()
+	local facing = current and current.bounds and current.bounds.center or nil
 	for _, player in self._participants do
 		local state = self._states[player]
 		if state then
@@ -63,7 +66,7 @@ function Flow.methods:_beginRoom(index, now)
 			end
 			state:GrantInvulnerability(now)
 			if self._world then
-				self._world.Teleport(player, spawnPoint)
+				self._world.Teleport(player, spawnPoint, facing)
 				if self._world.SetWalkSpeed then
 					self._world.SetWalkSpeed(player, RunConfig.BaseWalkSpeed + state.stats.MoveSpeedBonus)
 				end
@@ -355,6 +358,7 @@ function Flow.methods:_finish(outcome, now)
 				self._persistence:SaveInBackground(player, now)
 			end
 			summary.RunKey = runKey
+			self:_funnel(player, "FirstRunEnd")
 
 			self:_fireClient("RunResults", player, summary)
 		end

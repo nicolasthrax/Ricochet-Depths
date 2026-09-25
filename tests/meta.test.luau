@@ -105,14 +105,32 @@ describe("daily login reward", function()
 		expect(second.Coins).toBe(MetaConfig.DailyRewards[2].Coins)
 	end)
 
-	it("starts the streak again after a missed day", function()
+	it("never resets the track after a missed day: the next claim is the next step", function()
 		local meta, _, subject, clock = setup(502)
 		meta:ClaimDaily(subject)
 		clock.now += DAY
 		meta:ClaimDaily(subject)
-		clock.now += 2 * DAY
-		expect(meta:GetState(subject).Daily.Streak).toBe(0)
-		expect(meta:ClaimDaily(subject).Streak).toBe(1)
+		clock.now += 9 * DAY -- a long break
+		local state = meta:GetState(subject).Daily
+		expect(state.CanClaim).toBe(true)
+		expect(state.Streak).toBe(2)
+		expect(state.DayIndex).toBe(3)
+		expect(meta:ClaimDaily(subject).Streak).toBe(3)
+	end)
+
+	it("adds a Revive token on day 5 and rerolls on day 7, in the same grant", function()
+		local meta, persistence, subject, clock = setup(504)
+		local extras = {}
+		for day = 1, 7 do
+			local result = meta:ClaimDaily(subject)
+			extras[day] = result.Extras
+			clock.now += DAY
+		end
+		expect(extras[5].ReviveTokens).toBe(1)
+		expect(extras[7].Rerolls).toBeGreaterThan(0)
+		expect(extras[1]).toBeNil()
+		expect(persistence:GetBalance(subject, "ReviveTokens")).toBe(1)
+		expect(persistence:GetBalance(subject, "Rerolls")).toBe(MetaConfig.DailyRewards[7].Extras.Rerolls)
 	end)
 
 	it("cannot be claimed twice across a rejoin on the same day", function()

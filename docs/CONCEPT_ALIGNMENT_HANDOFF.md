@@ -277,7 +277,23 @@ Original notes:
 - Not built, per the concept: the season pass (no 4-week content pipeline yet) and UGC limiteds
   ("not MVP-first"). Document both as deliberate.
 
-### E. Daily loop, social, telemetry (task 6)
+### E. Daily loop, social, telemetry (task 6): DONE
+Done: forgiving track (`MetaService.ClaimDaily/GetState`: streak = previous + 1, never reset;
+day 5 +1 ReviveToken, day 7 +3 Rerolls via `Extras`; `meta.test`). `FunnelService` (7 steps,
+once ever via `Flags.Funnel`, TelemetryService "FunnelStep" + `AnalyticsService:
+LogOnboardingFunnelStepEvent`, pcall) and economy events through a new
+`PlayerDataService` option `onEconomy` (every grant = Source, every spend = Sink ->
+`LogEconomyEvent`). Run hooks via `deps.onFunnel` (FirstInput in HandleFire, FirstHit in
+HandleImpact, FirstUpgrade/FirstFusion on choose/auto-pick, FirstRunEnd in `_finish`); Join and
+FirstBaseUpgrade in `GameBootstrap`. `docs/GO_NO_GO.md` (the concept gives no numeric thresholds:
+it says "at/above Roblox similar-experience benchmarks"). `tests/funnel.test.luau`.
+Also, after reading the concept spreadsheet (~/Downloads/steam-to-roblox.xlsx):
+`RunConfig.DoorVoteSeconds` 14 -> 10 (concept: 10-second vote cap); the first descent now offers
+the fusion right after the duplicate Split Shot (`MatchService:_offerFusionNow`, payload
+`Fusion = true`), so the fusion lands before the mini-elite as in the first-60-seconds table;
+`WorldAdapter.Teleport(player, position, lookAt)` turns players to face the room on arrival.
+
+Original notes:
 - Forgiving 7-day track: in `MetaService.ClaimDaily` and `GetState`, the streak advances on every
   claim and **never resets** on a missed day. Update `meta.test`. Add a revive token or rerolls
   to the day 5 and day 7 rewards via `extras`.

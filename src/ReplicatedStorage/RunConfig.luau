@@ -32,7 +32,8 @@ RunConfig.SpawnInvulnerability = 2.5
 RunConfig.StartCountdown = 3
 RunConfig.TransitionDuration = 2.5
 -- How long the group has to vote on the next door (it closes early once everyone has voted).
-RunConfig.DoorVoteSeconds = 14
+-- The concept's co-op rule: a 10-second vote cap, then the default.
+RunConfig.DoorVoteSeconds = 10
 RunConfig.ResultsDuration = 15
 
 -- Target descent length. Room count and spawn budgets are tuned against this.
@@ -486,8 +487,9 @@ for _, room in TUTORIAL_ROOMS do
 end
 
 -- The scripted opening for a player who has never descended. Rooms run first, then the normal
--- run shape; ForceCards[n] puts those cards into the offer after room n (Split Shot twice, so the
--- Fusillade fusion is offered after the Hoard Keeper). Banner is the first thing they read.
+-- run shape; ForceCards[n] puts those cards into the offer after room n. Split Shot twice: the
+-- duplicate completes a fusion, and the first descent offers it at once ("try it now"), before
+-- the Hoard Keeper, as the concept's first 60 seconds lay out. Banner is the first thing read.
 RunConfig.FirstDescent = {
 	Rooms = { "FirstPit", "FirstPair", "FirstElite" },
 	ForceCards = { [1] = { "SplitShot" }, [2] = { "SplitShot" } },

@@ -352,7 +352,7 @@ describe("first descent", function()
 		expect((centre - spawnPoint).Magnitude).toBeLessThan(60)
 	end)
 
-	it("offers Split Shot twice, so the Fusillade fusion is offered after the Hoard Keeper", function()
+	it("offers Split Shot twice, and the duplicate brings Fusillade at once, before the Hoard Keeper", function()
 		local ctx = build()
 		local player = newPlayer()
 		start(ctx, { player }, { firstDescent = true })
@@ -365,20 +365,38 @@ describe("first descent", function()
 			end
 			expect(ids.SplitShot).toBe(true)
 			ctx.match:ChooseUpgrade(player, offer.id, "SplitShot", now)
+			if round == 2 then
+				-- Try it now: the fusion, alone, straight after the duplicate.
+				local fusion = ctx.upgrades:GetOffer(player)
+				expect(#fusion.cards).toBe(1)
+				expect(fusion.cards[1].Id).toBe("Fusillade")
+				expect(ctx.net.UpgradeOffer:Last(player).Fusion).toBe(true)
+				ctx.match:ChooseUpgrade(player, fusion.id, "Fusillade", now)
+				expect(ctx.match:GetPlayerState(player):GetStacks("Fusillade")).toBe(1)
+			end
 			ctx.match:ChooseDoor(player, 1, now)
 			step(ctx, DT * 2)
 			step(ctx, RunConfig.TransitionDuration + DT)
-			for _, door in ctx.match._plan do
-				expect(door.Id).never().toBe(RouteConfig.GalleryRoom.Id)
+			for _, room in ctx.match._plan do
+				expect(room.Id).never().toBe(RouteConfig.GalleryRoom.Id)
 			end
-			local _ = round
 		end
 		expect(ctx.match:GetRunSnapshot().RoomName).toBe("The Hoard Keeper")
 		clear(ctx, player)
-		local offer = ctx.upgrades:GetOffer(player)
-		expect(offer.recommended).toBe("Fusillade")
 		local doors = ctx.match:GetRunSnapshot().Doors.Doors
 		expect(doors[#doors].Reward).toBe("BankLoot")
+	end)
+
+	it("never offers a follow-up fusion outside the first descent", function()
+		local ctx = build({ plan = { "Atrium", "Cistern", "Gallery" } })
+		local player = newPlayer()
+		start(ctx, { player })
+		local state = ctx.match:GetPlayerState(player)
+		state:AddUpgrade(UpgradeConfig.Get("SplitShot"))
+		clear(ctx, player)
+		local offer = ctx.upgrades:_open(player, state, { UpgradeConfig.Get("SplitShot") }, now)
+		ctx.match:ChooseUpgrade(player, offer.id, "SplitShot", now)
+		expect(ctx.upgrades:GetOffer(player)).toBeNil()
 	end)
 
 	it("bursts the Hoard Keeper's room into coins", function()
@@ -634,5 +652,19 @@ describe("party bonus", function()
 		end)
 		cache:Learn({ UserId = 1 }, { { UserId = 2 } })
 		expect(cache:AreFriends({ UserId = 1 }, { UserId = 2 })).toBe(false)
+	end)
+end)
+
+describe("arrival", function()
+	it("turns a teleported character to face the room", function()
+		local WorldAdapter = __require("WorldAdapter")
+		local player = Harness.addPlayer("Facer")
+		Harness.giveCharacter(player, Vector3.new(0, 3, 0))
+		expect(WorldAdapter.Teleport(player, Vector3.new(0, 0, 50), Vector3.new(0, 0, 0))).toBe(true)
+		local root = player.Character:FindFirstChild("HumanoidRootPart")
+		expect(root.CFrame.LookVector.Z).toBeLessThan(-0.99)
+		-- Without a target it simply lands.
+		expect(WorldAdapter.Teleport(player, Vector3.new(5, 0, 5))).toBe(true)
+		Harness.removePlayer(player)
 	end)
 end)

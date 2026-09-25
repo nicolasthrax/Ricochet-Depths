@@ -14,6 +14,7 @@ local EmoteBurst = require(script.Parent.EmoteBurst)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local FriendCache = require(script.Parent.FriendCache)
+local FunnelService = require(script.Parent.FunnelService)
 local LeaderboardService = require(script.Parent.LeaderboardService)
 local Leaderstats = require(script.Parent.Leaderstats)
 local MetaConfig = require(ReplicatedStorage:WaitForChild("MetaConfig"))
@@ -84,7 +85,24 @@ function GameBootstrap.Start()
 	if not FeatureFlags.Persistence then
 		store = DataStoreProvider.UnavailableStore.new("persistence feature flag is off")
 	end
-	local persistence = PlayerDataService.new(store)
+	-- Every coin and token that moves is reported as an economy event (FunnelService, below).
+	local funnel
+	local persistence = PlayerDataService.new(store, {
+		onEconomy = function(...)
+			if funnel then
+				funnel:Economy(...)
+			end
+		end,
+	})
+	-- The onboarding funnel, once ever per player, to telemetry and Roblox's AnalyticsService.
+	local analyticsOk, analytics = pcall(function()
+		return game:GetService("AnalyticsService")
+	end)
+	funnel = FunnelService.new({
+		persistence = persistence,
+		telemetry = telemetry,
+		analytics = analyticsOk and analytics or nil,
+	})
 	if DebugConfig.IsEnabled() then
 		print(("[data] scope=%s schema=v%d"):format(scope, PlayerDataConfig.SchemaVersion))
 	end
@@ -294,8 +312,8 @@ function GameBootstrap.Start()
 			pushProfile(player)
 			pushBase(player)
 		end,
-		onFirstBuild = function()
-			telemetry:Log("FirstBaseUpgrade", {}, os.clock())
+		onFirstBuild = function(player)
+			funnel:Step(player, "FirstBaseUpgrade")
 		end,
 	})
 	-- Sends the player their base and rebuilds their plot to match. open asks the client to show
@@ -366,6 +384,9 @@ function GameBootstrap.Start()
 				return meta
 			end,
 			wallClock = os.time,
+			onFunnel = function(player, step)
+				funnel:Step(player, step)
+			end,
 			-- A downed player may be offered the paid Revive once it is switched on and configured.
 			canBuyRevive = function()
 				if not FeatureFlags.PaidRevive then
@@ -701,6 +722,7 @@ function GameBootstrap.Start()
 			if FeatureFlags.Monetization then
 				monetization:RefreshOwnership(player)
 			end
+			funnel:Step(player, "Join")
 			if FeatureFlags.BaseBuilding then
 				builder:Assign(player)
 			end
@@ -742,6 +764,7 @@ function GameBootstrap.Start()
 		metaService:ClearPlayer(player)
 		builder:Release(player)
 		friends:Forget(player)
+		funnel:ClearPlayer(player)
 		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
@@ -805,6 +828,7 @@ function GameBootstrap.Start()
 		base = base,
 		builder = builder,
 		ads = ads,
+		funnel = funnel,
 	}
 end
 

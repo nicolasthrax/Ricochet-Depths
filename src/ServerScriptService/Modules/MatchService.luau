@@ -91,6 +91,8 @@ function MatchService.new(deps)
 	-- player -> whether the paid Revive may be offered to them now (FeatureFlags.PaidRevive and a
 	-- configured product). Optional: without it only held tokens hold a lost run open.
 	self._canBuyRevive = deps.canBuyRevive
+	-- (player, stepId): onboarding-funnel steps seen in a run (FunnelService keeps them once ever).
+	self._onFunnel = deps.onFunnel
 	self._modifier = nil
 	self._partySize = 1
 	self._runOptions = {}
@@ -299,8 +301,27 @@ function MatchService:ChooseUpgrade(player, offerId, cardId, now)
 
 	self:_fireClient("UpgradeResolved", player, { CardId = card.Id, Auto = false })
 	self:_pushPlayerState(player)
+	self:_cardFunnel(player, card)
 	self:_log("CardChosen", { CardId = card.Id, RunId = self._runId, Room = self._roomIndex }, now)
+	self:_offerFusionNow(player, state, now)
 	return card
+end
+
+-- In the first descent, a card that completes a fusion is followed at once by that fusion,
+-- alone, as a "try it now" offer: the duplicate makes the power jump obvious.
+function MatchService:_offerFusionNow(player, state, now)
+	if not (self._runOptions and self._runOptions.firstDescent) or not self._upgrades.GetEligibleCards then
+		return
+	end
+	for _, candidate in self._upgrades:GetEligibleCards(state) do
+		if candidate.Rarity == "Fused" and candidate.Requires then
+			local offer = self._upgrades:BuildOffer(player, state, now, 1, { force = { candidate.Id } })
+			local payload = self:_offerPayload(player, offer, now)
+			payload.Fusion = true
+			self:_fireClient("UpgradeOffer", player, payload)
+			return
+		end
+	end
 end
 
 -- Reads the player's building, pass and rig bonuses as they stand now, for the run about to
@@ -496,6 +517,7 @@ function MatchService:Step(deltaTime, now)
 		end) do
 			self:_fireClient("UpgradeResolved", resolution.playerKey, { CardId = resolution.card.Id, Auto = true })
 			self:_pushPlayerState(resolution.playerKey)
+			self:_cardFunnel(resolution.playerKey, resolution.card)
 		end
 		if not self._upgrades:HasPendingOffers() and self:_doorsSettled(now) then
 			self:_resolveDoors()
@@ -519,6 +541,20 @@ function MatchService:Step(deltaTime, now)
 	end
 
 	self:_broadcastRunState(now, false)
+end
+
+-- An onboarding-funnel step for a player (once ever; FunnelService remembers).
+function MatchService:_funnel(player, stepId)
+	if self._onFunnel and player then
+		self._onFunnel(player, stepId)
+	end
+end
+
+function MatchService:_cardFunnel(player, card)
+	self:_funnel(player, "FirstUpgrade")
+	if card and card.Rarity == "Fused" then
+		self:_funnel(player, "FirstFusion")
+	end
 end
 
 function MatchService:_log(eventName, payload, now)

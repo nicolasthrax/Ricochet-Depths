@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 8
+PlayerDataConfig.SchemaVersion = 9
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -31,14 +31,33 @@ PlayerDataConfig.ExpectedWriteSeconds = 1
 -- any reconnect or duplicate completion event could take to arrive.
 PlayerDataConfig.RunLedgerSize = 25
 
+-- Every balance a profile holds. Salvage is the coin balance (kept under its original name so
+-- older balances carry over); Rerolls and ReviveTokens are consumables. All three are
+-- store-owned: they change only through grants and spends applied inside the save transform.
+PlayerDataConfig.Currencies = { "Salvage", "Rerolls", "ReviveTokens" }
+
+-- The Armory's permanent stat upgrades (1.0-2.0). v9 moved earnable power into home-base
+-- buildings, so the v8 -> v9 migration refunds every coin spent here. Ids and prices exactly as
+-- they were sold; never edit.
+PlayerDataConfig.LegacyArmoryCosts = {
+	Vitality = { 80, 160, 260, 380, 520 },
+	Stride = { 60, 140, 240 },
+	Velocity = { 40, 55, 70, 90, 110, 135, 160, 190, 220, 250 },
+	Mending = { 120, 240, 400, 600 },
+	CoinMagnet = { 100, 220, 380 },
+	Fortune = { 250, 500, 900 },
+}
+
 -- Every field a profile may contain, with its safe default. Load fills in anything missing,
 -- so adding a field here is always backwards compatible.
 function PlayerDataConfig.DefaultProfile()
 	return {
 		SchemaVersion = PlayerDataConfig.SchemaVersion,
-		Currency = { Salvage = 0 },
+		Currency = { Salvage = 0, Rerolls = 0, ReviveTokens = 0 },
 		Unlocks = {},
-		Flags = { OnboardingSeen = false },
+		-- OnboardingSeen: finished a run. FirstDescentDone: finished the first-60-seconds descent.
+		-- Funnel: onboarding-funnel step id -> true once logged, so each is reported once ever.
+		Flags = { OnboardingSeen = false, FirstDescentDone = false, Funnel = {} },
 		Stats = {
 			RunsStarted = 0,
 			RunsExtracted = 0,
@@ -81,6 +100,27 @@ function PlayerDataConfig.DefaultProfile()
 		Achievements = {},
 		-- What this player has found: card id -> true, and enemy id -> lifetime kills.
 		Codex = { Cards = {}, Enemies = {} },
+		-- The home base (BaseConfig, BaseService). Building levels are store-owned and live in
+		-- MetaUpgrades under each building's id; everything here is a preference or a timestamp.
+		--   Layout: building id -> grid tile (1..BaseConfig.Tiles) it stands on.
+		--   LastClaimAt: wall-clock time the offline workers were last emptied (0: never built).
+		--   Theme / Sign: equipped cosmetic ids ("" for the defaults).
+		--   Cheers: today's friend visits: the UTC day, who this player cheered, and how many
+		--   cheers this player received (and was paid for).
+		Base = {
+			Layout = {},
+			LastClaimAt = 0,
+			Theme = "",
+			Sign = "",
+			Cheers = { Day = 0, Given = {}, Received = 0 },
+		},
+		-- Loadout presets: slot -> { Rig, Trail }. How many slots are usable depends on passes.
+		Presets = {},
+		-- Equipped identity cosmetics ("" for the defaults).
+		Nameplate = "",
+		-- Once-a-day allowances, by UTC day: the daily-modifier bonus, rewarded-video bonuses
+		-- and friend-visit rewards (count per day).
+		Limits = { ModifierDay = 0, AdDay = 0, AdCount = 0, VisitDay = 0, Visits = 0 },
 		Settings = PlayerDataConfig.DefaultSettings(),
 		LastSaved = 0,
 	}
@@ -191,6 +231,33 @@ PlayerDataConfig.Migrations = {
 			Cards = type(codex.Cards) == "table" and codex.Cards or {},
 			Enemies = type(codex.Enemies) == "table" and codex.Enemies or {},
 		}
+		return profile
+	end,
+	-- v8 -> v9: the home base. Armory stat levels are refunded in coins (power now comes from
+	-- buildings); the consumable balances, base, presets and funnel flags start empty. Runs
+	-- inside the save transform on the stored copy, so the refund lands exactly once.
+	[8] = function(profile)
+		local currency = type(profile.Currency) == "table" and profile.Currency or {}
+		local levels = type(profile.MetaUpgrades) == "table" and profile.MetaUpgrades or {}
+		local refund = 0
+		for itemId, costs in PlayerDataConfig.LegacyArmoryCosts do
+			local owned = tonumber(levels[itemId]) or 0
+			owned = math.clamp(math.floor(owned), 0, #costs)
+			for level = 1, owned do
+				refund += costs[level]
+			end
+			levels[itemId] = nil
+		end
+		currency.Salvage = (tonumber(currency.Salvage) or 0) + refund
+		currency.Rerolls = math.max(math.floor(tonumber(currency.Rerolls) or 0), 0)
+		currency.ReviveTokens = math.max(math.floor(tonumber(currency.ReviveTokens) or 0), 0)
+		profile.Currency = currency
+		profile.MetaUpgrades = levels
+		local flags = type(profile.Flags) == "table" and profile.Flags or {}
+		flags.Funnel = type(flags.Funnel) == "table" and flags.Funnel or {}
+		-- Anyone who already played is past the first descent.
+		flags.FirstDescentDone = flags.FirstDescentDone == true or flags.OnboardingSeen == true
+		profile.Flags = flags
 		return profile
 	end,
 }

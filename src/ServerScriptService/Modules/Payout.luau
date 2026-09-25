@@ -15,16 +15,23 @@ end
 -- Returns the coins credited (not counting level-up coins), the experience credited, the
 -- level-up coins, the level before and the level after. Everything is 0 (and the levels equal)
 -- when nothing was paid: the key was already paid, or the profile is read-only. The fifth
--- value on failure is the reason.
-function Payout.Grant(persistence, player, key, coins, xp)
+-- value on failure is the reason. extras (optional) adds consumables to the same grant:
+-- { Rerolls = n, ReviveTokens = n }.
+function Payout.Grant(persistence, player, key, coins, xp, extras)
 	coins = math.max(math.floor(tonumber(coins) or 0), 0)
 	xp = math.max(math.floor(tonumber(xp) or 0), 0)
 	local xpBefore = Payout.XpOf(persistence, player)
 	local levelCoins, levelBefore, levelAfter = ProgressionConfig.RewardBetween(xpBefore, xpBefore + xp)
-	if coins + levelCoins <= 0 and xp <= 0 then
+	local anyExtra = false
+	for _, value in type(extras) == "table" and extras or {} do
+		if type(value) == "number" and value >= 1 then
+			anyExtra = true
+		end
+	end
+	if coins + levelCoins <= 0 and xp <= 0 and not anyExtra then
 		return 0, 0, 0, levelBefore, levelBefore, "nothing to pay"
 	end
-	local granted, reason, xpGranted = persistence:GrantReward(player, key, coins + levelCoins, xp)
+	local granted, reason, xpGranted = persistence:GrantReward(player, key, coins + levelCoins, xp, anyExtra and extras or nil)
 	if reason then
 		return 0, 0, 0, levelBefore, levelBefore, reason
 	end

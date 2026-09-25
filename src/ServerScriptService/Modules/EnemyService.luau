@@ -233,6 +233,8 @@ function EnemyService:_serviceRequests(enemy, now, targets)
 end
 
 -- options.champion, when given, is a CombatConfig.Champions id: a tougher version with one affix.
+-- options.optional: this one never holds a room open. options.coins: what it drops, in place of
+-- its archetype's. options.hunter: sent by depth pressure, so it earns no champion credit.
 function EnemyService:Spawn(archetypeId, position, options)
 	local archetype = EnemyConfig.Get(archetypeId)
 	if not archetype then
@@ -258,7 +260,10 @@ function EnemyService:Spawn(archetypeId, position, options)
 		archetype = archetype,
 		champion = champion,
 		-- Coins dropped on death; champions pay more.
-		coins = (archetype.Coins or 0) * (champion and CombatConfig.ChampionCoinMultiplier or 1),
+		coins = options and options.coins
+			or (archetype.Coins or 0) * (champion and CombatConfig.ChampionCoinMultiplier or 1),
+		optional = options and options.optional == true or nil,
+		hunter = options and options.hunter == true or nil,
 		speedScale = champion and champion.SpeedMultiplier or 1,
 		spawnedAt = self._now,
 		part = part,
@@ -356,7 +361,7 @@ end
 function EnemyService:GetRequiredCount()
 	local count = 0
 	for _, enemy in self._enemies do
-		if not enemy.archetype.Optional then
+		if not enemy.archetype.Optional and not enemy.optional then
 			count += 1
 		end
 	end

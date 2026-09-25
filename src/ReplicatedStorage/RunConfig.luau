@@ -39,6 +39,19 @@ RunConfig.ResultsDuration = 15
 RunConfig.TargetRunSeconds = 420
 -- A room that somehow cannot be cleared is force-cleared rather than soft-locking the run.
 RunConfig.RoomTimeLimit = 150
+-- Depth pressure (FeatureFlags.Pressure): a normal room that drags on past After seconds starts
+-- sending hunters, one every Delay seconds up to MaxAlive at once. Hunters are Swift champions
+-- that drop nothing and never hold the room open; they go when it clears. A normal room that
+-- reaches RoomTimeLimit anyway is still cleared, but its door reward and any Trial are lost.
+RunConfig.Pressure = {
+	After = 60,
+	Delay = 8,
+	MaxAlive = 3,
+	Archetype = "Chaser",
+	Champion = "Swift",
+	-- The HUD starts counting down this many seconds before the first hunter.
+	WarnSeconds = 15,
+}
 -- The boss is the exception: outlasting it is not beating it. Its room gets longer, and when
 -- the time runs out the run ends out of time, without the extraction bonus.
 RunConfig.BossRoomTimeLimit = 300
@@ -80,6 +93,7 @@ RunConfig.RemoteRules = {
 	Dash = { Cooldown = 0.25, Burst = 2 },
 	ChooseSurge = { Cooldown = 0.2, Burst = 3 },
 	ChooseDoor = { Cooldown = 0.2, Burst = 4 },
+	DeepenArmory = { Cooldown = 1, Burst = 2 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,

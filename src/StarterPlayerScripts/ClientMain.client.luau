@@ -39,6 +39,7 @@ local requestReturnToLobby = Remotes.Get("RequestReturnToLobby")
 local updateSettings = Remotes.Get("UpdateSettings")
 local purchaseShopItem = Remotes.Get("PurchaseShopItem")
 local equipShopItem = Remotes.Get("EquipShopItem")
+local deepenArmory = Remotes.Get("DeepenArmory")
 local claimDaily = Remotes.Get("ClaimDaily")
 local claimQuest = Remotes.Get("ClaimQuest")
 local redeemCode = Remotes.Get("RedeemCode")
@@ -80,6 +81,8 @@ end, function(kind, id)
 	else
 		MarketplaceService:PromptProductPurchase(player, id)
 	end
+end, function()
+	deepenArmory:FireServer()
 end)
 local sounds = SoundPlayer.Shared()
 -- Every themed button clicks.
@@ -370,7 +373,7 @@ Remotes.Get("RunResults").OnClientEvent:Connect(function(summary)
 		return
 	end
 	cardPicker:Hide()
-	if summary.Outcome == "Extracted" then
+	if summary.Outcome == "Extracted" or summary.Outcome == "Surfaced" then
 		sounds:Play("RoomClear")
 	end
 	results:Show(summary)

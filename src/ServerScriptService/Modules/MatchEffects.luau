@@ -119,7 +119,7 @@ function Effects.methods:_onEnemyKilled(enemy, shooter, contacts, source, now, b
 		end
 		local surge = ArsenalConfig.Surge
 		local archetype = enemy.archetype
-		local big = enemy.champion or archetype.IsElite or archetype.IsBoss or archetype.IsMiniBoss
+		local big = (enemy.champion and not enemy.hunter) or archetype.IsElite or archetype.IsBoss or archetype.IsMiniBoss
 		self:_grantSurge(shooter, surge.PerKill + (ricochet and surge.RicochetBonus or 0) + (big and surge.EliteKill or 0), now)
 		self:_pushPlayerState(shooter)
 	end
@@ -136,13 +136,14 @@ function Effects.methods:_onEnemyKilled(enemy, shooter, contacts, source, now, b
 	end)
 	shooterId = hasId and shooterId or nil
 	local chain = source == "Shot" and contacts or 0
-	self:_fireAll("EnemyDefeated", enemy.position, enemy.archetypeId, shooterId, chain,
-		enemy.champion and enemy.champion.Id or nil)
+	local champion = enemy.champion and not enemy.hunter and enemy.champion.Id or nil
+	self:_fireAll("EnemyDefeated", enemy.position, enemy.archetypeId, shooterId, chain, champion)
 	self:_log("EnemyDefeated", {
 		Archetype = enemy.archetypeId,
 		Contacts = contacts,
 		Source = source,
-		Champion = enemy.champion and enemy.champion.Id or nil,
+		Champion = champion,
+		Hunter = enemy.hunter,
 		RunId = self._runId,
 	}, now)
 

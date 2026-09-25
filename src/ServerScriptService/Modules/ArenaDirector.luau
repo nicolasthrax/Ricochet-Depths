@@ -85,6 +85,8 @@ function ArenaDirector:_createSlot(index)
 		doors = FeatureFlags.IsEnabled("Doors"),
 		challenges = FeatureFlags.IsEnabled("Challenges"),
 		events = FeatureFlags.IsEnabled("RoomEvents"),
+		haul = FeatureFlags.IsEnabled("Haul"),
+		pressure = FeatureFlags.IsEnabled("Pressure"),
 	}
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs

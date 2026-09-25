@@ -1,7 +1,7 @@
 -- Persistence schema and policy. Only data that genuinely needs to survive a session lives here.
 local PlayerDataConfig = {}
 
-PlayerDataConfig.SchemaVersion = 8
+PlayerDataConfig.SchemaVersion = 9
 
 PlayerDataConfig.StoreName = "PlayerProfiles"
 -- Development builds write to a completely separate namespace, so test data can never touch
@@ -61,6 +61,9 @@ function PlayerDataConfig.DefaultProfile()
 		-- Permanent salvage-shop purchases: item id -> level owned. Store-owned, like currency:
 		-- changed only by purchases applied inside the save transform.
 		MetaUpgrades = {},
+		-- Times this player has Deepened (reset a maxed Armory for a permanent coin bonus).
+		-- Store-owned, like MetaUpgrades: changed only by a Deepen applied inside the save.
+		DepthRank = 0,
 		-- The cosmetic trail shown on this player's shots; "" for none. A player preference.
 		EquippedTrail = "",
 		-- Lifetime experience; the level is derived from it (ProgressionConfig). Store-owned,
@@ -191,6 +194,12 @@ PlayerDataConfig.Migrations = {
 			Cards = type(codex.Cards) == "table" and codex.Cards or {},
 			Enemies = type(codex.Enemies) == "table" and codex.Enemies or {},
 		}
+		return profile
+	end,
+	-- v8 -> v9: Deepen. Nobody has a Depth Rank yet.
+	[8] = function(profile)
+		local rank = tonumber(profile.DepthRank)
+		profile.DepthRank = rank and rank == rank and math.max(math.floor(rank), 0) or 0
 		return profile
 	end,
 }

@@ -72,11 +72,18 @@ function MatchService.new(deps)
 	-- door choices need to find alternative rooms.
 	self._planFollowsShape = deps.planRun == nil
 	self._plan = {}
-	-- Doors, challenges and room events: { doors, challenges, events }. Off unless asked for.
+	-- Doors, challenges, room events, the haul at risk (with the Surface Lift) and depth
+	-- pressure: { doors, challenges, events, haul, pressure }. Off unless asked for.
 	self._route = deps.route or {}
 	self._roomRewards = {}
 	if self._route.events and self._rooms.SetEvents then
 		self._rooms:SetEvents({ runners = true })
+	end
+	if self._route.pressure and self._rooms.SetPressure then
+		self._rooms:SetPressure(RunConfig.Pressure)
+		self._rooms.OnPressure = function()
+			self:_fireAll("Notify", { Kind = "Callout", Text = "THE DEPTHS STIR. HUNTERS COMING!", Tone = "Warning" })
+		end
 	end
 
 	self._states = {}
@@ -195,6 +202,7 @@ function MatchService:RequestStart(player, now)
 	self._runStartedAt = now
 	self._roomIndex = 0
 	self._eliteCleared = false
+	self._zonesCleared = 0
 	self:_setState(States.Starting, now)
 	self:_log("RunStart", {
 		RunId = self._runId,
@@ -331,8 +339,13 @@ function MatchService:Step(deltaTime, now)
 			self:_pushPlayerState(resolution.playerKey)
 		end
 		if not self._upgrades:HasPendingOffers() and self:_doorsSettled(now) then
-			self:_resolveDoors()
-			self:_setState(States.Transition, now)
+			local door = self:_resolveDoors()
+			if door and door.Reward == "Lift" then
+				-- The group took the Surface Lift: the run ends here and the haul is banked.
+				self:_finish("Surfaced", now)
+			else
+				self:_setState(States.Transition, now)
+			end
 		end
 	elseif state == States.Transition then
 		self:_applyRegen(deltaTime, now)

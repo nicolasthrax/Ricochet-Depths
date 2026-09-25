@@ -186,7 +186,8 @@ function CardPickerView:_renderDoors()
 	for index, door in doors.Doors do
 		local button = UiTheme.button("Door" .. index, self.row, "")
 		button.LayoutOrder = index
-		button.Size = UDim2.new(0.42, 0, 1, 0)
+		-- Two doors side by side, or three narrower ones when the Surface Lift joins them.
+		button.Size = UDim2.new(math.min(0.42, 0.94 / #doors.Doors), 0, 1, 0)
 		button.BackgroundColor3 = UiConfig.Colors.PanelRaised
 		UiTheme.padding(button, 12)
 		local sizeConstraint = Instance.new("UISizeConstraint")
@@ -195,7 +196,8 @@ function CardPickerView:_renderDoors()
 		local chosen = self._voted == door.Id
 		local edge = button:FindFirstChildOfClass("UIStroke")
 		if edge then
-			edge.Color = chosen and UiConfig.Colors.Gold or (ZONE_COLORS[door.Zone] or UiConfig.Colors.Accent)
+			edge.Color = chosen and UiConfig.Colors.Gold
+				or (door.Kind == "Lift" and UiConfig.Colors.Health or ZONE_COLORS[door.Zone] or UiConfig.Colors.Accent)
 			edge.Thickness = chosen and 3 or 1.5
 			edge.Transparency = chosen and 0 or 0.4
 		end
@@ -205,8 +207,10 @@ function CardPickerView:_renderDoors()
 		room.Size = UDim2.new(1, 0, 0, 30)
 		room.TextWrapped = true
 		local kind = door.Kind == "MiniBoss" and "MINI-BOSS" or door.Kind == "Boss" and "BOSS"
-			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM" or ""
-		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small, UiConfig.Colors.Danger)
+			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM"
+			or door.Kind == "Lift" and "LEAVE THE RUN" or ""
+		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small,
+			door.Kind == "Lift" and UiConfig.Colors.Health or UiConfig.Colors.Danger)
 		sub.Position = UDim2.new(0, 0, 0, 30)
 		sub.Size = UDim2.new(1, 0, 0, 16)
 		local reward = UiTheme.label("Reward", button, door.RewardTitle, UiConfig.Text.Hud, UiConfig.Colors.Gold)

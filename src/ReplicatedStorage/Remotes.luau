@@ -12,6 +12,7 @@ local REMOTE_NAMES = {
 	"UpdateSettings", -- accessibility options, sanitised server-side before storage
 	"PurchaseShopItem", -- salvage shop item id; price and eligibility are decided server-side
 	"EquipShopItem", -- an owned trail's item id, or "" to clear
+	"DeepenArmory", -- reset a maxed Armory for the next Depth Rank; eligibility is decided server-side
 	"ClaimDaily", -- claim today's login reward
 	"ClaimQuest", -- quest id
 	"RedeemCode", -- promo code text

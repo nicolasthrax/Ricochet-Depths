@@ -28,13 +28,15 @@ function HudView.new(playerGui)
 	track.Size = UDim2.new(1, 0, 0, 14)
 	self.healthFill = fill
 
-	-- Coins picked up this run, with a brief "+N" as they come in.
+	-- Coins picked up this run, with a brief "+N" as they come in. With the haul at risk it reads
+	-- "Haul", with what getting out now would multiply it by.
 	self.coinLabel = UiTheme.label("CoinLabel", health, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
 	self.coinLabel.AnchorPoint = Vector2.new(1, 0)
 	self.coinLabel.Position = UDim2.new(1, 0, 0, 0)
 	self.coinLabel.Size = UDim2.new(0.5, 0, 0, 20)
 	self.coinLabel.TextXAlignment = Enum.TextXAlignment.Right
 	self._coins = 0
+	self._coinWord = "Coins"
 
 	-- Orbs in hand: one pip each, lit when the orb is ready to throw.
 	local pips = Instance.new("Frame")
@@ -257,16 +259,16 @@ function HudView:UpdatePlayer(snapshot)
 	local gained = coins - self._coins
 	self._coins = coins
 	if gained > 0 then
-		self.coinLabel.Text = string.format("+%d  Coins %d", gained, coins)
+		self.coinLabel.Text = string.format("+%d  %s", gained, self:_coinText())
 		self._coinToken = (self._coinToken or 0) + 1
 		local token = self._coinToken
 		task.delay(1.2, function()
 			if self._coinToken == token then
-				self.coinLabel.Text = string.format("Coins %d", self._coins)
+				self.coinLabel.Text = self:_coinText()
 			end
 		end)
 	else
-		self.coinLabel.Text = string.format("Coins %d", coins)
+		self.coinLabel.Text = self:_coinText()
 	end
 
 	self:_renderUpgrades(snapshot.Upgrades or {})
@@ -274,6 +276,14 @@ function HudView:UpdatePlayer(snapshot)
 end
 
 -- Orb pips, the Surge meter and the combo meter from a player snapshot.
+function HudView:_coinText()
+	local text = string.format("%s %d", self._coinWord, self._coins)
+	if self._haulMultiplier and self._haulMultiplier > 1 then
+		text ..= string.format("  x%s", (string.gsub(string.format("%.2f", self._haulMultiplier), "%.?0+$", "")))
+	end
+	return text
+end
+
 function HudView:_renderArsenal(snapshot)
 	local orbsMax = tonumber(snapshot.OrbsMax)
 	local orbs = tonumber(snapshot.Orbs) or 0
@@ -382,6 +392,12 @@ function HudView:UpdateRun(snapshot)
 	end
 
 	local inRun = snapshot.State ~= RunConfig.States.Lobby
+	local haul = inRun and type(snapshot.Haul) == "table" and snapshot.Haul or nil
+	local word, multiplier = haul and "Haul" or "Coins", haul and tonumber(haul.Multiplier) or nil
+	if word ~= self._coinWord or multiplier ~= self._haulMultiplier then
+		self._coinWord, self._haulMultiplier = word, multiplier
+		self.coinLabel.Text = self:_coinText()
+	end
 	-- Upgrades belong to a run: hidden in the lobby, and cleared when a run ends. The Store
 	-- button is the reverse.
 	self.upgradePanel.Visible = inRun
@@ -430,8 +446,19 @@ function HudView:UpdateRun(snapshot)
 			self.objectiveLabel.Text = string.format("Wave %d / %d  -  %s", math.min(wave.Wave, wave.Waves), wave.Waves, targets)
 			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
 		else
-			self.objectiveLabel.Text = targets
-			self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+			-- Depth pressure: a countdown as it nears, then a warning while hunters come.
+			local pressure = type(snapshot.Pressure) == "table" and snapshot.Pressure or nil
+			local warnAt = RunConfig.Pressure and RunConfig.Pressure.WarnSeconds or 0
+			if pressure and pressure.Active then
+				self.objectiveLabel.Text = "HUNTED!  -  " .. targets
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.Danger
+			elseif pressure and tonumber(pressure.In) and pressure.In <= warnAt then
+				self.objectiveLabel.Text = string.format("%s  -  hunters in %ds", targets, pressure.In)
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.Warning
+			else
+				self.objectiveLabel.Text = targets
+				self.objectiveLabel.TextColor3 = UiConfig.Colors.TextMuted
+			end
 		end
 	elseif snapshot.State == RunConfig.States.Lobby then
 		self:_renderLobbyObjective()

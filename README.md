@@ -8,7 +8,7 @@ Original IP. Nothing here copies names, art, layouts, wording, enemies, cards or
 from any existing game.
 
 **Status:** 2.0.0, the redesign. Every check below comes from static checks, a Rojo build
-and a headless test suite of 655 tests. The game has not yet been run end to end in Roblox
+and a headless test suite of 686 tests. The game has not yet been run end to end in Roblox
 Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
 [docs/PROGRESS.md](docs/PROGRESS.md) gives the honest state of things.
 
@@ -27,6 +27,11 @@ Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
   1/2/3 or a tap, without the fight stopping.
 - **Your route.** After every room, pick a door: which room is next and what it promises (a
   heal, treasure, a bigger card choice, a Surge, a Trial, or the Trick Shot Gallery).
+- **The haul.** Coins collected in a run are at risk: a wipe keeps only 40% of them. After each
+  mini-boss a **Surface Lift** door lets the group bank the haul and leave, and getting out
+  deeper multiplies it (x1.25 after the Forge Press, x1.5 at the Throne).
+- **Depth pressure.** A normal room that drags past 60 seconds starts sending Swift hunters
+  that drop nothing; a room the clock has to clear loses its door reward and its Trial.
 - **Roguelite runs.** Three zones (Ruins, Foundry, Abyss), randomised rooms, an upgrade card
   after each room, room mechanics (sweepers, laser gates, breakable cover, amp pads).
 - **Builds.** 30 upgrade cards, including elemental shot effects (crits, burn, chain arcs, kill
@@ -40,6 +45,8 @@ Studio. `docs/RELEASE_CHECKLIST.md` lists what is left before going public, and
   once on one server, each in its own arena.
 - **Progression.** Coins from kills, a permanent Armory, cosmetic trails, and levels (XP) from
   every run, with level-up coin rewards.
+- **Deepen.** A Deep Quiver adds orbs to every run; once every Armory upgrade is maxed, Deepen
+  resets them all for a permanent +10% coins per Depth Rank (up to 10).
 - **Come-back loop.** Daily login rewards on a 7-day streak, three daily quests, promo codes,
   badges, and global leaderboards on the lobby wall.
 - **Presentation.** A title screen, a themed UI with animated menus and toasts, kill-streak and

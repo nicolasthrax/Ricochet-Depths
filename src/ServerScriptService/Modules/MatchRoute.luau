@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
 local ObjectiveConfig = require(ReplicatedStorage:WaitForChild("ObjectiveConfig"))
+local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
+local RewardService = require(script.Parent.RewardService)
 local RouteConfig = require(ReplicatedStorage:WaitForChild("RouteConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
@@ -15,6 +17,12 @@ local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
 local Route = { methods = {} }
 
 local UP = Vector3.new(0, 1, 0)
+
+-- A multiplier as players read it: 1, 1.25, 1.5.
+local function multiplierText(multiplier)
+	local text = string.gsub(string.format("%.2f", multiplier), "%.?0+$", "")
+	return text
+end
 
 local function zoneStep(definition)
 	local zone = definition and RunConfig.Zones[definition.Zone]
@@ -91,6 +99,23 @@ function Route.methods:_rollDoors()
 			room = room,
 		})
 	end
+	-- With the haul at risk, every mini-boss is a way out: the Surface Lift goes last, so a tie
+	-- or a silent group pushes on rather than leaving.
+	local cleared = self._plan[self._roomIndex]
+	if self._route.haul and cleared and cleared.Kind == "MiniBoss" then
+		local lift = RouteConfig.Lift
+		-- The lift pays at the depth reached, this mini-boss included.
+		local multiplier = RewardService.DepthMultiplier(self._zonesCleared or 0)
+		table.insert(doors, {
+			Id = #doors + 1,
+			RoomId = lift.Id,
+			RoomName = lift.RoomName,
+			Kind = "Lift",
+			Reward = lift.Id,
+			RewardTitle = lift.Title,
+			RewardText = string.format(lift.Text, multiplierText(multiplier), math.floor(RewardConfig.DefeatCoinKeep * 100 + 0.5)),
+		})
+	end
 	return doors
 end
 
@@ -147,6 +172,11 @@ function Route.methods:_resolveDoors()
 		if (tally[door.Id] or 0) > (tally[winner.Id] or 0) then
 			winner = door
 		end
+	end
+	if winner.Reward == "Lift" then
+		-- The run ends here (MatchService); nothing about the plan changes.
+		self:_log("DoorChosen", { RunId = self._runId, Room = winner.RoomId, Reward = winner.Reward }, self._now)
+		return winner
 	end
 	local nextIndex = self._roomIndex + 1
 	self._plan[nextIndex] = winner.room

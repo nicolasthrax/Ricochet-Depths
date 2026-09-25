@@ -13,21 +13,55 @@ function RewardService.new()
 	return setmetatable({ _granted = {} }, RewardService)
 end
 
+-- Whether an outcome got the group out alive: the Throne ("Extracted") or a Surface Lift
+-- ("Surfaced").
+function RewardService.GotOut(outcome)
+	return outcome == "Extracted" or outcome == "Surfaced"
+end
+
+-- Whether an outcome loses part of an at-risk haul: a wipe, or a run out of time. A run that
+-- collapsed or was abandoned is nobody's failure and keeps it.
+function RewardService.LosesHaul(outcome)
+	return outcome == "Defeated" or outcome == "TimedOut"
+end
+
+-- The haul multiplier for getting out after `zonesCleared` zone bosses (RewardConfig).
+function RewardService.DepthMultiplier(zonesCleared)
+	return 1 + RewardConfig.HaulDepthBonus * math.max((tonumber(zonesCleared) or 0) - 1, 0)
+end
+
+-- The coins a run's haul is worth for this outcome, before any multipliers. `haul` is nil
+-- unless the haul is at risk, as { depthMultiplier }.
+function RewardService.HaulValue(playerState, outcome, haul)
+	local coins = playerState.coins or 0
+	if not haul then
+		return coins
+	end
+	if RewardService.GotOut(outcome) then
+		return math.floor(coins * (haul.depthMultiplier or 1))
+	elseif RewardService.LosesHaul(outcome) then
+		return math.floor(coins * RewardConfig.DefeatCoinKeep)
+	end
+	return coins
+end
+
 -- Coins collected, plus the clear bonus, times the player's multipliers (Fortune and cards via
 -- RewardMultiplier, the 2x Coins pass via CoinMultiplier). Only "Extracted" earns the whole
--- bonus; every other outcome keeps the coins and a share of the bonus. heatMultiplier is the
--- Depth Pact's reward multiplier (1 at Heat 0).
-function RewardService.Compute(playerState, outcome, eliteCleared, heatMultiplier)
+-- bonus; a Surface Lift keeps the clear bonus but not the extraction's; every other outcome
+-- keeps a share of the bonus. heatMultiplier is the Depth Pact's reward multiplier (1 at Heat 0).
+-- haul, when given, puts the collected coins at risk (see HaulValue).
+function RewardService.Compute(playerState, outcome, eliteCleared, heatMultiplier, haul)
 	local bonus = playerState.roomsCleared * RewardConfig.PerRoomCleared
 	if eliteCleared then
 		bonus += RewardConfig.EliteBonus
 	end
 	if outcome == "Extracted" then
 		bonus += RewardConfig.ExtractionBonus
-	else
+	elseif outcome ~= "Surfaced" then
 		bonus = math.floor(bonus * RewardConfig.DefeatMultiplier)
 	end
-	return RewardService.Multiply(playerState, ((playerState.coins or 0) + bonus) * (heatMultiplier or 1))
+	local coins = RewardService.HaulValue(playerState, outcome, haul)
+	return RewardService.Multiply(playerState, (coins + bonus) * (heatMultiplier or 1))
 end
 
 -- Experience for a run. Every outcome keeps what the kills and clears earned; only extracting

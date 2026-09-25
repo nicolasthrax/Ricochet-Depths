@@ -116,8 +116,9 @@ function ArenaDirector:_freeSlot()
 	return nil
 end
 
--- Starts a descent for `players` in a free arena. Returns the slot, or nil and a reason.
-function ArenaDirector:StartGroup(players, now)
+-- Starts a descent for `players` in a free arena. options (optional) go to
+-- MatchService:RequestStart, e.g. { firstDescent = true }. Returns the slot, or nil and a reason.
+function ArenaDirector:StartGroup(players, now, options)
 	if #players == 0 then
 		return nil, "no players"
 	end
@@ -133,7 +134,7 @@ function ArenaDirector:StartGroup(players, now)
 	for _, player in players do
 		slot.match:RegisterPlayer(player)
 	end
-	local ok, reason = slot.match:RequestStart(players[1], now)
+	local ok, reason = slot.match:RequestStart(players[1], now, options)
 	if not ok then
 		for _, player in players do
 			slot.match:UnregisterPlayer(player, now)

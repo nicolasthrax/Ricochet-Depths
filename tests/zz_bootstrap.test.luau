@@ -20,6 +20,9 @@ describe("GameBootstrap wiring", function()
 	rawset(Harness.service("DataStoreService"), "GetDataStore", function()
 		return store
 	end)
+	-- These players are veterans: the first descent has its own test below.
+	local FeatureFlags = __require("FeatureFlags")
+	FeatureFlags.FirstDescent = false
 	local systems = GameBootstrap.Start()
 	local lobby = workspace:FindFirstChild("Lobby")
 	local spawnAt = RunConfig.LobbyReturnPosition
@@ -115,6 +118,18 @@ describe("GameBootstrap wiring", function()
 		expect(match).toBeTruthy()
 		expect(match).never().toBe(systems.director:MatchFor(first))
 		expect(#match:GetParticipants()).toBe(1)
+	end)
+
+	it("drops a brand-new player straight into the first descent once they spawn", function()
+		FeatureFlags.FirstDescent = true
+		local rookie = Harness.addPlayer("Rookie")
+		expect(systems.director:MatchFor(rookie)).toBeNil() -- no character yet
+		Harness.giveCharacter(rookie, spawnAt)
+		local match = systems.director:MatchFor(rookie)
+		expect(match).toBeTruthy()
+		expect(#match:GetParticipants()).toBe(1)
+		expect(match._runOptions.firstDescent).toBe(true)
+		FeatureFlags.FirstDescent = false
 	end)
 
 	it("closes the base to players in a run", function()

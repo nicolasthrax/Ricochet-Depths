@@ -21,7 +21,6 @@ local QuestsView = require(script.Parent:WaitForChild("QuestsView"))
 local StatsView = require(script.Parent:WaitForChild("StatsView"))
 local SurgePickerView = require(script.Parent:WaitForChild("SurgePickerView"))
 local RoomFx = require(script.Parent:WaitForChild("RoomFx"))
-local TitleScreen = require(script.Parent:WaitForChild("TitleScreen"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -433,11 +432,6 @@ for _, name in { "Mirror", "Magnet", "Sponge", "TreasureRunner" } do
 		onboarding:Show(name, 7)
 	end)
 end
-
--- The title card, over everything until the player presses Play.
-TitleScreen.new(playerGui, function()
-	sounds:Play("Reward")
-end)
 
 RunService.RenderStepped:Connect(function()
 	local now = os.clock()

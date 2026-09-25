@@ -128,7 +128,17 @@ point the `LUAU_BIN` / `LUAU_COMPILE_BIN` / `LUAU_ANALYZE_BIN` / `ROJO_BIN` vari
    - Other references: `lobby.test`, `match.test`, `projectile.test`, `zz_bootstrap.test`,
      `coins`, `soak`, `shot_effects`, `redesign`.
 
-### B. Hub redesign (task 3)
+### B. Hub redesign (task 3): DONE
+Done: `GateCapacity = 4`; the spawn pad faces north at the well (`lobby.test`); `TitleScreen`
+deleted (module, `ClientMain` use, its `meta.test` case); `FeatureFlags.FirstDescent` and
+`GameBootstrap._wantsFirstDescent`: a loaded, writable profile with `FirstDescentDone == false`
+waits for its character, then `startSolo(player, now, { firstDescent = true })`.
+`ArenaDirector:StartGroup(players, now, options)` -> `MatchService:RequestStart(player, now,
+options)`, stored as `match._runOptions`; C3 turns it into the scripted plan. The Outpost kiosk is
+the hub portal; the HUD BASE button is part of F. Max players 8 is in `RELEASE_CHECKLIST.md`.
+Harness: `Signal:Wait` added to the stub.
+
+Original notes:
 - In `LobbyBuilder`, gates hold 1-4 players (`RunConfig.Lobby.GateCapacity = 4`, min 2; the
   solo portal covers 1). Update `lobby.test`.
 - Players spawn facing the pit. Add a hub portal / HUD "BASE" button that teleports you to your

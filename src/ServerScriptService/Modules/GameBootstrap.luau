@@ -324,8 +324,8 @@ function GameBootstrap.Start()
 	})
 
 	local lobbyStatus = Remotes.Get("LobbyReadyState")
-	local function startSolo(player, now)
-		local slot, reason = director:StartGroup({ player }, now)
+	local function startSolo(player, now, options)
+		local slot, reason = director:StartGroup({ player }, now, options)
 		if not slot and reason == "all arenas busy" then
 			lobbyStatus:FireClient(player, { Active = true, Notice = "Every arena is busy. Try again in a moment." })
 		end
@@ -577,6 +577,17 @@ function GameBootstrap.Start()
 			pushMeta(player)
 			pushBase(player)
 			metaService:AwardBadge(player, "Welcome")
+			-- No title card and no lobby wall: a player who has never descended goes straight
+			-- into the scripted first descent once their character is standing in the hall.
+			local public = persistence:GetPublicProfile(player)
+			if GameBootstrap._wantsFirstDescent(public) then
+				if not player.Character then
+					player.CharacterAdded:Wait()
+				end
+				if director:MatchFor(player) == nil and player.Parent ~= nil then
+					startSolo(player, os.clock(), { firstDescent = true })
+				end
+			end
 			local dailyReady, questReady = false, false
 			if FeatureFlags.DailyRewards then
 				dailyReady, questReady = metaService:HasClaimable(player)
@@ -661,6 +672,16 @@ function GameBootstrap.Start()
 		base = base,
 		builder = builder,
 	}
+end
+
+-- Whether a freshly loaded profile should be dropped into the first descent. A read-only session
+-- never is: it could never record having done it, and would repeat it on every join.
+function GameBootstrap._wantsFirstDescent(public)
+	return FeatureFlags.FirstDescent == true
+		and type(public) == "table"
+		and not public.ReadOnly
+		and type(public.Flags) == "table"
+		and public.Flags.FirstDescentDone == false
 end
 
 function GameBootstrap._isPremium(player)

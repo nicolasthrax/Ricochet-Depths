@@ -169,8 +169,8 @@ These cannot be done from this repository and need a human with account access.
    sync cannot write it, untick it by hand; the server warns while it is on.
 3. **Create a separate test experience** and publish the same place there for sections 2–4.
 4. **Enable API services** on the test experience (Game Settings → Security).
-5. **Set max players to 20** (Game Settings → Players). Two gates of 8 plus solo players, each
-   group in its own arena; up to 6 runs at once per server.
+5. **Set max players to 8** (Game Settings → Players). The Outpost has 8 home-base plots, one per
+   player; two gates of 2–4 plus solo players, each group in its own arena.
 6. **Enable the platforms** you intend to support (Game Settings → Places → Devices).
 7. **Set the icon and thumbnails** (Creator Hub → Experience). Ready-made originals are in
    `marketing/`: `icon.png` (512×512) and `thumb1–3.png` (1920×1080). Add one or two real

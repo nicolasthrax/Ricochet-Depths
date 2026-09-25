@@ -15,7 +15,6 @@ local QuestsView = __require("QuestsView")
 local RemoteRouter = __require("RemoteRouter")
 local Remotes = __require("Remotes")
 local StatsView = __require("StatsView")
-local TitleScreen = __require("TitleScreen")
 
 local DAY = MetaConfig.SecondsPerDay
 local START = 20000 * DAY + 3600 -- an arbitrary day, one hour in
@@ -535,16 +534,5 @@ describe("menus and toasts", function()
 		expect(view:OnKill(1)).toBe("DOUBLE KILL")
 		now += 5
 		expect(view:OnKill(1)).toBeNil() -- the streak lapsed
-	end)
-
-	it("shows the title card until Play is pressed", function()
-		local played = false
-		local title = TitleScreen.new(Instance.new("Folder"), function()
-			played = true
-		end)
-		expect(title:IsShowing()).toBe(true)
-		title.playButton.Activated:Fire()
-		expect(played).toBe(true)
-		expect(title:IsShowing()).toBe(false)
 	end)
 end)

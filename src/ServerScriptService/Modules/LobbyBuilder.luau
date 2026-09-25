@@ -80,7 +80,9 @@ function LobbyBuilder.Build(parent)
 	local spawnPad = Instance.new("SpawnLocation")
 	spawnPad.Name = "LobbySpawn"
 	spawnPad.Size = RoomConfig.SpawnPadSize
-	spawnPad.Position = origin + SPAWN_OFFSET + Vector3.new(0, floorY + RoomConfig.SpawnPadSize.Y / 2, 0)
+	-- Characters spawn facing the pad's front: north, straight at the descent well.
+	local spawnAt = origin + SPAWN_OFFSET + Vector3.new(0, floorY + RoomConfig.SpawnPadSize.Y / 2, 0)
+	spawnPad.CFrame = CFrame.lookAt(spawnAt, spawnAt + Vector3.new(0, 0, -1))
 	spawnPad.Anchored = true
 	spawnPad.Neutral = true
 	spawnPad.Duration = 0

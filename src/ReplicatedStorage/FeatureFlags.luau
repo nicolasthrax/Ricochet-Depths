@@ -45,6 +45,8 @@ FeatureFlags.RoomEvents = true
 
 -- The home base: twelve buildings on a grid, offline workers and friend visits (BaseService).
 FeatureFlags.BaseBuilding = true
+-- A new player is dropped straight into a scripted solo first descent instead of a title card.
+FeatureFlags.FirstDescent = true
 
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false

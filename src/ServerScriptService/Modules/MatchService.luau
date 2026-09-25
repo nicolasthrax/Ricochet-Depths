@@ -158,7 +158,9 @@ end
 
 --// run control --------------------------------------------------------------
 
-function MatchService:RequestStart(player, now)
+-- options (optional): { firstDescent = true } runs the scripted first-60-seconds opening
+-- (RunConfig.FirstDescent) before the normal run shape.
+function MatchService:RequestStart(player, now, options)
 	if self._state ~= States.Lobby then
 		return false, "a run is already in progress"
 	end
@@ -184,6 +186,7 @@ function MatchService:RequestStart(player, now)
 	table.clear(self._pendingJoins)
 
 	self._runId += 1
+	self._runOptions = type(options) == "table" and table.clone(options) or {}
 	self._plan = table.clone(self._planRun(self._runId))
 	self._slots = self._planFollowsShape and table.clone(RunConfig.RunShape) or nil
 	self._roomRewards = {}

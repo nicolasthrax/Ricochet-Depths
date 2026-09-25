@@ -54,6 +54,17 @@ function Signal:Fire(...)
 	end
 end
 
+-- Suspends the calling thread until the next Fire, and returns what was fired.
+function Signal:Wait()
+	local thread = coroutine.running()
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		task.spawn(thread, ...)
+	end)
+	return coroutine.yield()
+end
+
 function Signal:CountHandlers()
 	return #self._handlers
 end

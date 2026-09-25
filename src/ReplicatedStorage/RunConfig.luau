@@ -90,9 +90,10 @@ RunConfig.RemoteRules = {
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
 -- a countdown runs (shorter when it fills) and its members descend together into their own
--- arena. A solo portal starts a one-player run at once.
+-- arena. A solo portal starts a one-player run at once, so every party size from 1 to 4 has a
+-- way down (the concept's 1-4 player runs).
 RunConfig.Lobby = {
-	GateCapacity = 8,
+	GateCapacity = 4,
 	GateMinPlayers = 2,
 	GateCountdown = 15,
 	FullCountdown = 5,

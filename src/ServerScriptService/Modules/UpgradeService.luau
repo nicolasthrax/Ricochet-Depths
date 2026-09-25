@@ -67,6 +67,34 @@ local function recommendScore(card, playerState)
 	return card.Rarity == "Rare" and 20 or 10
 end
 
+-- The fusion a card builds toward, for the card face: { Fusion, Have, Need } counted in this
+-- card's own stacks, or nil for a fused card or a card no unowned fusion needs. When a card
+-- feeds several fusions it points at the one the player is furthest along (ties: declared order).
+function UpgradeService.FusionHint(card, playerState)
+	if card.Rarity == "Fused" or not playerState then
+		return nil
+	end
+	local best, bestProgress = nil, -1
+	for _, fused in UpgradeConfig.FusionsUsing(card.Id) do
+		if playerState:GetStacks(fused.Id) < fused.MaxStacks then
+			local have, need = 0, 0
+			for partId, count in fused.Requires.Cards do
+				have += math.min(playerState:GetStacks(partId), count)
+				need += count
+			end
+			local progress = have / need
+			if progress > bestProgress then
+				best, bestProgress = fused, progress
+			end
+		end
+	end
+	if not best then
+		return nil
+	end
+	local need = best.Requires.Cards[card.Id]
+	return { Fusion = best.Title, Have = math.min(playerState:GetStacks(card.Id), need), Need = need }
+end
+
 -- The card of an offer to recommend (ties go to the earlier card).
 function UpgradeService.Recommend(cards, playerState)
 	local best, bestScore = nil, -1
@@ -184,10 +212,15 @@ end
 function UpgradeService:_open(playerKey, playerState, cards, now, timeout)
 	self._nextOfferId += 1
 	local recommended = UpgradeService.Recommend(cards, playerState)
+	local hints = {}
+	for _, card in cards do
+		hints[card.Id] = UpgradeService.FusionHint(card, playerState)
+	end
 	local offer = {
 		id = self._nextOfferId,
 		cards = cards,
 		recommended = recommended and recommended.Id or nil,
+		fusionHints = hints,
 		expiresAt = now + (timeout or UpgradeConfig.ChoiceTimeout),
 		resolved = false,
 		playerKey = playerKey,
@@ -244,6 +277,7 @@ function UpgradeService.ToClientPayload(offer, now)
 			Category = card.Category,
 			Rarity = card.Rarity,
 			Recommended = card.Id == offer.recommended or nil,
+			FusionHint = offer.fusionHints and offer.fusionHints[card.Id] or nil,
 		})
 	end
 	-- A duration, never a timestamp. os.clock() is per-process, so a server clock value is

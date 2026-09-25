@@ -11,6 +11,16 @@ local UiTheme = require(script.Parent.UiTheme)
 local CardPickerView = {}
 CardPickerView.__index = CardPickerView
 
+-- Vertical layout, in pixels. The title and timer end 56 px down and the RECOMMENDED tag pokes
+-- 23 px above its card, so the row starts at 80; the reroll/respec button sits BUTTON_BOTTOM
+-- above the bottom edge and the row ends ROW_BOTTOM_GAP above it (the button and a 6 px gap).
+-- A 300 px-tall screen still gives the row 158 px, over a card's 150 px minimum.
+local TITLE_TOP = 6
+local TIMER_TOP = TITLE_TOP + 30
+local ROW_TOP = 80
+local BUTTON_BOTTOM = 8
+local ROW_BOTTOM_GAP = BUTTON_BOTTOM + UiConfig.MinTouchTarget + 6
+
 -- onVote(doorId), optional: the player chose a door for the next room.
 -- actions, optional: { reroll = function(), respec = function() }.
 function CardPickerView.new(playerGui, onChoose, onVote, actions)
@@ -31,26 +41,31 @@ function CardPickerView.new(playerGui, onChoose, onVote, actions)
 	backdrop.BorderSizePixel = 0
 	backdrop.Parent = self.gui
 
+	-- Laid out in offsets from the top and bottom edges, so the title, the cards and the button
+	-- under them all fit a landscape phone (about 300 px tall below the Roblox top bar).
 	self.title = UiTheme.heading("Title", backdrop, "Choose an upgrade", UiConfig.Text.Title)
-	self.title.Position = UDim2.new(0.5, 0, 0.16, 0)
-	self.title.AnchorPoint = Vector2.new(0.5, 0.5)
-	self.title.Size = UDim2.fromOffset(500, 36)
+	self.title.Position = UDim2.new(0.5, 0, 0, TITLE_TOP)
+	self.title.AnchorPoint = Vector2.new(0.5, 0)
+	self.title.Size = UDim2.fromOffset(500, 30)
 	self.title.TextXAlignment = Enum.TextXAlignment.Center
 
 	self.timerLabel = UiTheme.label("Timer", backdrop, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
-	self.timerLabel.Position = UDim2.new(0.5, 0, 0.16, 30)
-	self.timerLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	self.timerLabel.Size = UDim2.fromOffset(500, 24)
+	self.timerLabel.Position = UDim2.new(0.5, 0, 0, TIMER_TOP)
+	self.timerLabel.AnchorPoint = Vector2.new(0.5, 0)
+	self.timerLabel.Size = UDim2.fromOffset(500, 20)
 	self.timerLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 	local row = Instance.new("Frame")
 	row.Name = "CardRow"
 	row.BackgroundTransparency = 1
-	row.Position = UDim2.fromScale(0.5, 0.56)
-	row.AnchorPoint = Vector2.new(0.5, 0.5)
-	row.Size = UDim2.fromScale(0.94, 0.6)
+	row.Position = UDim2.new(0.5, 0, 0, ROW_TOP)
+	row.AnchorPoint = Vector2.new(0.5, 0)
+	row.Size = UDim2.new(0.94, 0, 1, -ROW_TOP - ROW_BOTTOM_GAP)
 	row.Parent = backdrop
 	self.row = row
+	local rowLimit = Instance.new("UISizeConstraint")
+	rowLimit.MaxSize = Vector2.new(math.huge, UiConfig.CardSize.Y + 30)
+	rowLimit.Parent = row
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -62,8 +77,8 @@ function CardPickerView.new(playerGui, onChoose, onVote, actions)
 
 	-- Under the cards: reroll the offer, or (after picking, early on) take the card back.
 	self.rerollButton = UiTheme.button("Reroll", backdrop, "REROLL")
-	self.rerollButton.AnchorPoint = Vector2.new(0.5, 0)
-	self.rerollButton.Position = UDim2.new(0.5, 0, 0.88, 0)
+	self.rerollButton.AnchorPoint = Vector2.new(0.5, 1)
+	self.rerollButton.Position = UDim2.new(0.5, 0, 1, -BUTTON_BOTTOM)
 	self.rerollButton.Size = UDim2.fromOffset(200, UiConfig.MinTouchTarget)
 	self.rerollButton.TextSize = UiConfig.Text.Small + 2
 	self.rerollButton.Visible = false
@@ -74,8 +89,8 @@ function CardPickerView.new(playerGui, onChoose, onVote, actions)
 		end
 	end)
 	self.respecButton = UiTheme.button("Respec", backdrop, "CHANGE MY CARD (FREE)")
-	self.respecButton.AnchorPoint = Vector2.new(0.5, 0)
-	self.respecButton.Position = UDim2.new(0.5, 0, 0.88, 0)
+	self.respecButton.AnchorPoint = Vector2.new(0.5, 1)
+	self.respecButton.Position = UDim2.new(0.5, 0, 1, -BUTTON_BOTTOM)
 	self.respecButton.Size = UDim2.fromOffset(260, UiConfig.MinTouchTarget)
 	self.respecButton.TextSize = UiConfig.Text.Small + 2
 	self.respecButton.Visible = false
@@ -177,6 +192,21 @@ function CardPickerView:Show(payload)
 		body.TextYAlignment = Enum.TextYAlignment.Top
 		body.TextXAlignment = Enum.TextXAlignment.Center
 
+		-- The fusion this card builds toward, so the next fusion reads as a goal at the pick.
+		local hint = type(card.FusionHint) == "table" and card.FusionHint or nil
+		if hint then
+			body.Size = UDim2.new(1, 0, 1, -154)
+			local fused = UpgradeConfig.Rarities.Fused.Color
+			local chip = UiTheme.label("FusionHint", button, string.format("%d / %d  →  %s", tonumber(hint.Have) or 0,
+				tonumber(hint.Need) or 0, tostring(hint.Fusion)), UiConfig.Text.Small, fused)
+			chip.AnchorPoint = Vector2.new(0, 1)
+			chip.Position = UDim2.new(0, 0, 1, 0)
+			chip.Size = UDim2.new(1, 0, 0, 20)
+			chip.TextXAlignment = Enum.TextXAlignment.Center
+			chip.TextScaled = true
+			chip.Font = UiConfig.FontBold
+		end
+
 		if card.Recommended then
 			local tag = UiTheme.label("Recommended", button, "RECOMMENDED", UiConfig.Text.Small, UiConfig.Colors.PrimaryText)
 			tag.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -235,6 +265,11 @@ function CardPickerView:SetDoors(doors)
 	end
 end
 
+-- Coins picked up so far this run (the player snapshot's Coins), shown on the Bank loot door.
+function CardPickerView:SetHaul(coins)
+	self._haul = math.max(math.floor(tonumber(coins) or 0), 0)
+end
+
 function CardPickerView:HasDoors()
 	return self._doors ~= nil
 end
@@ -261,10 +296,12 @@ function CardPickerView:_renderDoors()
 	self.timerLabel.Text = self._voted and string.format("Waiting for the others...  %ds", doors.SecondsLeft or 0)
 		or string.format("The group votes. Closes in %ds", doors.SecondsLeft or 0)
 	for index, door in doors.Doors do
-		local button = UiTheme.button("Door" .. index, self.row, "")
+		-- Bank the loot is the one gold, primary door: the safe choice reads as the obvious one.
+		local bank = door.Kind == "Extract"
+		local ink = bank and UiConfig.Colors.PrimaryText or nil
+		local button = UiTheme.button("Door" .. index, self.row, "", bank and "Primary" or nil)
 		button.LayoutOrder = index
 		button.Size = UDim2.new(0.42, 0, 1, 0)
-		button.BackgroundColor3 = UiConfig.Colors.PanelRaised
 		UiTheme.padding(button, 12)
 		local sizeConstraint = Instance.new("UISizeConstraint")
 		sizeConstraint.MaxSize = Vector2.new(280, 300)
@@ -272,33 +309,40 @@ function CardPickerView:_renderDoors()
 		local chosen = self._voted == door.Id
 		local edge = button:FindFirstChildOfClass("UIStroke")
 		if edge then
-			edge.Color = chosen and UiConfig.Colors.Gold or (ZONE_COLORS[door.Zone] or UiConfig.Colors.Accent)
+			-- A gold edge would vanish on the gold Bank door, so its vote shows in white.
+			local picked = bank and UiConfig.Colors.Text or UiConfig.Colors.Gold
+			edge.Color = chosen and picked or (ZONE_COLORS[door.Zone] or UiConfig.Colors.Accent)
 			edge.Thickness = chosen and 3 or 1.5
 			edge.Transparency = chosen and 0 or 0.4
 		end
 
-		local room = UiTheme.label("Room", button, door.RoomName, UiConfig.Text.CardTitle, ZONE_COLORS[door.Zone] or UiConfig.Colors.Text)
+		local room = UiTheme.label("Room", button, door.RoomName, UiConfig.Text.CardTitle,
+			ink or ZONE_COLORS[door.Zone] or UiConfig.Colors.Text)
 		room.Font = UiConfig.FontDisplay
 		room.Size = UDim2.new(1, 0, 0, 30)
 		room.TextWrapped = true
 		local kind = door.Kind == "MiniBoss" and "MINI-BOSS" or door.Kind == "Boss" and "BOSS"
 			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM"
-			or door.Kind == "Extract" and "BANK LOOT" or ""
-		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small,
-			door.Kind == "Extract" and UiConfig.Colors.Health or UiConfig.Colors.Danger)
+			or bank and "BANK LOOT" or ""
+		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small, ink or UiConfig.Colors.Danger)
 		sub.Position = UDim2.new(0, 0, 0, 30)
 		sub.Size = UDim2.new(1, 0, 0, 16)
-		local reward = UiTheme.label("Reward", button, door.RewardTitle, UiConfig.Text.Hud, UiConfig.Colors.Gold)
+		local reward = UiTheme.label("Reward", button, door.RewardTitle, UiConfig.Text.Hud, ink or UiConfig.Colors.Gold)
 		reward.Font = UiConfig.FontBold
 		reward.Position = UDim2.new(0, 0, 0, 54)
 		reward.Size = UDim2.new(1, 0, 0, 22)
-		local body = UiTheme.label("Body", button, door.RewardText, UiConfig.Text.CardBody, UiConfig.Colors.TextMuted)
+		-- The haul this door keeps safe, from the coins picked up so far this run.
+		local text = door.RewardText
+		if bank and (self._haul or 0) > 0 then
+			text = string.format("%s\nYour haul: %d coins", tostring(text), self._haul)
+		end
+		local body = UiTheme.label("Body", button, text, UiConfig.Text.CardBody, ink or UiConfig.Colors.TextMuted)
 		body.Position = UDim2.new(0, 0, 0, 78)
 		body.Size = UDim2.new(1, 0, 1, -104)
 		body.TextWrapped = true
 		body.TextYAlignment = Enum.TextYAlignment.Top
 		local votes = UiTheme.label("Votes", button, (door.Votes or 0) > 0 and string.format("%d vote%s", door.Votes,
-			door.Votes == 1 and "" or "s") or "", UiConfig.Text.Small, UiConfig.Colors.Health)
+			door.Votes == 1 and "" or "s") or "", UiConfig.Text.Small, ink or UiConfig.Colors.Health)
 		votes.AnchorPoint = Vector2.new(0, 1)
 		votes.Position = UDim2.new(0, 0, 1, 0)
 		votes.Size = UDim2.new(1, 0, 0, 18)

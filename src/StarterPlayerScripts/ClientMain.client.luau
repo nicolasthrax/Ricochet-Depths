@@ -369,6 +369,9 @@ end)
 
 Remotes.Get("PlayerStateChanged").OnClientEvent:Connect(function(snapshot)
 	hud:UpdatePlayer(snapshot)
+	if type(snapshot) == "table" then
+		cardPicker:SetHaul(snapshot.Coins)
+	end
 	if type(snapshot) == "table" and type(snapshot.FireCooldown) == "number" then
 		-- AimController predicts its own cooldown from this, purely for feedback.
 		player:SetAttribute("FireCooldown", snapshot.FireCooldown)

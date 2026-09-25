@@ -12,14 +12,21 @@ local UiTheme = require(script.Parent.UiTheme)
 local HudView = {}
 HudView.__index = HudView
 
+-- Where the health panel sits. In a run it moves up the left edge, out from under the thumb on
+-- the move stick, and starts below the centre stack (room panel, Trial line, boss bar), which
+-- ends 132 px down, so the two never overlap at any screen width.
+local HEALTH_IN_LOBBY = UDim2.new(0, 16, 1, -112)
+local HEALTH_IN_RUN = UDim2.new(0, 16, 0, 136)
+
 function HudView.new(playerGui)
 	local self = setmetatable({}, HudView)
 
 	self.gui = UiTheme.screenGui("RicochetHud", playerGui, 10)
 
 	local health = UiTheme.panel("HealthPanel", self.gui)
-	health.Position = UDim2.new(0, 16, 1, -112)
+	health.Position = HEALTH_IN_LOBBY
 	health.Size = UDim2.fromOffset(260, 86)
+	self.healthPanel = health
 	UiTheme.padding(health, 10)
 	self.healthLabel = UiTheme.label("HealthLabel", health, "100 / 100", UiConfig.Text.Hud)
 	self.healthLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -424,6 +431,7 @@ function HudView:UpdateRun(snapshot)
 	-- Upgrades belong to a run: hidden in the lobby, and cleared when a run ends. The Store
 	-- button is the reverse.
 	self.upgradePanel.Visible = inRun
+	self.healthPanel.Position = inRun and HEALTH_IN_RUN or HEALTH_IN_LOBBY
 	self.storeButton.Visible = not inRun
 	self.baseButton.Visible = not inRun and self._onBase ~= nil
 	if snapshot.State ~= RunConfig.States.Combat then

@@ -33,6 +33,18 @@ describe("HudView", function()
 		expect(hud.storeButton.Visible).toBe(false)
 	end)
 
+	it("moves the health panel up the left edge in a run, clear of the thumbstick and the centre stack", function()
+		local hud = HudView.new(Instance.new("Folder"))
+		expect(hud.healthPanel.Position.Y.Scale).toBe(1)
+		hud:UpdateRun(snapshot(RunConfig.States.Combat))
+		expect(hud.healthPanel.Position.Y.Scale).toBe(0)
+		-- Below the boss bar, the lowest thing in the centre stack.
+		local boss = hud.bossPanel
+		expect(hud.healthPanel.Position.Y.Offset).toBeGreaterThan(boss.Position.Y.Offset + boss.Size.Y.Offset)
+		hud:UpdateRun(snapshot(RunConfig.States.Lobby))
+		expect(hud.healthPanel.Position.Y.Scale).toBe(1)
+	end)
+
 	it("clears last run's upgrades on the way back to the lobby", function()
 		local hud = HudView.new(Instance.new("Folder"))
 		hud:UpdatePlayer({ Health = 80, MaxHealth = 100, Alive = true, Coins = 0, Upgrades = { { Title = "Split Shot", Stacks = 1 } } })

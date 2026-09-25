@@ -4,9 +4,15 @@ Goal: make Ricochet Depths match the original concept in `steam-to-roblox.xlsx` 
 Roblox Playbook, Concept MVP sheets) in full. Branch: `claude/concept-alignment`, started from
 `claude/vigilant-keller-xt8dly` at `04e2266` (2.0.0).
 
-State at handoff: **all checks green** (`./scripts/check.sh`: syntax, lint, Rojo build, 666
-headless tests). Two work items have been done. `BaseService` exists but **is not wired into
-`GameBootstrap` yet**, so nothing about the base shows up in-game so far.
+**State now: sections A–G are all done** (3.0.0). `./scripts/check.sh` is green: syntax, lint,
+Rojo build (7.7.0 works as well as 7.4.4), and 806 headless tests. Every commit is on
+`origin/claude/concept-alignment`; no PR has been opened. **Nothing on this branch has been run
+in Roblox Studio.** The next step is the Studio pass in `docs/RELEASE_CHECKLIST.md` §2d, then
+the Creator Hub steps in §8 (new pass/product ids, regional pricing, private server price).
+The concept spreadsheet is at `~/Downloads/steam-to-roblox.xlsx` on the owner's machine;
+`docs/CONCEPT_TRACEABILITY.md` maps every row of it to code and tests.
+
+(The text below is the original handoff, annotated section by section as the work landed.)
 
 ## Tooling
 
@@ -330,7 +336,15 @@ Original notes:
   RESPEC buttons.
 - HUD: the daily modifier chip. Onboarding banner: "Bounce shots. Break everything."
 
-### G. Docs and wrap-up (task 8)
+### G. Docs and wrap-up (task 8): DONE
+Done: `docs/CONCEPT_TRACEABILITY.md`, `docs/GO_NO_GO.md`, README, PROGRESS (3.0.0 milestone,
+changelog and pacing), RELEASE_CHECKLIST (3.0 build rows, §2d Studio checks for plots, the first
+descent and the new UI, §8 new Creator Hub ids, regional pricing, private server price, max
+players 8), TEST_PLAN rows, `RunConfig.Version = "3.0.0"`. Found while writing the traceability
+doc and fixed: the concept's "pulsing aim line" (`AimIndicator:Pulse`, first descent only) and
+3.0 hints that veterans would never have seen (`OnboardingView` NEW_HINTS).
+
+Original notes:
 - Write a concept-to-code traceability doc: every row of the concept's Loop stack, MVP plan,
   Launch economy, Risks, First 60 seconds and Go / no-go sections, mapped to the module and
   test that covers it (or noted as deliberately deferred per the concept).

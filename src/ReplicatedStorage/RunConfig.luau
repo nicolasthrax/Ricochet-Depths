@@ -1,7 +1,7 @@
 -- Run shape and pacing. A descent is deliberately short enough for a Roblox session.
 local RunConfig = {}
 
-RunConfig.Version = "2.0.0"
+RunConfig.Version = "3.0.0"
 
 -- Explicit state machine. MatchService only ever moves between these.
 RunConfig.States = {

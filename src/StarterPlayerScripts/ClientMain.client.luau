@@ -315,6 +315,8 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	-- ZoneAmbience tweens the lighting from this.
 	local inRun = snapshot.State ~= RunConfig.States.Lobby and snapshot.State ~= RunConfig.States.Results
 	player:SetAttribute("Zone", inRun and type(snapshot.Zone) == "string" and snapshot.Zone ~= "" and snapshot.Zone or "Lobby")
+	-- AimController pulses a hint line until the first shot of a first descent.
+	player:SetAttribute("FirstDescent", inRun and snapshot.FirstDescent == true or nil)
 	local inLobby = snapshot.State == RunConfig.States.Lobby
 	menu:SetVisible(inLobby)
 	if not inLobby then

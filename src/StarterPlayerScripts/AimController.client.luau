@@ -72,6 +72,30 @@ local function muzzlePosition(worldDirection)
 	return base + worldDirection * ProjectileConfig.MuzzleOffset
 end
 
+-- The first descent's pulsing hint line, shown until the first shot (ClientMain sets the
+-- FirstDescent attribute from the run state).
+local hintDone = false
+local hintShowing = false
+RunService.RenderStepped:Connect(function()
+	local want = not hintDone and not activeInput and canAim() and player:GetAttribute("FirstDescent") == true
+	local character = player.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if want and rootPart then
+		local look = rootPart.CFrame.LookVector
+		local flat = Vector3.new(look.X, 0, look.Z)
+		if flat.Magnitude > 0.01 then
+			local direction = flat.Unit
+			indicator:Pulse(muzzlePosition(direction), direction, AimIndicator.PulseAlpha(os.clock()))
+			hintShowing = true
+			return
+		end
+	end
+	if hintShowing and not activeInput then
+		hintShowing = false
+		indicator:Hide()
+	end
+end)
+
 local function endDrag()
 	RunService:UnbindFromRenderStep(RENDER_STEP)
 	activeInput = nil
@@ -175,6 +199,7 @@ UserInputService.InputEnded:Connect(function(input)
 			player:SetAttribute("Orbs", math.max(orbs - 1, 0))
 		end
 		fireProjectile:FireServer(worldDirection, power)
+		hintDone = true
 		-- Heard the instant the shot is sent: waiting for the server would make it feel laggy.
 		SoundPlayer.Shared():Play("Fire")
 	end

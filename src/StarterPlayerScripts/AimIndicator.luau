@@ -139,6 +139,25 @@ function AimIndicator:Show(power, ready, muzzle, worldDirection)
 	self:_showWorld(muzzle, worldDirection, power, ready == false and AimConfig.CooldownColor or AimConfig.LineColor)
 end
 
+-- The first-descent hint: before a new player's first shot, a line pulses out ahead of them
+-- (they land facing the targets), showing where a shot would go. alpha (0..1) is the pulse,
+-- from AimIndicator.PulseAlpha. Hidden again by Hide or by the first real aim.
+function AimIndicator:Pulse(muzzle, worldDirection, alpha)
+	if not muzzle or not worldDirection then
+		return
+	end
+	self:_showWorld(muzzle, worldDirection, 0.6, AimConfig.LineColor)
+	local fade = 0.25 + 0.6 * (1 - math.clamp(alpha or 1, 0, 1))
+	for part, transparency in self._worldParts do
+		part.Transparency = math.clamp(transparency + fade, 0, 1)
+	end
+end
+
+-- A 0..1 pulse over time: bright, fade, bright, about once a second.
+function AimIndicator.PulseAlpha(now)
+	return (math.sin(now * math.pi * 2) + 1) / 2
+end
+
 function AimIndicator:Hide()
 	self:_hideWorld()
 	self._bar.Visible = false

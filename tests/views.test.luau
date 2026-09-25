@@ -434,3 +434,38 @@ describe("presets, preview and daily extras", function()
 		expect(view.streakLabel.Text:find("never lose your place")).toBeTruthy()
 	end)
 end)
+
+describe("first descent aim hint", function()
+	local AimIndicator = __require("AimIndicator")
+
+	it("pulses a hint line ahead of the player, fading in and out", function()
+		local world = Instance.new("Folder")
+		local indicator = AimIndicator.new(Instance.new("Folder"), world, 0)
+		indicator:Pulse(Vector3.new(0, 3, 0), Vector3.new(0, 0, -1), 1)
+		local line = world:FindFirstChild("AimLine", true) or indicator._worldLine
+		local bright = line.Transparency
+		expect(bright).toBeLessThan(1)
+		indicator:Pulse(Vector3.new(0, 3, 0), Vector3.new(0, 0, -1), 0)
+		expect(line.Transparency).toBeGreaterThan(bright)
+		indicator:Hide()
+		expect(line.Transparency).toBe(1)
+		expect(AimIndicator.PulseAlpha(0.25)).toBeCloseTo(1)
+		expect(AimIndicator.PulseAlpha(0.75)).toBeCloseTo(0)
+	end)
+end)
+
+describe("onboarding hints", function()
+	local OnboardingView = __require("OnboardingView")
+
+	it("shows the first-descent banner, and the new Bank loot and base hints even to veterans", function()
+		local view = OnboardingView.new(Instance.new("Folder"))
+		expect(view:Show("FirstDescent")).toBe(true)
+		expect(view.label.Text).toBe("Bounce shots. Break everything.")
+		expect(view:Show("FirstDescent")).toBe(false) -- once a session
+		local veteran = OnboardingView.new(Instance.new("Folder"))
+		veteran:MarkAllSeen()
+		expect(veteran:Show("Aim")).toBe(false)
+		expect(veteran:Show("BankLoot")).toBe(true)
+		expect(veteran:Show("Base")).toBe(true)
+	end)
+end)

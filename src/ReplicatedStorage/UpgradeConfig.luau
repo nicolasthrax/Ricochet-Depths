@@ -45,8 +45,10 @@ UpgradeConfig.BaseStats = {
 	RegenBonus = 0,
 	-- Studs added to the coin magnet's reach (Armory: Coin Magnet).
 	MagnetBonus = 0,
-	-- Multiplies the whole payout; the 2x Coins pass sets it to 2.
+	-- Multiplies the whole payout: party and friend bonuses and the daily modifier add to it.
 	CoinMultiplier = 1,
+	-- Multiplies the experience a run pays (the Training Yard adds to it).
+	XpMultiplier = 1,
 
 	-- Shot effects (CombatEffects). All start at 0, which means "off".
 	-- Chance (0..1) that a hit is a critical, dealing CritMultiplier times the damage.

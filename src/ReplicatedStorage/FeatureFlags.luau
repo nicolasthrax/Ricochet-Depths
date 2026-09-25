@@ -43,9 +43,11 @@ FeatureFlags.Challenges = true
 -- Random room events (Treasure Runners).
 FeatureFlags.RoomEvents = true
 
+-- The home base: twelve buildings on a grid, offline workers and friend visits (BaseService).
+FeatureFlags.BaseBuilding = true
+
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false
-FeatureFlags.BaseBuilding = false
 FeatureFlags.Matchmaking = false
 FeatureFlags.SecondBoss = false
 

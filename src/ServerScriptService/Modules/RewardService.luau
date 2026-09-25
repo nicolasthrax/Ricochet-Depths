@@ -43,7 +43,8 @@ function RewardService.Experience(playerState, outcome, eliteCleared, heatMultip
 	if outcome == "Extracted" then
 		xp += rates.Extracted
 	end
-	return math.max(math.floor(xp * (heatMultiplier or 1)), 0)
+	local stats = playerState.stats or {}
+	return math.max(math.floor(xp * (heatMultiplier or 1) * (stats.XpMultiplier or 1)), 0)
 end
 
 -- `amount` after the player's multipliers, floored and capped.

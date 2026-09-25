@@ -16,6 +16,7 @@ local RigView = __require("RigView")
 local RunConfig = __require("RunConfig")
 local ShopConfig = __require("ShopConfig")
 local ShopView = __require("ShopView")
+local UiConfig = __require("UiConfig")
 
 -- A BaseSync payload for a fresh base with some coins.
 local function baseState(overrides)
@@ -227,8 +228,9 @@ describe("CardPickerView 3.0", function()
 		expect(view.rerollButton.Visible).toBe(false)
 	end)
 
-	it("marks the Bank loot door", function()
+	it("marks the Bank loot door as the gold primary door, with the haul it keeps", function()
 		local view = CardPickerView.new(Instance.new("Folder"), function() end, function() end)
+		view:SetHaul(214)
 		view:SetDoors({ Doors = {
 			{ Id = 1, RoomName = "Cold Smelter", Zone = "Foundry", Kind = "Normal", RewardTitle = "Heal", RewardText = "h" },
 			{ Id = 2, RoomName = "The Surface", Zone = "Ruins", Kind = "Extract", RewardTitle = "Bank the loot", RewardText = "b" },
@@ -236,6 +238,38 @@ describe("CardPickerView 3.0", function()
 		view:ShowDoors()
 		local bank = view.row:FindFirstChild("Door2")
 		expect(bank:FindFirstChild("Kind").Text).toBe("BANK LOOT")
+		expect(bank.BackgroundColor3).toBe(UiConfig.Colors.PrimaryButton)
+		expect(bank:FindFirstChild("Body").Text:find("Your haul: 214 coins")).toBeTruthy()
+		local other = view.row:FindFirstChild("Door1")
+		expect(other.BackgroundColor3).never().toBe(UiConfig.Colors.PrimaryButton)
+		expect(other:FindFirstChild("Body").Text).toBe("h")
+	end)
+
+	it("shows the fusion a card builds toward", function()
+		local view = CardPickerView.new(Instance.new("Folder"), function() end, function() end)
+		local shown = payload()
+		shown.Cards[2].FusionHint = { Fusion = "Fusillade", Have = 1, Need = 2 }
+		view:Show(shown)
+		local split = view.row:FindFirstChild("Card2")
+		expect(split:FindFirstChild("FusionHint").Text).toBe("1 / 2  →  Fusillade")
+		expect(view.row:FindFirstChild("Card1"):FindFirstChild("FusionHint")).toBeNil()
+	end)
+
+	it("keeps the cards and the reroll button inside a landscape phone screen", function()
+		local view = CardPickerView.new(Instance.new("Folder"), function() end, function() end, { reroll = function() end })
+		view:Show(payload())
+		-- The button hangs from the bottom edge, inside it; the row ends above the button's top.
+		local button = view.rerollButton
+		expect(button.AnchorPoint.Y).toBe(1)
+		expect(button.Position.Y.Scale).toBe(1)
+		expect(button.Position.Y.Offset).toBeLessThan(0)
+		local buttonTop = -button.Position.Y.Offset + button.Size.Y.Offset
+		local rowBottom = -(view.row.Position.Y.Offset + view.row.Size.Y.Offset)
+		expect(rowBottom).toBeGreaterThan(buttonTop)
+		-- On a 300 px-tall screen the row still has room for a card's minimum height (150 px).
+		expect(300 * view.row.Size.Y.Scale + view.row.Size.Y.Offset).toBeGreaterThanOrEqual(150)
+		expect(view.respecButton.Position.Y.Offset).toBe(button.Position.Y.Offset)
+		expect(view.respecButton.AnchorPoint.Y).toBe(1)
 	end)
 end)
 

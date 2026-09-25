@@ -105,6 +105,49 @@ describe("offer generation", function()
 		expect(UpgradeService.IsEligible(UpgradeConfig.Get("Fusillade"), state)).toBe(true)
 	end)
 
+	it("tells a card which fusion it builds toward, counted in its own stacks", function()
+		local state = newState()
+		local split = UpgradeConfig.Get("SplitShot")
+		local hint = UpgradeService.FusionHint(split, state)
+		expect(hint.Fusion).toBe("Fusillade")
+		expect(hint.Have).toBe(0)
+		expect(hint.Need).toBe(2)
+		state:AddUpgrade(split)
+		expect(UpgradeService.FusionHint(split, state).Have).toBe(1)
+		-- Fused cards and cards no fusion needs carry no hint; nor does a part of a fusion owned.
+		expect(UpgradeService.FusionHint(UpgradeConfig.Get("Fusillade"), state)).toBeNil()
+		expect(UpgradeService.FusionHint(UpgradeConfig.Get("Plating"), state)).toBeNil()
+		state:AddUpgrade(split)
+		state:AddUpgrade(UpgradeConfig.Get("Fusillade"))
+		expect(UpgradeService.FusionHint(split, state)).toBeNil()
+	end)
+
+	it("points a card that feeds two fusions at the one furthest along", function()
+		local state = newState()
+		local long = UpgradeConfig.Get("LongBounce")
+		expect(UpgradeService.FusionHint(long, state).Fusion).toBe("Caroms") -- a tie: declared order
+		state:AddUpgrade(UpgradeConfig.Get("Overcharge"))
+		state:AddUpgrade(UpgradeConfig.Get("Overcharge"))
+		local hint = UpgradeService.FusionHint(long, state)
+		expect(hint.Fusion).toBe("Ricochet Storm")
+		expect(hint.Need).toBe(1)
+	end)
+
+	it("sends each card's fusion hint to the client", function()
+		local service = UpgradeService.new(3)
+		local state = newState()
+		local offer = service:BuildOffer(1, state, 0)
+		local payload = UpgradeService.ToClientPayload(offer, 0)
+		for index, card in payload.Cards do
+			local expected = UpgradeService.FusionHint(offer.cards[index], state)
+			if expected then
+				expect(card.FusionHint.Fusion).toBe(expected.Fusion)
+			else
+				expect(card.FusionHint).toBeNil()
+			end
+		end
+	end)
+
 	it("gates stat-conditional cards until the stat qualifies", function()
 		local state = newState()
 		expect(UpgradeService.IsEligible(UpgradeConfig.Get("TightGroup"), state)).toBe(false)

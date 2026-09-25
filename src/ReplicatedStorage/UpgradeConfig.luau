@@ -561,18 +561,24 @@ for _, card in UpgradeConfig.Cards do
 	card.Label, card.Icon, card.UnlockLevel = face[1], face[2], face[3]
 end
 
--- The cards a fusion is built from: card id -> true for every prerequisite of any fused card.
+-- The cards a fusion is built from: card id -> the fused cards needing it, in declared order.
 local fusionParts = {}
 for _, card in UpgradeConfig.Cards do
 	if card.Rarity == "Fused" and card.Requires and card.Requires.Cards then
 		for partId in card.Requires.Cards do
-			fusionParts[partId] = true
+			fusionParts[partId] = fusionParts[partId] or {}
+			table.insert(fusionParts[partId], card)
 		end
 	end
 end
 
 function UpgradeConfig.IsFusionPart(cardId)
-	return fusionParts[cardId] == true
+	return fusionParts[cardId] ~= nil
+end
+
+-- The fused cards a card is a prerequisite of (empty when none).
+function UpgradeConfig.FusionsUsing(cardId)
+	return fusionParts[cardId] or {}
 end
 
 function UpgradeConfig.Get(cardId)

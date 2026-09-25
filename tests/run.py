@@ -11,15 +11,20 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "src")
+MVP = os.path.join(ROOT, "mvp")
+# Two games share this harness: the 3.0 game (src/) and the lane game (mvp/, mvp.project.json).
+# Test files named mvp_*.test.luau are bundled with mvp/ modules, the rest with src/ modules, so
+# module names only need to be unique within each tree.
+MVP_TEST_PREFIX = "mvp_"
 TESTS = os.path.join(ROOT, "tests")
 HARNESS = os.path.join(TESTS, "harness")
 LUAU = os.environ.get("LUAU_BIN", "luau")
 
 
-def collect_modules():
+def collect_modules(source_root):
     """ModuleScripts only: .server/.client files are entry points with side effects."""
     modules = {}
-    for dirpath, _, filenames in os.walk(SRC):
+    for dirpath, _, filenames in sorted(os.walk(source_root)):
         for filename in sorted(filenames):
             if not filename.endswith(".luau"):
                 continue
@@ -69,8 +74,8 @@ def rewrite_requires(source, known):
     return "".join(out)
 
 
-def build_bundle(test_files):
-    modules = collect_modules()
+def build_bundle(test_files, source_root):
+    modules = collect_modules(source_root)
     # RobloxStub must come first (it installs the globals everything else builds on), then the
     # runner, then any remaining harness helpers.
     ordered = ["RobloxStub.luau", "TestRunner.luau"]
@@ -116,16 +121,25 @@ def main():
         print("no test files found")
         return 1
 
-    bundle, modules = build_bundle(test_files)
+    groups = [("src", SRC, []), ("mvp", MVP, [])]
+    for path in test_files:
+        is_mvp = os.path.basename(path).startswith(MVP_TEST_PREFIX)
+        groups[1 if is_mvp else 0][2].append(path)
+
     out_dir = os.environ.get("TEST_OUT_DIR", os.path.join(ROOT, ".test-build"))
     os.makedirs(out_dir, exist_ok=True)
-    bundle_path = os.path.join(out_dir, "bundle.luau")
-    with open(bundle_path, "w") as handle:
-        handle.write(bundle)
-
-    print(f"bundled {len(modules)} modules + {len(test_files)} test file(s)")
-    result = subprocess.run([LUAU, bundle_path])
-    return result.returncode
+    status = 0
+    for name, source_root, files in groups:
+        if not files:
+            continue
+        bundle, modules = build_bundle(files, source_root)
+        bundle_path = os.path.join(out_dir, f"bundle-{name}.luau")
+        with open(bundle_path, "w") as handle:
+            handle.write(bundle)
+        print(f"[{name}] bundled {len(modules)} modules + {len(files)} test file(s)")
+        result = subprocess.run([LUAU, bundle_path])
+        status = status or result.returncode
+    return status
 
 
 if __name__ == "__main__":

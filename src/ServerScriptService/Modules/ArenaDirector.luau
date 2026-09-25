@@ -20,7 +20,8 @@ local ArenaDirector = {}
 ArenaDirector.__index = ArenaDirector
 
 -- options: parent (where slot folders go), planeY, seed, maxSlots, shared (MatchService deps
--- every slot shares: net, world, persistence, telemetry, metaProvider, planRun, runKeyPrefix),
+-- every slot shares: net, world, persistence, telemetry, metaProvider, planRun, runKeyPrefix,
+-- wallClock, areFriends),
 -- effectsRemote (optional), onReleased(players) called when a group is sent home.
 function ArenaDirector.new(options)
 	return setmetatable({
@@ -87,6 +88,8 @@ function ArenaDirector:_createSlot(index)
 		events = FeatureFlags.IsEnabled("RoomEvents"),
 	}
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
+	-- 3.0: the daily biome modifier.
+	deps.dailyModifiers = FeatureFlags.IsEnabled("DailyModifiers")
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs
 	-- would share a payout key and the profile ledger would refuse the second.
 	deps.runKeyPrefix = string.format("%s-a%d", self._shared.runKeyPrefix or "local", index)

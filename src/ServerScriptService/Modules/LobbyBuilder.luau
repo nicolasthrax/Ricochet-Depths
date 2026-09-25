@@ -106,6 +106,7 @@ function LobbyBuilder.Build(parent)
 	LobbyBuilder._buildLandmarks(lobby, signs, origin)
 	LobbyBuilder._buildAmbience(lobby, origin)
 	local leaderboards = LobbyBuilder._buildLeaderboards(lobby, origin)
+	local modifierBoard = LobbyBuilder._buildModifierBoard(signs, origin)
 	LobbyBuilder._buildBarrier(lobby, origin)
 
 	return lobby, soloPrompt, {
@@ -113,7 +114,16 @@ function LobbyBuilder.Build(parent)
 		outpostPrompt = prompts.OutpostKiosk,
 		cosmeticsPrompt = prompts.CosmeticsKiosk,
 		leaderboards = leaderboards,
+		modifierBoard = modifierBoard,
 	}
+end
+
+-- Today's biome modifier, on a board beside the walkway facing the spawn. GameBootstrap prints
+-- it (and reprints it when the UTC day turns).
+function LobbyBuilder._buildModifierBoard(signs, origin)
+	local floorY = RoomConfig.FloorY
+	return Signage.Board(signs, "ModifierBoard", Vector3.new(16, 3.4, 0.2), origin + Vector3.new(-17, floorY + 5, 10),
+		SOUTH, "TODAY IN THE DEPTHS", Color3.fromRGB(255, 214, 120), SIGN_BACK)
 end
 
 -- The pedestal at the north end. Its prompt starts a one-player run.

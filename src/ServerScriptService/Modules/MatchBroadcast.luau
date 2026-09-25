@@ -29,6 +29,9 @@ function Broadcast.methods:GetRunSnapshot()
 		Objective = self:_objectiveSnapshot(),
 		Challenge = self._challengeSnapshot and self:_challengeSnapshot() or nil,
 		Doors = self._state == RunConfig.States.UpgradeChoice and self._doorsSnapshot and self:_doorsSnapshot(self._now) or nil,
+		-- Today's biome modifier (the HUD chip), and whether this is a player's first descent.
+		Modifier = self.GetModifier and self:GetModifier() or nil,
+		FirstDescent = self._runOptions and self._runOptions.firstDescent or nil,
 	}
 end
 

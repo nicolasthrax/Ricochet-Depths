@@ -150,7 +150,36 @@ Original notes:
     match, auto-start a solo **first descent** (see C3).
 - `RELEASE_CHECKLIST.md`: set the server's max players to 8, to match the plot count.
 
-### C. Run changes (task 4)
+### C. Run changes (task 4): DONE (server side; card-picker/results UI is F)
+Done, all covered by `tests/runloop.test.luau`:
+- C1 `RewardConfig.DefeatHaulShare = 0.5` (`RewardService.HaulShare/HaulKept`; Aborted keeps all,
+  leaving mid-run keeps the share). `ExtractPoint` on ColossusHall, ForgeHall and the tutorial's
+  FirstElite; `MatchRoute:_rollDoors` appends the `RouteConfig.BankLoot` door (always last, so a
+  tie keeps descending); winning it sets `_banked` and `MatchService.Step` finishes "Extracted"
+  with `RewardConfig.BankBonusByZone[zone]`. Summary gains `Haul`, `HaulLost`, `Banked`.
+- C2 `DailyModifierConfig` (7 modifiers, `ForDay(day % 7)`, `Today`, `Describe`, `Bonus`).
+  `deps.dailyModifiers` (ArenaDirector reads `FeatureFlags.DailyModifiers`) and `deps.wallClock`.
+  Stats in `_refreshMeta`; enemy health/champions in `_applyPact`; bonus once a day via
+  `Limits.ModifierDay` + ledger key `dailymod:<day>` (summary `DailyBonus`). Lobby
+  `ModifierBoard` (printed by `refreshModifierSign`), `MetaSync.Modifier`, run snapshot `Modifier`.
+- C3 `RunConfig.FirstDescent` + Tier-0 rooms FirstPit/FirstPair/FirstElite (`CoinBurst`,
+  `ExtractPoint`). `MatchService:_planFor` prepends them (slots `false`); ForceCards via
+  `BuildOffer(..., { force })`; banner Notify Callout at room 1; `Flags.FirstDescentDone` set in
+  `_finish`; no Gallery doors in the tutorial; snapshot `FirstDescent = true`.
+- C4 Card `Label`/`Icon`/`UnlockLevel` (the `FACES` table in `UpgradeConfig`), `IsFusionPart`,
+  `UpgradeService.Recommend` (offer.recommended, payload `Recommended`, `ResolveExpired` picks it),
+  `Reroll`, `Reopen` (respec), `ClearSettled`. `MatchFlow:RerollOffer` (free once a run
+  (`RunConfig.Cards`), then `SpendOnUpgrade(p, "RerollUse", n+1, 1, "Rerolls")`) and
+  `RespecCard` (rounds 1-2, once a run). Remotes `RerollOffer`, `RespecCard`. Offer payload has
+  `FreeRerolls`, `Rerolls`, `CanRespec`. Level reaches runs as `meta.level` -> `PlayerState.level`.
+- C5 `RewardConfig.Party` (+5% per extra member, max +15%, +10% friend) in `_partyBonus`;
+  `RunConfig.PartyScaling.EnemyHealthPerExtra = 0.35` (there was no party scaling before).
+  `FriendCache` (background `IsFriendsWith`, never yields in a run) wired in `GameBootstrap`.
+- C6 `./scripts/dryrun.sh` (probing bot): full-run floor 389 s (6.5 min) vs target 420 s; median
+  rooms 1-3 ~164 s (bank at ColossusHall ~3 min), rooms 1-6 ~255 s (bank at ForgeHall ~4.5 min).
+  Record in PROGRESS.md (G). Bots cannot bank-shot: these are floors, not predictions.
+
+Original notes:
 1. **Haul at risk + Bank loot:**
    - On defeat, keep only `RewardConfig.DefeatHaulShare = 0.5` of the coins collected. Today
      coins are kept in full; see `RewardService.Compute` and the tests that assume full coins.

@@ -32,6 +32,8 @@ function PlayerState:SetMeta(meta)
 		trail = type(meta) == "table" and meta.trail or nil,
 		rig = type(meta) == "table" and type(meta.rig) == "string" and meta.rig or nil,
 	}
+	-- The player's account level, which gates cards with an UnlockLevel. nil: no gating.
+	self.level = type(meta) == "table" and type(meta.level) == "number" and meta.level or nil
 end
 
 -- The stats a run starts from: the base values plus shop bonuses. Cards fold over these.
@@ -85,6 +87,9 @@ function PlayerState:ResetRun()
 	self.surgeLevel = 1
 	self.lastDashAt = -math.huge
 	self.trickShots = 0
+	-- Card-round allowances: rerolls taken free this run, and whether the respec is spent.
+	self.freeRerollsUsed = 0
+	self.respecUsed = false
 end
 
 function PlayerState:OrbCapacity()
@@ -211,6 +216,25 @@ function PlayerState:AddUpgrade(card)
 	self:RecomputeStats()
 	-- A new orb arrives in hand.
 	self.orbsHeld = math.min(self.orbsHeld + math.max(self:OrbCapacity() - capacity, 0), self:OrbCapacity())
+	return true
+end
+
+-- Takes one stack of a card back off (a respec). Stats are refolded from the stacks, so nothing
+-- the card did lingers. Returns false if the card is not held.
+function PlayerState:RemoveUpgrade(cardId)
+	local stacks = self:GetStacks(cardId)
+	if stacks <= 0 then
+		return false
+	end
+	self.upgrades[cardId] = stacks > 1 and stacks - 1 or nil
+	for index = #self.upgradeOrder, 1, -1 do
+		if self.upgradeOrder[index] == cardId then
+			table.remove(self.upgradeOrder, index)
+			break
+		end
+	end
+	self:RecomputeStats()
+	self.orbsHeld = math.min(self.orbsHeld, self:OrbCapacity())
 	return true
 end
 

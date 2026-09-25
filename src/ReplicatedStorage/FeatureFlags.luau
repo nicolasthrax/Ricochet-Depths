@@ -47,6 +47,8 @@ FeatureFlags.RoomEvents = true
 FeatureFlags.BaseBuilding = true
 -- A new player is dropped straight into a scripted solo first descent instead of a title card.
 FeatureFlags.FirstDescent = true
+-- One biome modifier a day for every run, with a once-a-day bonus (DailyModifierConfig).
+FeatureFlags.DailyModifiers = true
 
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false

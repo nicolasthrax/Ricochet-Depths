@@ -13,21 +13,36 @@ function RewardService.new()
 	return setmetatable({ _granted = {} }, RewardService)
 end
 
--- Coins collected, plus the clear bonus, times the player's multipliers (Fortune and cards via
--- RewardMultiplier, the 2x Coins pass via CoinMultiplier). Only "Extracted" earns the whole
--- bonus; every other outcome keeps the coins and a share of the bonus. heatMultiplier is the
--- Depth Pact's reward multiplier (1 at Heat 0).
-function RewardService.Compute(playerState, outcome, eliteCleared, heatMultiplier)
+-- The share of the coins collected an outcome keeps. Extracting keeps the whole haul, and so does
+-- an aborted run (the server failed it, not the player); anything else keeps DefeatHaulShare.
+function RewardService.HaulShare(outcome)
+	if outcome == "Extracted" or outcome == "Aborted" then
+		return 1
+	end
+	return RewardConfig.DefeatHaulShare
+end
+
+-- The coins of a haul an outcome keeps, before multipliers.
+function RewardService.HaulKept(playerState, outcome)
+	return math.floor((playerState.coins or 0) * RewardService.HaulShare(outcome))
+end
+
+-- Coins kept, plus the clear bonus, times the player's multipliers (buildings and cards via
+-- RewardMultiplier, party, premium and the daily modifier via CoinMultiplier). Only "Extracted"
+-- earns the whole bonus and keeps the whole haul. heatMultiplier is the Depth Pact's reward
+-- multiplier (1 at Heat 0). extractionBonus replaces ExtractionBonus for a run banked early.
+function RewardService.Compute(playerState, outcome, eliteCleared, heatMultiplier, extractionBonus)
 	local bonus = playerState.roomsCleared * RewardConfig.PerRoomCleared
 	if eliteCleared then
 		bonus += RewardConfig.EliteBonus
 	end
 	if outcome == "Extracted" then
-		bonus += RewardConfig.ExtractionBonus
+		bonus += extractionBonus or RewardConfig.ExtractionBonus
 	else
 		bonus = math.floor(bonus * RewardConfig.DefeatMultiplier)
 	end
-	return RewardService.Multiply(playerState, ((playerState.coins or 0) + bonus) * (heatMultiplier or 1))
+	local kept = RewardService.HaulKept(playerState, outcome)
+	return RewardService.Multiply(playerState, (kept + bonus) * (heatMultiplier or 1))
 end
 
 -- Experience for a run. Every outcome keeps what the kills and clears earned; only extracting

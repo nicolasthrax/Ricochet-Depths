@@ -75,7 +75,9 @@ function Route.methods:_rollDoors()
 	while #rooms < RouteConfig.Doors do
 		table.insert(rooms, planned)
 	end
-	local rewards = self:_drawRewards(#rooms, self._lastReward == "Gallery" and "Gallery" or nil)
+	-- No bonus Gallery twice in a row, nor inside the scripted first descent.
+	local noGallery = self._lastReward == "Gallery" or planned.Kind == "Tutorial"
+	local rewards = self:_drawRewards(#rooms, noGallery and "Gallery" or nil)
 	local doors = {}
 	for index, room in rooms do
 		local reward = RouteConfig.Rewards[rewards[index] or "Treasure"]
@@ -89,6 +91,21 @@ function Route.methods:_rollDoors()
 			RewardTitle = reward.Title,
 			RewardText = reward.Text,
 			room = room,
+		})
+	end
+	-- An extract point: the last door banks the haul and ends the run.
+	local current = self._plan[self._roomIndex]
+	if current and current.ExtractPoint then
+		local bank = RouteConfig.BankLoot
+		table.insert(doors, {
+			Id = #doors + 1,
+			RoomId = "Surface",
+			RoomName = bank.RoomName,
+			Zone = current.Zone,
+			Kind = "Extract",
+			Reward = bank.Id,
+			RewardTitle = bank.Title,
+			RewardText = bank.Text,
 		})
 	end
 	return doors
@@ -147,6 +164,12 @@ function Route.methods:_resolveDoors()
 		if (tally[door.Id] or 0) > (tally[winner.Id] or 0) then
 			winner = door
 		end
+	end
+	if winner.Reward == RouteConfig.BankLoot.Id then
+		-- Banked: the run ends here as an extraction (MatchService finishes it).
+		self._banked = true
+		self:_log("DoorChosen", { RunId = self._runId, Room = winner.RoomId, Reward = winner.Reward }, self._now)
+		return winner
 	end
 	local nextIndex = self._roomIndex + 1
 	self._plan[nextIndex] = winner.room
@@ -296,6 +319,13 @@ function Route.methods:_leaveRoom(definition, now)
 				RouteConfig.ChallengeCoinsPerZone * step) })
 		end
 		self:_log("Challenge", { RunId = self._runId, Id = challenge.def.Id, Won = won }, now)
+	end
+
+	-- A room that bursts into coins when it is cleared (the first descent's Hoard Keeper).
+	if definition and definition.CoinBurst and self._coins then
+		local current = self._rooms:GetCurrent()
+		local centre = current and current.bounds.center or Vector3.zero
+		self._coins:Drop(centre + Vector3.new(0, 3, 0), definition.CoinBurst * math.max(#self._participants, 1))
 	end
 
 	if self._activeReward == "Treasure" and self._coins then

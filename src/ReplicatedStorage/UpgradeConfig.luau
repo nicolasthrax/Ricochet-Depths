@@ -495,10 +495,84 @@ for _, card in MINOR do
 	table.insert(UpgradeConfig.Cards, card)
 end
 
+-- 3.0: how each card reads at a glance, and when it joins the pool. Label is three words at most
+-- (the card picker leads with it, the description sits under it); Icon is a glyph drawn on the
+-- card; UnlockLevel is the account level a card is first offered at (gradual unlocks: a new
+-- player meets the core ricochet cards first, the elements later). A card without an
+-- UnlockLevel is always in the pool. Fusions need no level: their prerequisites are the gate.
+local FACES = {
+	SplitShot = { "+1 projectile", "🔱" },
+	LongBounce = { "+2 bounces", "↩️" },
+	HeavyRound = { "Faster shots", "💨" },
+	Persistence = { "Longer flight", "⏳", 2 },
+	TightGroup = { "Tighter spread", "🎯", 2 },
+	SharpEdge = { "+1 damage", "🗡️" },
+	RapidCycle = { "Fire faster", "⚡" },
+	RicochetCharge = { "Bounce damage", "💥", 2 },
+	Plating = { "+25 health", "🛡️" },
+	FieldMend = { "Heal on clear", "➕" },
+	Scavenger = { "+25% coins", "💰" },
+	Reclaim = { "Coin trickle", "🪙" },
+	Fusillade = { "Fan of shots", "🎆" },
+	Caroms = { "Mega bounces", "🌀" },
+	KeenEdge = { "Crit chance", "✴️", 3 },
+	TrickShot = { "Bank shots crit", "🎱", 3 },
+	Ignite = { "Burning hits", "🔥", 4 },
+	ChainArc = { "Arcing hits", "⛓️", 4 },
+	Volatile = { "Exploding kills", "💣", 5 },
+	Frostbite = { "Slowing hits", "❄️", 5 },
+	Siphon = { "Heal on kill", "🩸", 2 },
+	Hunter = { "Boss slayer", "🏹", 6 },
+	SecondWind = { "Cheat death", "💖", 6 },
+	FleetFoot = { "Move faster", "👟" },
+	StormConduit = { "Storm arcs", "🌩️" },
+	Wildfire = { "Spreading fire", "☄️" },
+	AbsoluteZero = { "Shatter the frozen", "🧊" },
+	Deadeye = { "Triple crits", "👁️" },
+	ExtraOrb = { "+1 orb", "🔮" },
+	Overcharge = { "Charged bounces", "🔋", 2 },
+	Homecoming = { "Orbs roll home", "🧲" },
+	BlinkStrike = { "Dash damage", "⚔️", 3 },
+	Recall = { "Dash recalls orbs", "🔁", 3 },
+	QuickStep = { "Dash often", "🏃", 2 },
+	RicochetStorm = { "Bounce storm", "🌪️" },
+	Phantom = { "Phantom dash", "👻" },
+	-- Surge perks.
+	Bulwarker = { "+40 health", "🧱" },
+	Sharpen = { "+0.25 damage", "🔪" },
+	Quickdraw = { "Throw faster", "🤾" },
+	Rebound = { "+1 bounce", "↪️" },
+	Momentum = { "Bounce power", "📈" },
+	Vigor = { "+12 health", "💚" },
+	Stride = { "Step faster", "🦶" },
+	Focus = { "More crits", "🔍" },
+	Magnetism = { "Pull loot", "🧲" },
+	Reflex = { "Dash sooner", "⏱️" },
+	Hunger = { "Surge faster", "🍖" },
+	SecondBreath = { "Regen boost", "🌬️" },
+}
+
 local byId = {}
 for _, card in UpgradeConfig.Cards do
 	assert(byId[card.Id] == nil, "duplicate upgrade card id: " .. card.Id)
 	byId[card.Id] = card
+	local face = FACES[card.Id]
+	assert(face, "no label or icon for card " .. card.Id)
+	card.Label, card.Icon, card.UnlockLevel = face[1], face[2], face[3]
+end
+
+-- The cards a fusion is built from: card id -> true for every prerequisite of any fused card.
+local fusionParts = {}
+for _, card in UpgradeConfig.Cards do
+	if card.Rarity == "Fused" and card.Requires and card.Requires.Cards then
+		for partId in card.Requires.Cards do
+			fusionParts[partId] = true
+		end
+	end
+end
+
+function UpgradeConfig.IsFusionPart(cardId)
+	return fusionParts[cardId] == true
 end
 
 function UpgradeConfig.Get(cardId)

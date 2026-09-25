@@ -28,6 +28,8 @@ local REMOTE_NAMES = {
 	"VisitBase", -- a player's user id, or nil for your own plot (lobby only)
 	"CheerBase", -- the user id of the base being cheered
 	"RequestBase", -- ask for a fresh BaseSync (opening the base panel)
+	"RerollOffer", -- redraw the pending card offer (free once a run, then a Reroll token)
+	"RespecCard", -- undo this round's card and pick again (once a run, early rounds only)
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts

@@ -2,6 +2,7 @@
 -- teardown. Every collaborator is injected, so the whole loop is exercised headlessly in tests.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local DailyModifierConfig = require(ReplicatedStorage:WaitForChild("DailyModifierConfig"))
 local MatchArsenal = require(script.Parent.MatchArsenal)
 local MatchBroadcast = require(script.Parent.MatchBroadcast)
 local MatchCombat = require(script.Parent.MatchCombat)
@@ -10,6 +11,7 @@ local MatchFlow = require(script.Parent.MatchFlow)
 local MatchMembership = require(script.Parent.MatchMembership)
 local MatchRoute = require(script.Parent.MatchRoute)
 local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
+local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
 local UpgradeService = require(script.Parent.UpgradeService)
@@ -78,6 +80,17 @@ function MatchService.new(deps)
 	if self._route.events and self._rooms.SetEvents then
 		self._rooms:SetEvents({ runners = true })
 	end
+
+	-- 3.0: today's biome modifier (DailyModifierConfig) on every run started here. Off unless
+	-- asked for, like the other systems.
+	self._dailyModifiers = deps.dailyModifiers == true
+	-- Wall-clock seconds, for the day's modifier and its once-a-day bonus. Tests pin it.
+	self._wallClock = deps.wallClock or os.time
+	-- (a, b) -> whether two players are Roblox friends, for the party bonus. Must not yield.
+	self._areFriends = deps.areFriends
+	self._modifier = nil
+	self._partySize = 1
+	self._runOptions = {}
 
 	self._states = {}
 	self._participants = {}
@@ -159,12 +172,21 @@ end
 --// run control --------------------------------------------------------------
 
 -- options (optional): { firstDescent = true } runs the scripted first-60-seconds opening
--- (RunConfig.FirstDescent) before the normal run shape.
+-- (RunConfig.FirstDescent) before the normal run shape, without the day's modifier.
 function MatchService:RequestStart(player, now, options)
 	if self._state ~= States.Lobby then
 		return false, "a run is already in progress"
 	end
 	self:RegisterPlayer(player)
+
+	self._runOptions = type(options) == "table" and table.clone(options) or {}
+	local firstDescent = self._runOptions.firstDescent == true
+	self._modifier = self._dailyModifiers and not firstDescent and DailyModifierConfig.Today(self._wallClock()) or nil
+	local members = 0
+	for _ in self._states do
+		members += 1
+	end
+	self._partySize = math.max(members, 1)
 
 	-- The group's Pact is settled before anyone's stats are, since it can change them.
 	local pacts = {}
@@ -186,9 +208,9 @@ function MatchService:RequestStart(player, now, options)
 	table.clear(self._pendingJoins)
 
 	self._runId += 1
-	self._runOptions = type(options) == "table" and table.clone(options) or {}
-	self._plan = table.clone(self._planRun(self._runId))
-	self._slots = self._planFollowsShape and table.clone(RunConfig.RunShape) or nil
+	self._banked = false
+	self._upgradeRound = 0
+	self._plan, self._slots = self:_planFor(self._runId, firstDescent)
 	self._roomRewards = {}
 	self._surges:ClearAll()
 	self._doors = nil
@@ -204,8 +226,47 @@ function MatchService:RequestStart(player, now, options)
 		Players = #self._participants,
 		Rooms = #self._plan,
 		Heat = self._pactEffects.Heat,
+		Modifier = self._modifier and self._modifier.Id or nil,
+		FirstDescent = firstDescent or nil,
 	}, now)
 	return true
+end
+
+-- The rooms for a run, and the run-shape slot each fills (nil for a fixed plan). A first descent
+-- puts the scripted opening in front; its rooms fill no slot, so doors never swap them out.
+function MatchService:_planFor(runId, firstDescent)
+	local plan = table.clone(self._planRun(runId))
+	local slots = self._planFollowsShape and table.clone(RunConfig.RunShape) or nil
+	if firstDescent then
+		local opening = RunPlanner.Fixed(RunConfig.FirstDescent.Rooms)
+		for index = #opening, 1, -1 do
+			table.insert(plan, 1, opening[index])
+			if slots then
+				table.insert(slots, 1, false)
+			end
+		end
+	end
+	return plan, slots
+end
+
+-- The coin bonus for playing together: each other member of the group, up to a cap, plus a
+-- Roblox friend among them. Never negative, so a solo run is never worse off.
+function MatchService:_partyBonus(player)
+	local party = RewardConfig.Party
+	local others, friend = 0, false
+	for other in self._states do
+		if other ~= player then
+			others += 1
+			if not friend and self._areFriends and self._areFriends(player, other) then
+				friend = true
+			end
+		end
+	end
+	local bonus = math.min(others * party.PerExtraMember, party.MaxBonus)
+	if friend then
+		bonus += party.FriendBonus
+	end
+	return bonus
 end
 
 -- Any participant can dismiss the results for the whole team, which is why the requesting
@@ -238,8 +299,8 @@ function MatchService:ChooseUpgrade(player, offerId, cardId, now)
 	return card
 end
 
--- Reads the player's shop, pass and rig bonuses as they stand now, for the run about to start,
--- and folds in what the run's Pact does to every player (Frailty).
+-- Reads the player's building, pass and rig bonuses as they stand now, for the run about to
+-- start, and folds in what the run's Pact (Frailty), the day's modifier and the party bonus do.
 function MatchService:_refreshMeta(player, state)
 	local meta = self._metaProvider and self._metaProvider(player) or {}
 	local stats = table.clone(type(meta.stats) == "table" and meta.stats or {})
@@ -247,20 +308,41 @@ function MatchService:_refreshMeta(player, state)
 	if delta ~= 0 then
 		stats.MaxHealthBonus = (stats.MaxHealthBonus or 0) + delta
 	end
-	state:SetMeta({ stats = stats, trail = meta.trail, rig = meta.rig })
+	for stat, change in self._modifier and self._modifier.Stats or {} do
+		stats[stat] = (stats[stat] or 0) + change
+	end
+	local party = self:_partyBonus(player)
+	if party > 0 then
+		stats.CoinMultiplier = (stats.CoinMultiplier or 0) + party
+	end
+	state.partyBonus = party
+	state:SetMeta({ stats = stats, trail = meta.trail, rig = meta.rig, level = meta.level })
 end
 
--- Sets the run's Depth Pact and applies what it does to enemies and rooms.
+-- Sets the run's Depth Pact and applies what it, the day's modifier and the party's size do to
+-- enemies and rooms.
 function MatchService:_applyPact(pact)
 	self._pact = pact
 	self._pactEffects = PactConfig.Effects(pact)
 	local effects = self._pactEffects
+	local modifier = self._modifier
+	local enemy = modifier and modifier.Enemy or {}
+	local party = 1 + math.max((self._partySize or 1) - 1, 0) * RunConfig.PartyScaling.EnemyHealthPerExtra
 	if self._enemies.SetModifiers then
-		self._enemies:SetModifiers({ Health = effects.EnemyHealth, Speed = effects.EnemySpeed, Damage = effects.EnemyDamage })
+		self._enemies:SetModifiers({
+			Health = effects.EnemyHealth * (enemy.Health or 1) * party,
+			Speed = effects.EnemySpeed * (enemy.Speed or 1),
+			Damage = effects.EnemyDamage * (enemy.Damage or 1),
+		})
 	end
 	if self._rooms.SetChampionBonus then
-		self._rooms:SetChampionBonus(effects.ChampionBonus)
+		self._rooms:SetChampionBonus(effects.ChampionBonus + (modifier and modifier.ChampionBonus or 0))
 	end
+end
+
+-- Today's modifier as clients see it, or nil.
+function MatchService:GetModifier()
+	return DailyModifierConfig.Describe(self._modifier)
 end
 
 function MatchService:GetPact()
@@ -335,7 +417,11 @@ function MatchService:Step(deltaTime, now)
 		end
 		if not self._upgrades:HasPendingOffers() and self:_doorsSettled(now) then
 			self:_resolveDoors()
-			self:_setState(States.Transition, now)
+			if self._banked then
+				self:_finish("Extracted", now)
+			else
+				self:_setState(States.Transition, now)
+			end
 		end
 	elseif state == States.Transition then
 		self:_applyRegen(deltaTime, now)

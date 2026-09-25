@@ -8,9 +8,11 @@ local ArenaDirector = require(script.Parent.ArenaDirector)
 local BaseBuilder = require(script.Parent.BaseBuilder)
 local BaseConfig = require(ReplicatedStorage:WaitForChild("BaseConfig"))
 local BaseService = require(script.Parent.BaseService)
+local DailyModifierConfig = require(ReplicatedStorage:WaitForChild("DailyModifierConfig"))
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local FriendCache = require(script.Parent.FriendCache)
 local LeaderboardService = require(script.Parent.LeaderboardService)
 local Leaderstats = require(script.Parent.Leaderstats)
 local MetaConfig = require(ReplicatedStorage:WaitForChild("MetaConfig"))
@@ -23,11 +25,13 @@ local PartyRooms = require(script.Parent.PartyRooms)
 local ProjectileConfig = require(ReplicatedStorage:WaitForChild("ProjectileConfig"))
 local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfig"))
 local PlayerDataService = require(script.Parent.PlayerDataService)
+local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RemoteRouter = require(script.Parent.RemoteRouter)
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local ShopService = require(script.Parent.ShopService)
+local Signage = require(script.Parent.Signage)
 local TelemetryService = require(script.Parent.TelemetryService)
 local WorldAdapter = require(script.Parent.WorldAdapter)
 
@@ -131,6 +135,20 @@ function GameBootstrap.Start()
 	-- Assigned just below; pushProfile only runs once players are about.
 	local monetization
 
+	-- Roblox friendships between players on this server, looked up as they join (the party bonus).
+	local friends = FriendCache.new(function(a, b)
+		return a:IsFriendsWith(b.UserId)
+	end)
+
+	-- Today's biome modifier, as the hub sign, the HUD and the lobby panel show it.
+	local function todaysModifier()
+		if not FeatureFlags.DailyModifiers then
+			return nil
+		end
+		local now = os.time()
+		return DailyModifierConfig.Describe(DailyModifierConfig.Today(now), MetaConfig.SecondsUntilReset(now))
+	end
+
 	local metaSync, notify = Remotes.Get("MetaSync"), Remotes.Get("Notify")
 	local function pushMeta(player)
 		if not FeatureFlags.DailyRewards then
@@ -138,6 +156,7 @@ function GameBootstrap.Start()
 		end
 		local state = metaService:GetState(player)
 		if state then
+			state.Modifier = todaysModifier()
 			metaSync:FireClient(player, state)
 		end
 	end
@@ -306,6 +325,8 @@ function GameBootstrap.Start()
 				if GameBootstrap._isPremium(player) then
 					meta.stats.CoinMultiplier = (meta.stats.CoinMultiplier or 0) + MetaConfig.PremiumCoinBonus
 				end
+				-- The account level gates which cards can be offered (gradual unlocks).
+				meta.level = ProgressionConfig.LevelFor(persistence:GetXp(player))
 				-- The chosen rig bends the starting stats the same way the buildings do.
 				if FeatureFlags.Loadouts then
 					local rig = loadout:GetRig(player)
@@ -315,6 +336,10 @@ function GameBootstrap.Start()
 					meta.rig = rig.Id
 				end
 				return meta
+			end,
+			wallClock = os.time,
+			areFriends = function(a, b)
+				return friends:AreFriends(a, b)
 			end,
 			-- Each member's saved Pact; the match runs the group at the lowest shared ranks.
 			pactProvider = function(player)
@@ -544,7 +569,21 @@ function GameBootstrap.Start()
 		end
 	end
 
+	-- The hub sign shows today's modifier, reprinted when the UTC day turns.
+	local modifierShown = nil
+	local function refreshModifierSign()
+		local modifier = todaysModifier()
+		local text = modifier and string.format("TODAY: %s\n%s", string.upper(modifier.Title), modifier.Text)
+			or "TODAY IN THE DEPTHS"
+		if text ~= modifierShown and lobbyParts.modifierBoard then
+			modifierShown = text
+			Signage.SetText(lobbyParts.modifierBoard, text)
+		end
+	end
+	refreshModifierSign()
+
 	local function onPlayerAdded(player)
+		friends:Learn(player, Players:GetPlayers())
 		-- A mid-run respawn lands in the lobby; send the character back to its room once its
 		-- root part exists.
 		player.CharacterAdded:Connect(function(character)
@@ -610,6 +649,7 @@ function GameBootstrap.Start()
 		monetization:ClearPlayer(player)
 		metaService:ClearPlayer(player)
 		builder:Release(player)
+		friends:Forget(player)
 		lastStatus[player] = nil
 		task.spawn(function()
 			local ok, err = persistence:Release(player, os.clock())
@@ -649,6 +689,7 @@ function GameBootstrap.Start()
 		if now >= nextDebugPush then
 			nextDebugPush = now + DebugConfig.OverlayUpdateInterval
 			reportRefusedPurchases()
+			refreshModifierSign()
 			for _, player in Players:GetPlayers() do
 				refreshLeaderstats(player)
 				if DebugConfig.IsDebugUser(player) then

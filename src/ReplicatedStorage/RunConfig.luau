@@ -86,6 +86,8 @@ RunConfig.RemoteRules = {
 	VisitBase = { Cooldown = 1, Burst = 2 },
 	CheerBase = { Cooldown = 0.5, Burst = 3 },
 	RequestBase = { Cooldown = 0.5, Burst = 4 },
+	RerollOffer = { Cooldown = 0.5, Burst = 2 },
+	RespecCard = { Cooldown = 0.5, Burst = 2 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
@@ -224,6 +226,8 @@ RunConfig.Rooms = {
 			{ Archetype = "Mite", Count = 4, Markers = { 2, 3, 5, 6 } },
 		},
 		HealOnClear = 0.35,
+		-- 3.0: an extract point. The doors after it include "Bank loot".
+		ExtractPoint = true,
 	},
 
 	-- The Foundry: tighter lanes, barrels, and enemies that punish straight shooting.
@@ -334,6 +338,8 @@ RunConfig.Rooms = {
 			{ Archetype = "Mite", Count = 4, Markers = { 2, 3, 5, 6 } },
 		},
 		HealOnClear = 0.35,
+		-- 3.0: an extract point. The doors after it include "Bank loot".
+		ExtractPoint = true,
 	},
 
 	-- The Abyss: the hardest mixes, magnets that bend your shots, then the Warden itself.
@@ -423,6 +429,78 @@ RunConfig.Rooms = {
 		-- The Warden Prime alone; it summons its own Shards from its second phase.
 		Spawns = { { Archetype = "WardenPrime", Count = 1, Markers = { 1 } } },
 	},
+}
+
+-- 3.0: the first descent, a new player's first 60 seconds (RunConfig.FirstDescent). Tier 0, so
+-- no run shape slot or door ever draws them; the plan puts them in front of a normal run.
+local TUTORIAL_ROOMS = {
+	-- A tight pack of harmless Drifters straight ahead of the spawn: the first hit lands within
+	-- seconds, and the first bank shot clears half the pack.
+	{
+		Id = "FirstPit",
+		DisplayName = "The First Pit",
+		Layout = "Atrium",
+		Zone = "Ruins",
+		Tier = 0,
+		Kind = "Tutorial",
+		Spawns = { { Archetype = "Drifter", Count = 6, Markers = { 6 } } },
+	},
+	-- A pair round: sentries to bank shots off, and a few Mites that close in.
+	{
+		Id = "FirstPair",
+		DisplayName = "Echoing Stair",
+		Layout = "Atrium",
+		Zone = "Ruins",
+		Tier = 0,
+		Kind = "Tutorial",
+		Spawns = {
+			{ Archetype = "Drifter", Count = 4, Markers = { 1, 3 } },
+			{ Archetype = "Mite", Count = 4, Markers = { 2, 6 } },
+		},
+	},
+	-- A mini-elite that bursts into coins, at an extract point: the first "Bank loot" choice.
+	{
+		Id = "FirstElite",
+		DisplayName = "The Hoard Keeper",
+		Layout = "Colosseum",
+		Zone = "Ruins",
+		Tier = 0,
+		Kind = "Elite",
+		Spawns = {
+			{ Archetype = "Bulwark", Count = 1, Markers = { 1 } },
+			{ Archetype = "Drifter", Count = 3, Markers = { 2, 3, 5 } },
+		},
+		CoinBurst = 40,
+		HealOnClear = 0.5,
+		ExtractPoint = true,
+	},
+}
+for _, room in TUTORIAL_ROOMS do
+	table.insert(RunConfig.Rooms, room)
+end
+
+-- The scripted opening for a player who has never descended. Rooms run first, then the normal
+-- run shape; ForceCards[n] puts those cards into the offer after room n (Split Shot twice, so the
+-- Fusillade fusion is offered after the Hoard Keeper). Banner is the first thing they read.
+RunConfig.FirstDescent = {
+	Rooms = { "FirstPit", "FirstPair", "FirstElite" },
+	ForceCards = { [1] = { "SplitShot" }, [2] = { "SplitShot" } },
+	Banner = "BOUNCE SHOTS. BREAK EVERYTHING.",
+}
+
+-- Card rounds: one free reroll per run (more cost a Reroll token each), and one free respec per
+-- run during the first RespecRounds upgrade rounds (undo the card just taken and pick again).
+RunConfig.Cards = {
+	FreeRerolls = 1,
+	RespecRounds = 2,
+	-- The use counter a spent Reroll token is recorded against (PlayerDataService purchase path).
+	RerollUseId = "RerollUse",
+}
+
+-- More players, tougher enemies: every member past the first adds this much enemy health. A
+-- solo run is never scaled down or penalised.
+RunConfig.PartyScaling = {
+	EnemyHealthPerExtra = 0.35,
 }
 
 -- The shape of every run: one room per slot, drawn at random from the rooms matching the

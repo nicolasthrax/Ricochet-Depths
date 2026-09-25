@@ -56,6 +56,17 @@ RouteConfig.Rewards = {
 }
 RouteConfig.RewardOrder = { "Heal", "Treasure", "Arsenal", "Surge", "Challenge", "Gallery" }
 
+-- The extra door after a room marked ExtractPoint: climb out now, keep the whole haul, and take
+-- a bonus that grows with depth (RewardConfig.BankBonusByZone). Never drawn at random. It is
+-- always the last door, so a tied vote keeps descending.
+RouteConfig.BankLoot = {
+	Id = "BankLoot",
+	Title = "Bank the loot",
+	Text = "Climb out now and keep the whole haul.",
+	RoomName = "The Surface",
+	Color = Color3.fromRGB(122, 224, 146),
+}
+
 -- The bonus room a Gallery door inserts before the next room.
 RouteConfig.GalleryRoom = {
 	Id = "TrickRange",

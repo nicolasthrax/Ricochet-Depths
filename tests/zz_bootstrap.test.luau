@@ -23,6 +23,8 @@ describe("GameBootstrap wiring", function()
 	-- These players are veterans: the first descent has its own test below.
 	local FeatureFlags = __require("FeatureFlags")
 	FeatureFlags.FirstDescent = false
+	-- Whatever today's modifier is would change the numbers below; it has its own tests.
+	FeatureFlags.DailyModifiers = false
 	local systems = GameBootstrap.Start()
 	local lobby = workspace:FindFirstChild("Lobby")
 	local spawnAt = RunConfig.LobbyReturnPosition

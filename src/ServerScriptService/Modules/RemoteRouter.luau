@@ -73,6 +73,20 @@ function RemoteRouter:Bind()
 		end
 	end)
 
+	self:_connect("RerollOffer", "RerollOffer", function(player, now)
+		local match = self._matchFor(player)
+		if match and match.RerollOffer then
+			match:RerollOffer(player, now)
+		end
+	end)
+
+	self:_connect("RespecCard", "RespecCard", function(player, now)
+		local match = self._matchFor(player)
+		if match and match.RespecCard then
+			match:RespecCard(player, now)
+		end
+	end)
+
 	self:_connect("Dash", "Dash", function(player, now, direction)
 		local match = self._matchFor(player)
 		if match and match.HandleDash then

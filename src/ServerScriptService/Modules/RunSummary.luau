@@ -24,7 +24,9 @@ local function upgradeList(playerState)
 end
 
 function RunSummary.ForPlayer(playerState, context)
-	local reward = RewardService.Compute(playerState, context.outcome, context.eliteCleared, context.rewardMultiplier)
+	local reward = RewardService.Compute(playerState, context.outcome, context.eliteCleared, context.rewardMultiplier,
+		context.extractionBonus)
+	local haul = math.floor(playerState.coins or 0)
 	return {
 		RunId = context.runId,
 		Outcome = context.outcome,
@@ -39,6 +41,10 @@ function RunSummary.ForPlayer(playerState, context)
 		Survived = playerState.alive,
 		Upgrades = upgradeList(playerState),
 		Reward = reward,
+		-- The haul at risk: coins picked up, and how many of them were lost with the run.
+		Haul = haul,
+		HaulLost = haul - RewardService.HaulKept(playerState, context.outcome),
+		Banked = context.banked == true,
 		CurrencyName = RewardConfig.CurrencyName,
 		XpEarned = RewardService.Experience(playerState, context.outcome, context.eliteCleared, context.rewardMultiplier),
 		Heat = context.heat or 0,

@@ -1,9 +1,11 @@
--- The lobby shop, in two tabs: Cosmetics (bought with coins) and the Store (Robux passes and
--- products). Display only: it shows the catalogue against the levels,
--- balance and passes the server last sent, and asks the server (or Roblox, for Robux) to buy.
--- It never assumes a request succeeded; the next ProfileSync is the truth.
+-- The lobby shop: a tab per cosmetic kind (trails, base themes, signs, emotes, nameplate titles)
+-- and the Store (Robux passes and products). Display only: it shows the catalogue against the
+-- levels, balance, account level and passes the server last sent, and asks the server (or
+-- Roblox, for Robux) to buy, equip or play. It never assumes a request succeeded; the next
+-- ProfileSync is the truth.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local MonetizationConfig = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
@@ -13,30 +15,42 @@ local ShopView = {}
 ShopView.__index = ShopView
 
 local ROW_HEIGHT = 74
-local TABS = { "Cosmetics", "Store" }
+-- Tab id -> the cosmetic kind it lists ("Store" lists Robux items).
+local TABS = { "Trails", "Themes", "Signs", "Emotes", "Titles", "Store" }
+local TAB_KIND = { Trails = "Trail", Themes = "Theme", Signs = "Sign", Emotes = "Emote", Titles = "Nameplate" }
 
 -- Player-facing text for the reasons ShopService gives.
 local REASONS = {
 	["insufficient salvage"] = "Not enough coins",
-	["max level"] = "Already at max level",
+	["max level"] = "You already own that",
 	["shop closed"] = "The shop is closed during a run",
 	["profile not loaded"] = "Your profile is offline; purchases are disabled",
 	["not owned"] = "You do not own that yet",
-	["requires VIP"] = "The Gold trail is for VIP pass holders",
+	["not for sale"] = "That one is earned, not sold",
+	["requires SupporterPack"] = "That comes with the Supporter Pack",
+	["requires ExplorerPass"] = "That comes with the Explorer Pass",
 }
 
--- onRobux(kind, id): kind is "Pass" or "Product"; the client script prompts Roblox's purchase.
-function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
+local function passTitle(passKey)
+	local pass = MonetizationConfig.Passes[passKey]
+	return pass and pass.Title or passKey
+end
+
+-- onPurchase(itemId), onEquip(itemId, kind), onRobux(kind, id) ("Pass" or "Product"; the client
+-- script prompts Roblox's purchase), onEmote(itemId).
+function ShopView.new(playerGui, onPurchase, onEquip, onRobux, onEmote)
 	local self = setmetatable({}, ShopView)
 	self._onPurchase = onPurchase
 	self._onEquip = onEquip
 	self._onRobux = onRobux or function() end
+	self._onEmote = onEmote or function() end
 	self._levels = {}
 	self._balance = 0
-	self._equipped = ""
+	self._level = 1
+	self._worn = {}
 	self._passes = {}
 	self._rows = {}
-	self._tab = "Cosmetics"
+	self._tab = TABS[1]
 
 	self.gui = UiTheme.screenGui("RicochetShop", playerGui, 30)
 
@@ -48,7 +62,7 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	panel.Visible = false
 	UiTheme.padding(panel, 14)
 	local limit = Instance.new("UISizeConstraint")
-	limit.MaxSize = Vector2.new(560, 620)
+	limit.MaxSize = Vector2.new(640, 620)
 	limit.Parent = panel
 	self.panel = panel
 
@@ -67,13 +81,12 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 		self:Close()
 	end)
 
-	-- Tab buttons.
 	self._tabButtons = {}
 	for index, tab in TABS do
-		local button = UiTheme.button("Tab" .. tab, panel, tab)
-		button.Position = UDim2.new((index - 1) / #TABS, index > 1 and 4 or 0, 0, 60)
-		button.Size = UDim2.new(1 / #TABS, -4, 0, UiConfig.MinTouchTarget)
-		button.TextSize = UiConfig.Text.Small
+		local button = UiTheme.button("Tab" .. tab, panel, string.upper(tab))
+		button.Position = UDim2.new((index - 1) / #TABS, index > 1 and 3 or 0, 0, 60)
+		button.Size = UDim2.new(1 / #TABS, -3, 0, UiConfig.MinTouchTarget)
+		button.TextSize = UiConfig.Text.Small - 2
 		button.Activated:Connect(function()
 			self:SetTab(tab)
 		end)
@@ -97,29 +110,36 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	local order = 0
 	for _, item in ShopConfig.Items do
 		order += 1
-		self._rows[item.Id] = self:_buildRow(list, order, item.Id, item.Title, item.Description, item.Category, function()
+		local row = self:_buildRow(list, order, item.Id, item.Title, item.Description, item.Kind, function()
 			self:_activate(item)
 		end)
+		row.item = item
+		self._rows[item.Id] = row
 	end
 	-- Robux items with real ids only; anything left at 0 in MonetizationConfig is never shown.
 	for key, pass in MonetizationConfig.Passes do
 		if pass.Id > 0 then
 			order += 1
-			self._rows["Pass_" .. key] = self:_buildRow(list, order, "Pass_" .. key, pass.Title, pass.Description, "Store", function()
+			local row = self:_buildRow(list, order, "Pass_" .. key, pass.Title, pass.Description, "Store", function()
 				if not self._passes[key] then
 					self._onRobux("Pass", pass.Id)
 				end
 			end)
-			self._rows["Pass_" .. key].pass = key
+			row.pass = key
+			row.price = pass.Price
+			self._rows["Pass_" .. key] = row
 		end
 	end
 	for _, product in MonetizationConfig.Products do
-		if product.Id > 0 then
+		local offered = product.Id > 0 and (product.Kind ~= "Revive" or FeatureFlags.PaidRevive)
+		if offered then
 			order += 1
-			self._rows["Product_" .. product.Key] = self:_buildRow(list, order, "Product_" .. product.Key, product.Title,
-				"Coins, added to your balance straight away.", "Store", function()
-					self._onRobux("Product", product.Id)
-				end)
+			local row = self:_buildRow(list, order, "Product_" .. product.Key, product.Title, product.Description, "Store", function()
+				self._onRobux("Product", product.Id)
+			end)
+			row.product = product
+			row.price = product.Price
+			self._rows["Product_" .. product.Key] = row
 		end
 	end
 
@@ -128,7 +148,7 @@ function ShopView.new(playerGui, onPurchase, onEquip, onRobux)
 	self.status.Position = UDim2.new(0, 0, 1, 0)
 	self.status.Size = UDim2.new(1, 0, 0, 24)
 
-	self:SetTab("Cosmetics")
+	self:SetTab(TABS[1])
 	return self
 end
 
@@ -141,7 +161,7 @@ function ShopView:_buildRow(parent, index, name, title, description, category, o
 
 	local nameLabel = UiTheme.label("Name", row, title, UiConfig.Text.Hud)
 	nameLabel.Size = UDim2.new(1, -130, 0, 22)
-	local descriptionLabel = UiTheme.label("Description", row, description, UiConfig.Text.Small, UiConfig.Colors.TextMuted)
+	local descriptionLabel = UiTheme.label("Description", row, description or "", UiConfig.Text.Small, UiConfig.Colors.TextMuted)
 	descriptionLabel.Position = UDim2.new(0, 0, 0, 22)
 	descriptionLabel.Size = UDim2.new(1, -130, 0, 18)
 	descriptionLabel.TextWrapped = true
@@ -159,13 +179,17 @@ function ShopView:_buildRow(parent, index, name, title, description, category, o
 	return { frame = row, level = level, button = button, category = category }
 end
 
--- Shows one tab's rows and hides the rest.
+-- Shows one tab's rows and hides the rest. "Cosmetics" (the kiosk) opens the first tab.
 function ShopView:SetTab(tab)
+	if tab == "Cosmetics" then
+		tab = TABS[1]
+	end
 	self._tab = tab
 	self.title.Text = tab
+	local kind = TAB_KIND[tab]
 	local visible = 0
 	for _, row in self._rows do
-		row.frame.Visible = row.category == tab
+		row.frame.Visible = (kind and row.category == kind) or (tab == "Store" and row.category == "Store")
 		if row.frame.Visible then
 			visible += 1
 		end
@@ -186,18 +210,23 @@ function ShopView:SetTab(tab)
 	self:_render()
 end
 
-function ShopView:_owned(item)
-	return self._levels[item.Id] or 0
+function ShopView:_owns(item)
+	return ShopConfig.Owns(item, self._levels, self._level, function(passKey)
+		return self._passes[passKey] == true
+	end)
 end
 
 function ShopView:_activate(item)
-	local owned = self:_owned(item)
-	if item.Kind == "Trail" and owned >= 1 then
-		self._onEquip(self._equipped == item.Id and "" or item.Id)
+	if self:_owns(item) then
+		if item.Kind == "Emote" then
+			self._onEmote(item.Id)
+		elseif ShopConfig.Equippable[item.Kind] then
+			self._onEquip(self._worn[item.Kind] == item.Id and "" or item.Id, item.Kind)
+		end
 		return
 	end
-	if owned >= ShopConfig.MaxLevel(item) then
-		return
+	if ShopConfig.MaxLevel(item) == 0 then
+		return -- earned by level or a pass: nothing to buy here
 	end
 	self.status.Text = "Buying " .. item.Title .. "..."
 	self.status.TextColor3 = UiConfig.Colors.TextMuted
@@ -206,40 +235,40 @@ end
 
 function ShopView:_render()
 	self.balanceLabel.Text = string.format("%d coins", self._balance)
-	for _, item in ShopConfig.Items do
-		local row = self._rows[item.Id]
-		local owned = self:_owned(item)
-		local max = ShopConfig.MaxLevel(item)
-		local nextCost = ShopConfig.CostFor(item, owned + 1)
-		local locked = item.RequiresPass and not self._passes[item.RequiresPass]
-
-		if item.Kind == "Trail" then
-			row.level.Text = owned >= 1 and (self._equipped == item.Id and "Equipped" or "Owned")
-				or (locked and (item.RequiresPass .. " only") or "Cosmetic")
-			if owned >= 1 then
-				row.button.Text = self._equipped == item.Id and "Unequip" or "Equip"
-			elseif locked then
-				row.button.Text = "Locked"
-			else
-				row.button.Text = string.format("Buy  %d", nextCost)
-			end
-		else
-			row.level.Text = string.format("Level %d / %d", owned, max)
-			row.button.Text = nextCost and string.format("Buy  %d", nextCost) or "Maxed"
-		end
-
-		local affordable = not locked and (nextCost == nil or self._balance >= nextCost or (item.Kind == "Trail" and owned >= 1))
-		row.button.AutoButtonColor = affordable
-		row.button.TextColor3 = affordable and UiConfig.Colors.Text or UiConfig.Colors.TextMuted
-	end
 	for _, row in self._rows do
-		if row.pass then
+		local item = row.item
+		if item then
+			local owned = self:_owns(item)
+			local worn = self._worn[item.Kind] == item.Id
+			local cost = ShopConfig.CostFor(item, 1)
+			local action, detail, active
+			if owned then
+				if item.Kind == "Emote" then
+					action, detail = "Play", "Owned"
+				else
+					action, detail = worn and "Unequip" or "Equip", worn and "Equipped" or "Owned"
+				end
+				active = true
+			elseif item.RequiresPass then
+				action, detail, active = "Pass", passTitle(item.RequiresPass), false
+			elseif item.UnlockLevel then
+				action, detail, active = "Level " .. item.UnlockLevel, "Unlocks by playing", false
+			else
+				action = string.format("Buy  %d", cost or 0)
+				detail = "Cosmetic"
+				active = self._balance >= (cost or 0)
+			end
+			row.level.Text = detail
+			row.button.Text = action
+			row.button.AutoButtonColor = active
+			row.button.TextColor3 = active and UiConfig.Colors.Text or UiConfig.Colors.TextMuted
+		elseif row.pass then
 			local owned = self._passes[row.pass] == true
 			row.level.Text = owned and "Owned" or "Game pass"
-			row.button.Text = owned and "Owned" or "Buy (Robux)"
-		elseif row.category == "Store" then
-			row.level.Text = "Coin pack"
-			row.button.Text = "Buy (Robux)"
+			row.button.Text = owned and "Owned" or string.format("%d R$", row.price or 0)
+		elseif row.product then
+			row.level.Text = "Consumable"
+			row.button.Text = string.format("%d R$", row.price or 0)
 		end
 	end
 end
@@ -251,7 +280,15 @@ function ShopView:SetProfile(profile)
 	end
 	self._balance = type(profile.Salvage) == "number" and profile.Salvage or 0
 	self._levels = type(profile.MetaUpgrades) == "table" and profile.MetaUpgrades or {}
-	self._equipped = type(profile.EquippedTrail) == "string" and profile.EquippedTrail or ""
+	local progression = type(profile.Progression) == "table" and profile.Progression or {}
+	self._level = tonumber(progression.Level) or 1
+	local base = type(profile.Base) == "table" and profile.Base or {}
+	self._worn = {
+		Trail = type(profile.EquippedTrail) == "string" and profile.EquippedTrail or "",
+		Theme = type(base.Theme) == "string" and base.Theme or "",
+		Sign = type(base.Sign) == "string" and base.Sign or "",
+		Nameplate = type(profile.Nameplate) == "string" and profile.Nameplate or "",
+	}
 	self._passes = {}
 	for _, key in type(profile.Passes) == "table" and profile.Passes or {} do
 		self._passes[key] = true
@@ -270,7 +307,7 @@ function ShopView:ShowResult(payload)
 		self.status.Text = name .. " was refunded: those coins were already spent elsewhere"
 		self.status.TextColor3 = UiConfig.Colors.Warning
 	elseif payload.Ok then
-		self.status.Text = payload.Action == "Equip" and "Trail updated" or (name .. " purchased")
+		self.status.Text = payload.Action == "Equip" and "Updated" or (name .. " purchased")
 		self.status.TextColor3 = UiConfig.Colors.Health
 	else
 		self.status.Text = REASONS[payload.Reason] or "That did not go through"
@@ -278,10 +315,10 @@ function ShopView:ShowResult(payload)
 	end
 end
 
--- Opens on `tab` (Cosmetics or Store).
+-- Opens on `tab` (a cosmetic tab, "Cosmetics" for the first one, or "Store").
 function ShopView:Open(tab)
 	self.status.Text = ""
-	self:SetTab(table.find(TABS, tab) and tab or self._tab)
+	self:SetTab((tab == "Cosmetics" or table.find(TABS, tab)) and tab or self._tab)
 	self.panel.Visible = true
 end
 

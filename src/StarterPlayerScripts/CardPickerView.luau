@@ -1,5 +1,7 @@
 -- Three-card upgrade choice with a visible countdown. The server decides what is offered and
--- what a pick means; this view only sends back the id it was given.
+-- what a pick means; this view only sends back the id it was given. 3.0: each card leads with
+-- its icon and a three-word label, one carries a RECOMMENDED tag, and the player can reroll the
+-- offer (free once a run, then with Reroll tokens) or, early on, respec the card just taken.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
@@ -10,10 +12,12 @@ local CardPickerView = {}
 CardPickerView.__index = CardPickerView
 
 -- onVote(doorId), optional: the player chose a door for the next room.
-function CardPickerView.new(playerGui, onChoose, onVote)
+-- actions, optional: { reroll = function(), respec = function() }.
+function CardPickerView.new(playerGui, onChoose, onVote, actions)
 	local self = setmetatable({}, CardPickerView)
 	self._onChoose = onChoose
 	self._onVote = onVote
+	self._actions = actions or {}
 	self._cards = {}
 
 	self.gui = UiTheme.screenGui("RicochetCardPicker", playerGui, 20)
@@ -56,6 +60,32 @@ function CardPickerView.new(playerGui, onChoose, onVote)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = row
 
+	-- Under the cards: reroll the offer, or (after picking, early on) take the card back.
+	self.rerollButton = UiTheme.button("Reroll", backdrop, "REROLL")
+	self.rerollButton.AnchorPoint = Vector2.new(0.5, 0)
+	self.rerollButton.Position = UDim2.new(0.5, 0, 0.88, 0)
+	self.rerollButton.Size = UDim2.fromOffset(200, UiConfig.MinTouchTarget)
+	self.rerollButton.TextSize = UiConfig.Text.Small + 2
+	self.rerollButton.Visible = false
+	self.rerollButton.Activated:Connect(function()
+		if self._canReroll and not self._locked and self._actions.reroll then
+			self._canReroll = false -- one request at a time; the new offer re-enables it
+			self._actions.reroll()
+		end
+	end)
+	self.respecButton = UiTheme.button("Respec", backdrop, "CHANGE MY CARD (FREE)")
+	self.respecButton.AnchorPoint = Vector2.new(0.5, 0)
+	self.respecButton.Position = UDim2.new(0.5, 0, 0.88, 0)
+	self.respecButton.Size = UDim2.fromOffset(260, UiConfig.MinTouchTarget)
+	self.respecButton.TextSize = UiConfig.Text.Small + 2
+	self.respecButton.Visible = false
+	self.respecButton.Activated:Connect(function()
+		if self._canRespec and self._actions.respec then
+			self._canRespec = false
+			self._actions.respec()
+		end
+	end)
+
 	return self
 end
 
@@ -68,7 +98,7 @@ end
 
 function CardPickerView:Show(payload)
 	self._stage = "Cards"
-	self.title.Text = "Choose an upgrade"
+	self.title.Text = payload.Fusion and "FUSION!  Try it now" or "Choose an upgrade"
 	self:_clear()
 	self._offerId = payload.OfferId
 	-- The server sends how long is left, and the deadline is computed against this machine's
@@ -76,6 +106,16 @@ function CardPickerView:Show(payload)
 	local secondsRemaining = tonumber(payload.SecondsRemaining) or UpgradeConfig.ChoiceTimeout
 	self._deadline = os.clock() + math.max(secondsRemaining, 0)
 	self._locked = false
+
+	local free = tonumber(payload.FreeRerolls) or 0
+	local tokens = tonumber(payload.Rerolls) or 0
+	self._canReroll = not payload.Fusion and (free > 0 or tokens > 0)
+	self.rerollButton.Visible = not payload.Fusion and self._actions.reroll ~= nil
+	self.rerollButton.Text = free > 0 and "REROLL (FREE)" or tokens > 0 and string.format("REROLL (%d left)", tokens)
+		or "NO REROLLS"
+	self.rerollButton.TextColor3 = self._canReroll and UiConfig.Colors.Text or UiConfig.Colors.TextMuted
+	self._canRespec = payload.CanRespec == true
+	self.respecButton.Visible = false
 
 	for index, card in payload.Cards do
 		local category = UpgradeConfig.Categories[card.Category]
@@ -101,10 +141,23 @@ function CardPickerView:Show(payload)
 		stripe.Parent = button
 		UiTheme.corner(stripe, 3)
 
-		local title = UiTheme.label("Title", button, card.Title, UiConfig.Text.CardTitle)
-		title.Position = UDim2.new(0, 0, 0, 14)
-		title.Size = UDim2.new(1, 0, 0, 30)
-		title.TextWrapped = true
+		-- Big icon and a three-word label first; the name and the detail sit underneath.
+		local icon = UiTheme.label("Icon", button, card.Icon or "", 40)
+		icon.Position = UDim2.new(0, 0, 0, 10)
+		icon.Size = UDim2.new(1, 0, 0, 46)
+		icon.TextXAlignment = Enum.TextXAlignment.Center
+
+		local label = UiTheme.heading("Label", button, string.upper(card.Label or card.Title), UiConfig.Text.CardTitle,
+			(rarity and rarity.Color) or UiConfig.Colors.Text)
+		label.Position = UDim2.new(0, 0, 0, 58)
+		label.Size = UDim2.new(1, 0, 0, 28)
+		label.TextXAlignment = Enum.TextXAlignment.Center
+		label.TextScaled = true
+
+		local title = UiTheme.label("Title", button, card.Title, UiConfig.Text.Small + 2)
+		title.Position = UDim2.new(0, 0, 0, 88)
+		title.Size = UDim2.new(1, 0, 0, 20)
+		title.TextXAlignment = Enum.TextXAlignment.Center
 
 		local kind = UiTheme.label(
 			"Kind",
@@ -113,20 +166,41 @@ function CardPickerView:Show(payload)
 			UiConfig.Text.Small,
 			(rarity and rarity.Color) or UiConfig.Colors.TextMuted
 		)
-		kind.Position = UDim2.new(0, 0, 0, 46)
+		kind.Position = UDim2.new(0, 0, 0, 108)
 		kind.Size = UDim2.new(1, 0, 0, 18)
+		kind.TextXAlignment = Enum.TextXAlignment.Center
 
-		local body = UiTheme.label("Body", button, card.Description, UiConfig.Text.CardBody, UiConfig.Colors.TextMuted)
-		body.Position = UDim2.new(0, 0, 0, 70)
-		body.Size = UDim2.new(1, 0, 1, -76)
+		local body = UiTheme.label("Body", button, card.Description, UiConfig.Text.Small, UiConfig.Colors.TextMuted)
+		body.Position = UDim2.new(0, 0, 0, 128)
+		body.Size = UDim2.new(1, 0, 1, -132)
 		body.TextWrapped = true
 		body.TextYAlignment = Enum.TextYAlignment.Top
+		body.TextXAlignment = Enum.TextXAlignment.Center
+
+		if card.Recommended then
+			local tag = UiTheme.label("Recommended", button, "RECOMMENDED", UiConfig.Text.Small, UiConfig.Colors.PrimaryText)
+			tag.AnchorPoint = Vector2.new(0.5, 0.5)
+			tag.Position = UDim2.new(0.5, 0, 0, -12)
+			tag.Size = UDim2.fromOffset(130, 22)
+			tag.TextXAlignment = Enum.TextXAlignment.Center
+			tag.Font = UiConfig.FontBold
+			tag.BackgroundTransparency = 0
+			tag.BackgroundColor3 = UiConfig.Colors.Gold
+			UiTheme.corner(tag, 6)
+			local edge = button:FindFirstChildOfClass("UIStroke")
+			if edge then
+				edge.Color = UiConfig.Colors.Gold
+				edge.Transparency = 0
+				edge.Thickness = 2.5
+			end
+		end
 
 		button.Activated:Connect(function()
 			if self._locked then
 				return
 			end
 			self._locked = true -- one pick per offer; the server rejects the rest anyway
+			self.rerollButton.Visible = false
 			self._onChoose(self._offerId, card.Id)
 		end)
 
@@ -172,6 +246,9 @@ function CardPickerView:ShowDoors()
 	end
 	self._stage = "Doors"
 	self._voted = nil
+	self.rerollButton.Visible = false
+	-- The free early respec: take the card back and choose again, while the vote is open.
+	self.respecButton.Visible = self._canRespec == true and self._actions.respec ~= nil
 	self:_renderDoors()
 	self.gui.Enabled = true
 	return true
@@ -205,8 +282,10 @@ function CardPickerView:_renderDoors()
 		room.Size = UDim2.new(1, 0, 0, 30)
 		room.TextWrapped = true
 		local kind = door.Kind == "MiniBoss" and "MINI-BOSS" or door.Kind == "Boss" and "BOSS"
-			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM" or ""
-		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small, UiConfig.Colors.Danger)
+			or door.Kind == "Elite" and "ELITE" or door.Kind == "Bonus" and "BONUS ROOM"
+			or door.Kind == "Extract" and "BANK LOOT" or ""
+		local sub = UiTheme.label("Kind", button, kind, UiConfig.Text.Small,
+			door.Kind == "Extract" and UiConfig.Colors.Health or UiConfig.Colors.Danger)
 		sub.Position = UDim2.new(0, 0, 0, 30)
 		sub.Size = UDim2.new(1, 0, 0, 16)
 		local reward = UiTheme.label("Reward", button, door.RewardTitle, UiConfig.Text.Hud, UiConfig.Colors.Gold)
@@ -240,6 +319,8 @@ end
 
 function CardPickerView:Hide()
 	self.gui.Enabled = false
+	self.rerollButton.Visible = false
+	self.respecButton.Visible = false
 	self._stage = nil
 	self._voted = nil
 	self:_clear()

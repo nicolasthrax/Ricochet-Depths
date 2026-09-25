@@ -305,7 +305,19 @@ Original notes:
 - Go / no-go metrics: write them up in a doc (bounce, D1, D7, play days, co-play days, payer
   conversion, ARPPU).
 
-### F. Client UI (task 7)
+### F. Client UI (task 7): DONE (headless view tests only; needs a Studio pass)
+Done (`tests/views.test.luau`): `BaseView` (grid, role-grouped cards with level/cost/Hearth gate,
+tap card then tile to build or move, claim with fill, visit/cheer list, private-server FEATURE
+link); `BasePreview` (3 s camera over `PlotIndex` via the `Cinematic` attribute); MenuDock BASE
+(first on the rail); HUD BASE button, modifier chip (`SetModifier`/`SetLobbyModifier`) and revive
+button (`OfferRevive`, Notify `ReviveOffer`); `ShopView` tabs Trails/Themes/Signs/Emotes/Titles/
+Store (coins, level, pass; Play for emotes; R$ prices); `ResultsView` haul banked/lost, daily
+bonus, `SetNextBuild`, DESCEND (waits for the lobby, then `RequestStartRun`) and BUILD AT BASE,
+optional ad button; `CardPickerView` icon + 3-word label, RECOMMENDED tag, REROLL (free/count),
+respec on the door stage, fusion "Try it now", BANK LOOT door; `RigView` preset slots;
+`DailyView` extras and forgiving wording; onboarding hints FirstDescent/BankLoot/Base.
+
+Original notes:
 - `BaseView`: a 4x4 grid; building cards grouped by role, with level, cost and the Hearth gate;
   tap a card then a tile to build or move; an upgrade button; the claim button with fill %;
   and a visit list of players on the server, with Visit and Cheer.

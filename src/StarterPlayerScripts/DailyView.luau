@@ -44,8 +44,18 @@ function DailyView.new(playerGui, onClaim)
 		coins.Size = UDim2.new(1, 0, 0, 28)
 		coins.TextXAlignment = Enum.TextXAlignment.Center
 		coins.Font = UiConfig.FontDisplay
-		local detail = UiTheme.label("Detail", tile, reward.Xp and ("coins\n+" .. reward.Xp .. " XP") or "coins",
-			UiConfig.Text.Small - 2, UiConfig.Colors.TextMuted)
+		local lines = { "coins" }
+		if reward.Xp then
+			table.insert(lines, "+" .. reward.Xp .. " XP")
+		end
+		local extras = reward.Extras or {}
+		if extras.ReviveTokens then
+			table.insert(lines, string.format("+%d Revive", extras.ReviveTokens))
+		end
+		if extras.Rerolls then
+			table.insert(lines, string.format("+%d Rerolls", extras.Rerolls))
+		end
+		local detail = UiTheme.label("Detail", tile, table.concat(lines, "\n"), UiConfig.Text.Small - 2, UiConfig.Colors.TextMuted)
 		detail.Position = UDim2.new(0, 0, 0, 58)
 		detail.Size = UDim2.new(1, 0, 0, 34)
 		detail.TextXAlignment = Enum.TextXAlignment.Center
@@ -86,8 +96,9 @@ function DailyView:SetState(daily, resetsIn)
 	self._canClaim = daily.CanClaim == true
 	local streak = tonumber(daily.Streak) or 0
 	local current = tonumber(daily.DayIndex) or 1
-	self.streakLabel.Text = streak > 0 and string.format("Streak: %d day%s. Come back every day for bigger rewards!",
-		streak, streak == 1 and "" or "s") or "Log in every day to build a streak!"
+	-- The forgiving track: a missed day never sends anyone back to day 1.
+	self.streakLabel.Text = streak > 0 and string.format("%d reward%s claimed. Missed a day? You never lose your place.",
+		streak, streak == 1 and "" or "s") or "A reward every day you play. Miss a day and you keep your place."
 	for index, tile in self.tiles do
 		local claimed = index < current or (index == current and not self._canClaim)
 		local today = index == current and self._canClaim

@@ -1,5 +1,5 @@
 -- The lobby's side menu: a slim rail on the right edge where a thumb can reach it. The rail holds
--- what a player reaches for before every run or every day (Rigs, Pact, Daily, Quests); the rest
+-- what a player reaches for before every run or every day (Base, Rigs, Pact, Daily, Quests); the rest
 -- (Journal, Codes, Invite) sit behind MORE, which pops out beside it. A red dot marks anything
 -- waiting to be claimed, and MORE shows a dot when anything behind it has one. Lobby only.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,6 +19,7 @@ local BUTTON_TRANSPARENCY = 0.3
 
 -- Group "Rail" is always shown; "More" lives in the pop-out.
 local ENTRIES = {
+	{ Id = "Base", Text = "BASE", Flag = "BaseBuilding", Group = "Rail" },
 	{ Id = "Rigs", Text = "RIGS", Flag = "Loadouts", Group = "Rail" },
 	{ Id = "Pact", Text = "PACT", Flag = "Loadouts", Group = "Rail" },
 	{ Id = "Daily", Text = "DAILY", Flag = "DailyRewards", Group = "Rail" },

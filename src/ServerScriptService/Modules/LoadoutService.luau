@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AchievementConfig = require(ReplicatedStorage:WaitForChild("AchievementConfig"))
+local MetaConfig = require(ReplicatedStorage:WaitForChild("MetaConfig"))
 local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
 local Payout = require(script.Parent.Payout)
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
@@ -14,6 +15,9 @@ local LoadoutService = {}
 LoadoutService.__index = LoadoutService
 
 -- options.canChange(player) -> bool: whether loadout changes are allowed now (the lobby only).
+-- options.extraPresets(player) -> number: preset slots passes add.
+-- options.ownsTrail(player, itemId) -> bool: whether a preset's trail may be worn.
+-- options.wearTrail(player, itemId): equips a trail (ShopService's path).
 function LoadoutService.new(persistence, options)
 	options = options or {}
 	return setmetatable({
@@ -21,6 +25,13 @@ function LoadoutService.new(persistence, options)
 		_canChange = options.canChange or function()
 			return true
 		end,
+		_extraPresets = options.extraPresets or function()
+			return 0
+		end,
+		_ownsTrail = options.ownsTrail or function()
+			return false
+		end,
+		_wearTrail = options.wearTrail,
 	}, LoadoutService)
 end
 
@@ -120,6 +131,64 @@ function LoadoutService:ClaimAchievement(player, achievementId)
 		return nil, "already claimed"
 	end
 	return { Coins = coins, Xp = xp, LevelCoins = levelCoins, Title = achievement.Title }
+end
+
+-- How many preset slots this player has.
+function LoadoutService:PresetSlots(player)
+	local presets = MetaConfig.Presets
+	return math.clamp(presets.FreeSlots + math.floor(tonumber(self._extraPresets(player)) or 0), 0, presets.MaxSlots)
+end
+
+-- A preset slot number from the client, or nil.
+function LoadoutService:_slot(player, slot)
+	if type(slot) ~= "number" or slot ~= math.floor(slot) or slot < 1 or slot > self:PresetSlots(player) then
+		return nil
+	end
+	return tostring(slot) -- stored under string keys: a DataStore table with holes is not an array
+end
+
+-- Saves the current rig, trail and Pact into a slot. Returns the preset, or nil and a reason.
+function LoadoutService:SavePreset(player, slot)
+	local profile = self:_profile(player)
+	if not profile then
+		return nil, "profile not loaded"
+	end
+	local key = self:_slot(player, slot)
+	if not key then
+		return nil, "no such slot"
+	end
+	local preset = { Rig = profile.SelectedRig, Trail = profile.EquippedTrail, Pact = table.clone(profile.Pact) }
+	self._persistence:Update(player, function(stored)
+		stored.Presets[key] = preset
+	end)
+	return preset
+end
+
+-- Puts a saved preset back on: its rig if still unlocked, its trail if still owned, its Pact if
+-- unlocked. Returns the preset, or nil and a reason.
+function LoadoutService:ApplyPreset(player, slot)
+	local profile = self:_profile(player)
+	if not profile then
+		return nil, "profile not loaded"
+	end
+	if not self._canChange(player) then
+		return nil, "in a run"
+	end
+	local key = self:_slot(player, slot)
+	local preset = key and profile.Presets[key]
+	if type(preset) ~= "table" then
+		return nil, "empty slot"
+	end
+	if type(preset.Rig) == "string" then
+		self:SelectRig(player, preset.Rig)
+	end
+	if type(preset.Trail) == "string" and (preset.Trail == "" or self._ownsTrail(player, preset.Trail)) and self._wearTrail then
+		self._wearTrail(player, preset.Trail)
+	end
+	if type(preset.Pact) == "table" then
+		self:SetPact(player, preset.Pact)
+	end
+	return preset
 end
 
 -- How many completed achievements are waiting to be claimed, for the menu's dot.

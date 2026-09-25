@@ -71,15 +71,17 @@ local function trailIds()
 end
 
 describe("ShopConfig catalogue", function()
-	it("gives every item a unique id, ascending positive whole-number costs and a max level", function()
+	it("gives every item a unique id, one way to earn it, and ascending whole-number costs", function()
 		local seen = {}
 		for _, item in ShopConfig.Items do
 			expect(seen[item.Id]).toBeNil()
 			seen[item.Id] = true
-			expect(#item.Costs).toBeGreaterThan(0)
-			expect(ShopConfig.MaxLevel(item)).toBe(#item.Costs)
+			-- Exactly one of: coins, a level, a pass.
+			local ways = (item.Costs and 1 or 0) + (item.UnlockLevel and 1 or 0) + (item.RequiresPass and 1 or 0)
+			expect(ways).toBe(1)
+			expect(ShopConfig.MaxLevel(item)).toBe(item.Costs and #item.Costs or 0)
 			local previous = 0
-			for _, price in item.Costs do
+			for _, price in item.Costs or {} do
 				expect(price).toBeGreaterThan(previous)
 				expect(price).toBe(math.floor(price))
 				previous = price
@@ -94,10 +96,11 @@ describe("ShopConfig catalogue", function()
 		for _, item in ShopConfig.Items do
 			expect(item.Effect).toBeNil()
 			expect(item.Kind).never().toBe("Stat")
+			expect(table.find(ShopConfig.Kinds, item.Kind)).toBeTruthy()
 			if item.Kind == "Trail" then
 				trails += 1
 				expect(typeof(item.Trail.Color)).toBe("Color3")
-				expect(ShopConfig.MaxLevel(item)).toBe(1)
+				expect(ShopConfig.MaxLevel(item) <= 1).toBe(true)
 			end
 		end
 		expect(trails).toBeGreaterThanOrEqual(1)
@@ -515,23 +518,28 @@ describe("Cosmetics catalogue", function()
 		expect(ShopConfig.Get("TrailGold").RequiresPass).toBeTruthy()
 	end)
 
-	it("refuses the Gold trail without its pass, and sells it with one", function()
+	it("gives the Gold trail with its pass, free, and never sells it", function()
 		local store = __FakeDataStore.new()
 		local persistence = PlayerDataService.new(store)
 		local player = funded(persistence, subject(7701), 5000)
 		local pass = ShopConfig.Get("TrailGold").RequiresPass
+		expect(pass).toBe("SupporterPack")
 		local owns = false
 		local shop = newShop(persistence, {
 			ownsPass = function(_, key)
 				return key == pass and owns
 			end,
 		})
-		local ok, reason = shop:Purchase(player, "TrailGold", 0)
-		expect(ok).toBe(false)
-		expect(reason).toBe("requires " .. pass)
+		expect(select(2, shop:Purchase(player, "TrailGold", 0))).toBe("requires " .. pass)
+		expect(select(2, shop:Equip(player, "TrailGold", 0))).toBe("not owned")
 		owns = true
-		ok = shop:Purchase(player, "TrailGold", 0)
-		expect(ok).toBe(true)
+		expect(select(2, shop:Purchase(player, "TrailGold", 0))).toBe("not for sale")
+		expect((shop:Equip(player, "TrailGold", 0))).toBe(true)
+		expect(shop:GetTrail(player)).toBe(ShopConfig.Get("TrailGold").Trail)
+		expect(persistence:GetBalance(player)).toBe(5000)
+		-- The pass lapses (a refund): the trail is no longer drawn.
+		owns = false
+		expect(shop:GetTrail(player)).toBeNil()
 	end)
 end)
 
@@ -545,5 +553,134 @@ describe("ShopView tabs", function()
 		expect(items:FindFirstChild("TrailEmber").Visible).toBe(true)
 		view:SetTab("Store")
 		expect(items:FindFirstChild("TrailEmber").Visible).toBe(false)
+	end)
+end)
+
+describe("cosmetic kinds", function()
+	local ProgressionConfig = __require("ProgressionConfig")
+
+	local function xpForLevel(level)
+		local xp = 0
+		for current = 1, level - 1 do
+			xp += ProgressionConfig.XpToNext(current)
+		end
+		return xp
+	end
+
+	it("sells themes, signs, emotes and nameplates, each earned by coins, a level or a pass", function()
+		local kinds = {}
+		for _, item in ShopConfig.Items do
+			kinds[item.Kind] = kinds[item.Kind] or { Coins = 0, Level = 0, Pass = 0 }
+			local tally = kinds[item.Kind]
+			if item.Costs then
+				tally.Coins += 1
+			elseif item.UnlockLevel then
+				tally.Level += 1
+			else
+				tally.Pass += 1
+			end
+		end
+		for _, kind in ShopConfig.Kinds do
+			expect(kinds[kind]).toBeTruthy()
+		end
+		-- Every theme and sign exists on the base side too.
+		for _, item in ShopConfig.Items do
+			if item.Kind == "Theme" then
+				expect(BaseConfig.Themes[item.Id]).toBeTruthy()
+			elseif item.Kind == "Sign" then
+				expect(BaseConfig.Signs[item.Id]).toBeTruthy()
+			elseif item.Kind == "Emote" then
+				expect(type(item.Emote.Text)).toBe("string")
+			end
+		end
+		-- The passes' cosmetics are the ones the concept lists.
+		expect(ShopConfig.Get("Gilded").RequiresPass).toBe("SupporterPack")
+		expect(ShopConfig.Get("Cheer").RequiresPass).toBe("SupporterPack")
+		expect(ShopConfig.Get("Banner").RequiresPass).toBe("ExplorerPass")
+		expect(ShopConfig.Get("Explorer").RequiresPass).toBe("ExplorerPass")
+	end)
+
+	it("buys a theme and wears it on the base, and equips a sign and nameplate by kind", function()
+		local persistence = PlayerDataService.new(__FakeDataStore.new())
+		local player = funded(persistence, subject(7801), 5000)
+		local shop = newShop(persistence, {
+			ownsPass = function(_, key)
+				return key == "ExplorerPass"
+			end,
+		})
+		expect((shop:Purchase(player, "Moss", 0))).toBe(true)
+		expect(persistence:GetPublicProfile(player).Base.Theme).toBe("Moss")
+		expect((shop:Equip(player, "Banner", 0))).toBe(true)
+		expect((shop:Equip(player, "Explorer", 0))).toBe(true)
+		expect(persistence:GetPublicProfile(player).Nameplate).toBe("Explorer")
+		local theme, sign = shop:GetBaseStyle(player)
+		expect(theme).toBe("Moss")
+		expect(sign).toBe("Banner")
+		expect(shop:GetNameplate(player)).toBe("Explorer")
+		-- Clearing a slot names its kind.
+		expect((shop:Equip(player, "", 0, "Theme"))).toBe(true)
+		expect((shop:GetBaseStyle(player))).toBe("")
+		expect(select(2, shop:Equip(player, "", 0, "Emote"))).toBe("not equippable")
+		expect(select(2, shop:Equip(player, "Wave", 0))).toBe("not equippable")
+	end)
+
+	it("unlocks level cosmetics by playing, without selling them", function()
+		local store = __FakeDataStore.new()
+		local persistence = PlayerDataService.new(store)
+		local player = funded(persistence, subject(7802), 5000)
+		local shop = newShop(persistence)
+		local frost = ShopConfig.Get("Frost")
+		expect(select(2, shop:Equip(player, "Frost", 0))).toBe("not owned")
+		expect(select(2, shop:Purchase(player, "Frost", 0))).toBe("not for sale")
+		persistence:GrantReward(player, "xp", 0, xpForLevel(frost.UnlockLevel))
+		expect((shop:Equip(player, "Frost", 0))).toBe(true)
+		expect(persistence:GetBalance(player)).toBe(5000)
+	end)
+
+	it("plays only owned emotes, and only in the lobby", function()
+		local persistence = PlayerDataService.new(__FakeDataStore.new())
+		local player = funded(persistence, subject(7803), 5000)
+		local open = true
+		local shop = newShop(persistence, {
+			canShop = function()
+				return open
+			end,
+		})
+		expect(shop:PlayEmote(player, "Wave").Id).toBe("Wave") -- level 1: everyone has it
+		expect(select(2, shop:PlayEmote(player, "Ricochet"))).toBe("not owned")
+		expect(select(2, shop:PlayEmote(player, "Cheer"))).toBe("not owned")
+		expect(select(2, shop:PlayEmote(player, "TrailEmber"))).toBe("unknown emote")
+		shop:Purchase(player, "Ricochet", 0)
+		expect(shop:PlayEmote(player, "Ricochet").Id).toBe("Ricochet")
+		open = false
+		expect(select(2, shop:PlayEmote(player, "Wave"))).toBe("in a run")
+	end)
+
+	it("bursts an emote over the player's head, then clears it", function()
+		local EmoteBurst = __require("EmoteBurst")
+		local player = Harness.addPlayer("Emoter")
+		local character = Harness.giveCharacter(player, Vector3.new(0, 3, 0))
+		local burst = EmoteBurst.Play(player, ShopConfig.Get("Wave").Emote)
+		expect(burst).toBeTruthy()
+		expect(burst:FindFirstChild("Text").Text).toBe(ShopConfig.Get("Wave").Emote.Text)
+		expect(burst.Parent).toBe(character:FindFirstChild("HumanoidRootPart"))
+		Harness.advance(EmoteBurst.Seconds + 0.1)
+		expect(burst.Parent).toBeNil()
+		expect(EmoteBurst.Play({ Character = nil }, ShopConfig.Get("Wave").Emote)).toBeNil()
+		Harness.removePlayer(player)
+	end)
+
+	it("shows a worn nameplate title with the level", function()
+		local Nameplates = __require("Nameplates")
+		local player = Harness.addPlayer("Titled")
+		local character = Harness.giveCharacter(player, Vector3.new(0, 3, 0))
+		local head = Instance.new("Part")
+		head.Name = "Head"
+		head.Parent = character
+		expect(Nameplates.Update(player, 7, "Explorer")).toBe(true)
+		expect(head:FindFirstChild("LevelPlate"):FindFirstChild("Text").Text).toBe("Lv 7  ·  Explorer")
+		Nameplates.Update(player, 7, nil)
+		expect(head:FindFirstChild("LevelPlate"):FindFirstChild("Text").Text).toBe("Lv 7")
+		Harness.removePlayer(player)
 	end)
 end)

@@ -90,6 +90,8 @@ function PlayerState:ResetRun()
 	-- Card-round allowances: rerolls taken free this run, and whether the respec is spent.
 	self.freeRerollsUsed = 0
 	self.respecUsed = false
+	-- A Revive token spent this run (once a run).
+	self.tokenReviveUsed = false
 end
 
 function PlayerState:OrbCapacity()

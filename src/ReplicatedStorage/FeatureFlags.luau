@@ -50,6 +50,11 @@ FeatureFlags.FirstDescent = true
 -- One biome modifier a day for every run, with a once-a-day bonus (DailyModifierConfig).
 FeatureFlags.DailyModifiers = true
 
+-- 3.0 monetization that needs a Studio / live check before it is switched on:
+-- the paid Revive product (a revive token bought while down), and rewarded video ads.
+FeatureFlags.PaidRevive = false
+FeatureFlags.RewardedVideo = false
+
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false
 FeatureFlags.Matchmaking = false

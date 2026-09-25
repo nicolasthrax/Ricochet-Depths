@@ -38,12 +38,29 @@ function RemoteRouter.new(match, persistence, onProfileChanged, shop, options)
 		_onBaseResult = options and options.onBaseResult,
 		_onVisitBase = options and options.onVisitBase,
 		_onCheerBase = options and options.onCheerBase,
+		-- options.onEmote(player, emote): play an emote ShopService allowed (needs the shop).
+		-- options.onFeatureBase(player, userId|nil): a private server owner features a base.
+		-- options.onWatchAd(player, now): a rewarded video for the end-of-run bonus.
+		_onEmote = options and options.onEmote,
+		_onFeatureBase = options and options.onFeatureBase,
+		_onWatchAd = options and options.onWatchAd,
 		_persistence = persistence,
 		_onProfileChanged = onProfileChanged,
 		_shop = shop,
 		_guard = RemoteGuard.new(RunConfig.RemoteRules),
 		_connections = {},
 	}, RemoteRouter)
+end
+
+-- A whole number in range, or nil: tiles and user ids arrive from the client.
+local function wholeNumber(value, low, high)
+	if type(value) ~= "number" or value ~= value or value ~= math.floor(value) then
+		return nil
+	end
+	if value < low or (high and value > high) then
+		return nil
+	end
+	return value
 end
 
 function RemoteRouter:_connect(remoteName, action, handler)
@@ -84,6 +101,13 @@ function RemoteRouter:Bind()
 		local match = self._matchFor(player)
 		if match and match.RespecCard then
 			match:RespecCard(player, now)
+		end
+	end)
+
+	self:_connect("UseRevive", "UseRevive", function(player, now)
+		local match = self._matchFor(player)
+		if match and match.UseReviveToken then
+			match:UseReviveToken(player, now)
 		end
 	end)
 
@@ -167,6 +191,14 @@ function RemoteRouter:Bind()
 			local result, reason = self._loadout:ClaimAchievement(player, id)
 			self._onLoadoutResult(player, "Achievement", result, reason)
 		end)
+		self:_connect("SavePreset", "SavePreset", function(player, _now, slot)
+			local result, reason = self._loadout:SavePreset(player, slot)
+			self._onLoadoutResult(player, "SavePreset", result, reason)
+		end)
+		self:_connect("ApplyPreset", "ApplyPreset", function(player, _now, slot)
+			local result, reason = self._loadout:ApplyPreset(player, slot)
+			self._onLoadoutResult(player, "ApplyPreset", result, reason)
+		end)
 	end
 
 	if self._base and self._onBaseResult then
@@ -185,8 +217,8 @@ function RemoteRouter:Bind()
 				Reason = not ok and result or nil,
 			})
 		end)
-		self:_connect("EquipShopItem", "EquipShopItem", function(player, now, itemId)
-			local ok, reason = self._shop:Equip(player, itemId, now)
+		self:_connect("EquipShopItem", "EquipShopItem", function(player, now, itemId, kind)
+			local ok, reason = self._shop:Equip(player, itemId, now, type(kind) == "string" and kind or nil)
 			shopResult:FireClient(player, {
 				Ok = ok,
 				Action = "Equip",
@@ -194,18 +226,25 @@ function RemoteRouter:Bind()
 				Reason = reason,
 			})
 		end)
+		if self._onEmote then
+			self:_connect("PlayEmote", "PlayEmote", function(player, _now, emoteId)
+				local emote = self._shop:PlayEmote(player, type(emoteId) == "string" and emoteId or nil)
+				if emote then
+					self._onEmote(player, emote)
+				end
+			end)
+		end
 	end
-end
-
--- A whole number in range, or nil: tiles and user ids arrive from the client.
-local function wholeNumber(value, low, high)
-	if type(value) ~= "number" or value ~= value or value ~= math.floor(value) then
-		return nil
+	if self._onFeatureBase then
+		self:_connect("FeatureBase", "FeatureBase", function(player, _now, userId)
+			self._onFeatureBase(player, wholeNumber(userId, 1))
+		end)
 	end
-	if value < low or (high and value > high) then
-		return nil
+	if self._onWatchAd then
+		self:_connect("WatchAd", "WatchAd", function(player, now)
+			self._onWatchAd(player, now)
+		end)
 	end
-	return value
 end
 
 function RemoteRouter:_bindBase()

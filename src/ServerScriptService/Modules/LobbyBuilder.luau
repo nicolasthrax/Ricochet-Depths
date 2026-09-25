@@ -107,6 +107,7 @@ function LobbyBuilder.Build(parent)
 	LobbyBuilder._buildAmbience(lobby, origin)
 	local leaderboards = LobbyBuilder._buildLeaderboards(lobby, origin)
 	local modifierBoard = LobbyBuilder._buildModifierBoard(signs, origin)
+	local featuredBoard, featuredPrompt = LobbyBuilder._buildFeaturedBoard(signs, origin)
 	LobbyBuilder._buildBarrier(lobby, origin)
 
 	return lobby, soloPrompt, {
@@ -115,7 +116,27 @@ function LobbyBuilder.Build(parent)
 		cosmeticsPrompt = prompts.CosmeticsKiosk,
 		leaderboards = leaderboards,
 		modifierBoard = modifierBoard,
+		featuredBoard = featuredBoard,
+		featuredPrompt = featuredPrompt,
 	}
+end
+
+-- A private server's featured base, on a board mirroring the modifier's. Its prompt stays off
+-- until the server's owner features someone (GameBootstrap).
+function LobbyBuilder._buildFeaturedBoard(signs, origin)
+	local floorY = RoomConfig.FloorY
+	local board = Signage.Board(signs, "FeaturedBoard", Vector3.new(16, 3.4, 0.2), origin + Vector3.new(17, floorY + 5, 10),
+		SOUTH, "OUTPOSTS\nVisit friends from the Outpost kiosk", Color3.fromRGB(255, 196, 120), SIGN_BACK)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "VisitFeaturedPrompt"
+	prompt.ActionText = "Visit featured base"
+	prompt.ObjectText = "Outpost"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Enabled = false
+	prompt.Parent = board
+	return board, prompt
 end
 
 -- Today's biome modifier, on a board beside the walkway facing the spawn. GameBootstrap prints

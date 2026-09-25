@@ -1,4 +1,4 @@
--- A small "Lv N" plate over every character, so players can see each other's level in the lobby
+-- A small "Lv N · Title" plate over every character, so players can see each other's level in the lobby
 -- and in co-op runs. Built on the server, so every client sees the same plate. Idempotent: call
 -- Update as often as you like; it only touches the plate when something changed.
 local Nameplates = {}
@@ -32,8 +32,9 @@ local function build(head)
 	return plate
 end
 
--- Shows `level` over the player's current character, if it has a head yet.
-function Nameplates.Update(player, level)
+-- Shows `level` (and a cosmetic title, if one is worn) over the player's current character, if
+-- it has a head yet.
+function Nameplates.Update(player, level, title)
 	local character = player.Character
 	local head = character and character:FindFirstChild("Head")
 	if not head then
@@ -42,6 +43,9 @@ function Nameplates.Update(player, level)
 	local plate = head:FindFirstChild(PLATE_NAME) or build(head)
 	local label = plate:FindFirstChild("Text")
 	local text = "Lv " .. tostring(level)
+	if type(title) == "string" and title ~= "" then
+		text ..= "  ·  " .. title
+	end
 	if label and label.Text ~= text then
 		label.Text = text
 	end

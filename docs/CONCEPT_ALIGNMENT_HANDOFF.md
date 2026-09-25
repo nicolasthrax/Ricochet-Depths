@@ -224,7 +224,34 @@ Original notes:
 6. **Pacing:** target 6-8 minutes for a full run. Short runs come from the Bank-loot points.
    Re-run `./scripts/dryrun.sh` and record the numbers in `PROGRESS.md`.
 
-### D. Monetization to the concept's launch economy (task 5)
+### D. Monetization to the concept's launch economy (task 5): DONE (server side; Store/cosmetics UI is F)
+Done (`tests/monetization.test.luau`, `tests/shop.test.luau` "cosmetic kinds", `tests/economy.test.luau`):
+- `MonetizationConfig`: ExplorerPass (129 R$, PresetSlots 1), SupporterPack (349 R$, PresetSlots 2,
+  ExtraCapHours 2, ChatTag "Supporter"); products Revive (29 R$, Kind "Revive", +1 ReviveToken)
+  and RerollBundle (59 R$, +5 Rerolls); `Ads` (RewardProductId, MaxPerDay 3, 40 coins). All ids 0.
+  Coin packs, 2x Coins, VIP and **the Premium coin bonus** removed (all were coins for money).
+- `MonetizationService`: `GetExtraCapHours`, `GetPresetSlots`, `GetPerk`; receipts grant `Extras`
+  only; a Revive receipt calls `onRevive` (bootstrap -> `match:UseReviveToken`); the ad product is
+  acknowledged without paying; `productEnabled` hides Revive while `FeatureFlags.PaidRevive` is off.
+- Revive tokens: `MatchService:UseReviveToken` (Combat, downed, once a run, spends "ReviveUse"
+  counter in ReviveTokens); `_holdForRevive` waits `RunConfig.Revive.GraceSeconds` when everyone
+  is down and someone holds a token (or `deps.canBuyRevive`), sending Notify `ReviveOffer`.
+  Remote `UseRevive`.
+- `ShopConfig`: Kinds Trail/Theme/Sign/Emote/Nameplate, each earned by `Costs`, `UnlockLevel` or
+  `RequiresPass` (free); `ShopConfig.Owns`. `ShopService`: `Owns`, generic `Equip(player, id, now,
+  kind)`, `GetTrail`/`GetBaseStyle`/`GetNameplate` (only still-owned items), `PlayEmote`.
+  `EmoteBurst` (server billboard). Remote `PlayEmote`; `EquipShopItem` takes a kind.
+- `LoadoutService:PresetSlots/SavePreset/ApplyPreset` (`MetaConfig.Presets` 2 free, max 5; string
+  slot keys). Remotes `SavePreset`, `ApplyPreset`. Public profile gains `PresetSlots`.
+- `RewardedAds` (named so it does not shadow Roblox's AdService): pcall-wrapped
+  availability/show, fixed bonus via `Payout.Grant` key `ad:<day>:<n>`, `Limits.AdDay/AdCount`.
+  Remote `WatchAd` bound only when `FeatureFlags.RewardedVideo`.
+- Private server: `GameBootstrap._ownsPrivateServer`; remote `FeatureBase(userId)` prints the
+  lobby `FeaturedBoard` and enables its "Visit featured base" prompt.
+- Chat tag: `ChatTag` attribute (was `VIP`); nameplate shows the worn title.
+- Season pass and UGC limiteds not built (deliberate, per the concept): document in G.
+
+Original notes:
 - Remove the coin packs and the 2x Coins pass from `MonetizationConfig` and
   `MonetizationService` (coins that buy buildings would be paid power). VIP folds into the
   Supporter Pack.

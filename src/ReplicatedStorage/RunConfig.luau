@@ -88,6 +88,12 @@ RunConfig.RemoteRules = {
 	RequestBase = { Cooldown = 0.5, Burst = 4 },
 	RerollOffer = { Cooldown = 0.5, Burst = 2 },
 	RespecCard = { Cooldown = 0.5, Burst = 2 },
+	UseRevive = { Cooldown = 1, Burst = 2 },
+	SavePreset = { Cooldown = 0.5, Burst = 3 },
+	ApplyPreset = { Cooldown = 0.5, Burst = 3 },
+	PlayEmote = { Cooldown = 3, Burst = 1 },
+	FeatureBase = { Cooldown = 2, Burst = 2 },
+	WatchAd = { Cooldown = 5, Burst = 1 },
 }
 
 -- Lobby: two multiplayer gates of GateMinPlayers..GateCapacity. Once a gate holds the minimum,
@@ -495,6 +501,15 @@ RunConfig.Cards = {
 	RespecRounds = 2,
 	-- The use counter a spent Reroll token is recorded against (PlayerDataService purchase path).
 	RerollUseId = "RerollUse",
+}
+
+-- Revive tokens (earned in daily rewards, or the paid Revive product): spent while down, once a
+-- run, to get straight back up. When everyone is down and someone could still revive, the run
+-- waits GraceSeconds before it is lost.
+RunConfig.Revive = {
+	GraceSeconds = 8,
+	HealthFraction = 0.5,
+	UseId = "ReviveUse",
 }
 
 -- More players, tougher enemies: every member past the first adds this much enemy health. A

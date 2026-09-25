@@ -88,6 +88,9 @@ function MatchService.new(deps)
 	self._wallClock = deps.wallClock or os.time
 	-- (a, b) -> whether two players are Roblox friends, for the party bonus. Must not yield.
 	self._areFriends = deps.areFriends
+	-- player -> whether the paid Revive may be offered to them now (FeatureFlags.PaidRevive and a
+	-- configured product). Optional: without it only held tokens hold a lost run open.
+	self._canBuyRevive = deps.canBuyRevive
 	self._modifier = nil
 	self._partySize = 1
 	self._runOptions = {}
@@ -209,6 +212,7 @@ function MatchService:RequestStart(player, now, options)
 
 	self._runId += 1
 	self._banked = false
+	self._reviveHoldUntil = nil
 	self._upgradeRound = 0
 	self._plan, self._slots = self:_planFor(self._runId, firstDescent)
 	self._roomRewards = {}
@@ -373,6 +377,82 @@ function MatchService:_allDown()
 	return true
 end
 
+--// revive tokens ------------------------------------------------------------
+
+-- Whether a downed participant could still get up with a token (held, or buyable now).
+function MatchService:_canRevive(player)
+	local state = self._states[player]
+	if not state or state.alive or state.tokenReviveUsed then
+		return false
+	end
+	local persistence = self._persistence
+	local tokens = persistence and persistence.GetBalance and persistence:GetBalance(player, "ReviveTokens") or 0
+	return tokens > 0 or (self._canBuyRevive ~= nil and self._canBuyRevive(player) == true)
+end
+
+-- Everyone is down. If anyone could still revive, the run waits RunConfig.Revive.GraceSeconds
+-- for them (and tells them so) before it is lost. Returns true while it is waiting.
+function MatchService:_holdForRevive(now)
+	if self._reviveHoldUntil then
+		return now < self._reviveHoldUntil
+	end
+	local offered = false
+	for _, player in self._participants do
+		if self:_canRevive(player) then
+			offered = true
+			local persistence = self._persistence
+			self:_fireClient("Notify", player, {
+				Kind = "ReviveOffer",
+				Text = "You're down! Use a Revive to get back up.",
+				Seconds = RunConfig.Revive.GraceSeconds,
+				Tokens = persistence and persistence.GetBalance and persistence:GetBalance(player, "ReviveTokens") or 0,
+			})
+		end
+	end
+	if offered then
+		self._reviveHoldUntil = now + RunConfig.Revive.GraceSeconds
+	end
+	return offered
+end
+
+-- Spends a Revive token to get a downed participant back up where they fell: once a run, only
+-- while down, only in a fight. The token is spent through the purchase path as the next level
+-- of a use counter, so it is re-checked against the store when the save commits.
+function MatchService:UseReviveToken(player, now)
+	if self._state ~= States.Combat then
+		return false, "not in a fight"
+	end
+	local state = self._states[player]
+	if not state or not table.find(self._participants, player) then
+		return false, "not in the run"
+	end
+	if state.alive then
+		return false, "not down"
+	end
+	if state.tokenReviveUsed then
+		return false, "already revived"
+	end
+	local persistence = self._persistence
+	if not persistence or not persistence.SpendOnUpgrade then
+		return false, "no tokens"
+	end
+	local useId = RunConfig.Revive.UseId
+	local used = persistence:GetMetaLevels(player)[useId] or 0
+	local left, reason = persistence:SpendOnUpgrade(player, useId, used + 1, 1, "ReviveTokens")
+	if not left then
+		return false, reason
+	end
+	persistence:SaveInBackground(player, now)
+	state.tokenReviveUsed = true
+	state:Revive(now, RunConfig.Revive.HealthFraction)
+	self:_setWalkSpeed(player, RunConfig.BaseWalkSpeed + (state.stats.MoveSpeedBonus or 0))
+	self._reviveHoldUntil = nil
+	self:_pushPlayerState(player)
+	self:_fireAll("Notify", { Kind = "Revive", Text = state.name .. " is back up!" })
+	self:_log("TokenRevive", { RunId = self._runId, Room = self._roomIndex }, now)
+	return true
+end
+
 function MatchService:Step(deltaTime, now)
 	self._now = now
 	local state = self._state
@@ -394,7 +474,9 @@ function MatchService:Step(deltaTime, now)
 		self:_stepRevives(deltaTime, now)
 		self:_stepArsenal(deltaTime, now)
 		if self:_allDown() then
-			self:_finish("Defeated", now)
+			if not self:_holdForRevive(now) then
+				self:_finish("Defeated", now)
+			end
 		elseif now - self._runStartedAt >= RunConfig.HardRunTimeLimit then
 			self:_finish("TimedOut", now)
 		elseif self._rooms:IsCleared(now) then

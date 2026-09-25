@@ -130,6 +130,8 @@ end
 
 --// Social ----------------------------------------------------------------------
 -- Roblox Premium members earn this much extra coin multiplier on every run.
-MetaConfig.PremiumCoinBonus = 0.1
+-- Loadout presets (rig, trail and Pact saved together): FreeSlots for everyone, more with passes
+-- (MonetizationConfig PresetSlots), never more than MaxSlots.
+MetaConfig.Presets = { FreeSlots = 2, MaxSlots = 5 }
 
 return MetaConfig

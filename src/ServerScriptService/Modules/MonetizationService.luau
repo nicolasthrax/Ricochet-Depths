@@ -1,5 +1,6 @@
--- Game passes and coin packs. Pass ownership is read when a player joins (and updated when they
--- buy one in-game) and turns into run bonuses. Coin packs are paid through the profile's grant
+-- Game passes and developer products. Pass ownership is read when a player joins (and updated
+-- when they buy one in-game) and turns into entitlements: presets, offline hours, cosmetics, a
+-- nameplate and a chat tag, never run power. Products are paid through the profile's grant
 -- ledger keyed by the receipt's PurchaseId, and only confirmed to Roblox once saved, so a
 -- receipt pays exactly once however often Roblox delivers it.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,7 +14,9 @@ local GRANTED = Enum.ProductPurchaseDecision.PurchaseGranted
 local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 -- options: marketplace (MarketplaceService or a stand-in), persistence, config (default
--- MonetizationConfig), getPlayer(userId), onChanged(player).
+-- MonetizationConfig), getPlayer(userId), onChanged(player), onRevive(player) -> bool (spend a
+-- just-bought revive now, if the buyer is down in a run), productEnabled(product) -> bool
+-- (whether a product may be offered; the paid revive waits for FeatureFlags.PaidRevive).
 function MonetizationService.new(options)
 	return setmetatable({
 		_marketplace = options.marketplace,
@@ -21,6 +24,10 @@ function MonetizationService.new(options)
 		_config = options.config or MonetizationConfig,
 		_getPlayer = options.getPlayer,
 		_onChanged = options.onChanged,
+		_onRevive = options.onRevive,
+		_productEnabled = options.productEnabled or function()
+			return true
+		end,
 		_owned = {}, -- player -> { [passKey] = true }
 	}, MonetizationService)
 end
@@ -41,8 +48,8 @@ function MonetizationService:Catalogue()
 		return a.Key < b.Key
 	end)
 	for _, product in self._config.Products do
-		if configured(product) then
-			table.insert(products, { Key = product.Key, Id = product.Id, Title = product.Title, Coins = product.Coins })
+		if configured(product) and self._productEnabled(product) then
+			table.insert(products, { Key = product.Key, Id = product.Id, Title = product.Title, Description = product.Description })
 		end
 	end
 	return { Passes = passes, Products = products }
@@ -83,24 +90,41 @@ function MonetizationService:OwnedList(player)
 	return list
 end
 
--- Stat deltas passes add to every run: { CoinMultiplier = total bonus }.
-function MonetizationService:GetRunBonuses(player)
-	local bonus = 0
+-- The sum of a numeric perk over every pass the player owns.
+function MonetizationService:_sum(player, perk)
+	local total = 0
 	for key in self._owned[player] or {} do
 		local pass = self._config.Passes[key]
-		bonus += pass and pass.CoinBonus or 0
+		total += pass and tonumber(pass[perk]) or 0
 	end
-	return { CoinMultiplier = bonus }
+	return total
 end
 
 -- Offline storage hours passes add to the Salvage Yard's cap.
 function MonetizationService:GetExtraCapHours(player)
-	local hours = 0
+	return self:_sum(player, "ExtraCapHours")
+end
+
+-- Loadout preset slots passes add to the free ones.
+function MonetizationService:GetPresetSlots(player)
+	return self:_sum(player, "PresetSlots")
+end
+
+-- The first owned pass's value for a text perk (Nameplate, ChatTag), or nil. Passes are checked
+-- in a fixed order so the result never depends on table order.
+function MonetizationService:GetPerk(player, perk)
+	local keys = {}
 	for key in self._owned[player] or {} do
-		local pass = self._config.Passes[key]
-		hours += pass and pass.ExtraCapHours or 0
+		table.insert(keys, key)
 	end
-	return hours
+	table.sort(keys)
+	for _, key in keys do
+		local pass = self._config.Passes[key]
+		if pass and type(pass[perk]) == "string" then
+			return pass[perk]
+		end
+	end
+	return nil
 end
 
 function MonetizationService:_productFor(productId)
@@ -115,6 +139,11 @@ end
 -- MarketplaceService.ProcessReceipt. Anything that cannot be granted and saved right now is
 -- left for Roblox to deliver again.
 function MonetizationService:ProcessReceipt(receipt, now)
+	-- A rewarded video's product: AdService already paid the bonus when the ad completed.
+	local ads = self._config.Ads
+	if ads and configured({ Id = ads.RewardProductId }) and receipt.ProductId == ads.RewardProductId then
+		return GRANTED
+	end
 	local product = self:_productFor(receipt.ProductId)
 	if not product then
 		return NOT_YET
@@ -123,14 +152,18 @@ function MonetizationService:ProcessReceipt(receipt, now)
 	if not player or not self._persistence:IsLoaded(player) then
 		return NOT_YET
 	end
-	local granted, reason = self._persistence:GrantReward(player, "receipt:" .. tostring(receipt.PurchaseId), product.Coins)
-	if granted <= 0 and reason ~= "already granted" then
+	local _, reason = self._persistence:GrantReward(player, "receipt:" .. tostring(receipt.PurchaseId), 0, 0, product.Extras)
+	if reason and reason ~= "already granted" then
 		return NOT_YET
 	end
 	-- Confirmed only once the coins are in the store.
 	local saved = self._persistence:Save(player, now)
 	if not saved then
 		return NOT_YET
+	end
+	-- A revive bought while down is spent straight away (once a run); otherwise the token waits.
+	if product.Kind == "Revive" and reason == nil and self._onRevive then
+		self._onRevive(player)
 	end
 	if self._onChanged then
 		self._onChanged(player)

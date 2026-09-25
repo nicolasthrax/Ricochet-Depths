@@ -30,6 +30,12 @@ local REMOTE_NAMES = {
 	"RequestBase", -- ask for a fresh BaseSync (opening the base panel)
 	"RerollOffer", -- redraw the pending card offer (free once a run, then a Reroll token)
 	"RespecCard", -- undo this round's card and pick again (once a run, early rounds only)
+	"UseRevive", -- spend a Revive token while down (once a run)
+	"SavePreset", -- save the current rig, trail and Pact into a preset slot
+	"ApplyPreset", -- put a saved preset back on
+	"PlayEmote", -- an owned emote id; lobby only, rate limited
+	"FeatureBase", -- private server owner: feature a player's base on the hub board
+	"WatchAd", -- watch a rewarded video for the end-of-run bonus (when enabled)
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts

@@ -10,6 +10,7 @@ local BaseConfig = require(ReplicatedStorage:WaitForChild("BaseConfig"))
 local BaseService = require(script.Parent.BaseService)
 local DailyModifierConfig = require(ReplicatedStorage:WaitForChild("DailyModifierConfig"))
 local DataStoreProvider = require(script.Parent.DataStoreProvider)
+local EmoteBurst = require(script.Parent.EmoteBurst)
 local DebugConfig = require(ReplicatedStorage:WaitForChild("DebugConfig"))
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
 local FriendCache = require(script.Parent.FriendCache)
@@ -27,9 +28,11 @@ local PlayerDataConfig = require(ReplicatedStorage:WaitForChild("PlayerDataConfi
 local PlayerDataService = require(script.Parent.PlayerDataService)
 local ProgressionConfig = require(ReplicatedStorage:WaitForChild("ProgressionConfig"))
 local RemoteRouter = require(script.Parent.RemoteRouter)
+local RewardedAds = require(script.Parent.RewardedAds)
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local RoomConfig = require(ReplicatedStorage:WaitForChild("RoomConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
+local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local ShopService = require(script.Parent.ShopService)
 local Signage = require(script.Parent.Signage)
 local TelemetryService = require(script.Parent.TelemetryService)
@@ -121,13 +124,16 @@ function GameBootstrap.Start()
 		net[name] = Remotes.Get(name)
 	end
 
+	-- Assigned below; used here only once players are about.
+	local shop, loadout
+
 	local profileSync = Remotes.Get("ProfileSync")
 	local function refreshLeaderstats(player)
 		local public = persistence:GetPublicProfile(player)
 		if public then
 			local level = public.Progression and public.Progression.Level or 1
 			Leaderstats.Update(player, public.Salvage or 0, public.Stats and public.Stats.BestRoomsCleared or 0, level)
-			Nameplates.Update(player, level)
+			Nameplates.Update(player, level, shop and shop:GetNameplate(player) or nil)
 		end
 		return public
 	end
@@ -165,8 +171,9 @@ function GameBootstrap.Start()
 		local public = refreshLeaderstats(player)
 		if public then
 			public.Passes = monetization and monetization:OwnedList(player) or {}
-			-- Chat shows a VIP tag for pass holders (ChatTags).
-			player:SetAttribute("VIP", table.find(public.Passes, "VIP") ~= nil)
+			public.PresetSlots = loadout and loadout:PresetSlots(player) or 0
+			-- Chat shows a pass holder's tag (ChatTags), e.g. [Supporter].
+			player:SetAttribute("ChatTag", monetization and monetization:GetPerk(player, "ChatTag") or nil)
 			profileSync:FireClient(player, public)
 			leaderboards:Submit(player, {
 				Level = public.Progression and public.Progression.Xp or 0,
@@ -215,6 +222,8 @@ function GameBootstrap.Start()
 		pushMeta(player)
 	end
 
+	-- Assigned just below; a revive bought while down is spent in the buyer's match.
+	local director
 	monetization = MonetizationService.new({
 		marketplace = game:GetService("MarketplaceService"),
 		persistence = persistence,
@@ -222,35 +231,58 @@ function GameBootstrap.Start()
 			return Players:GetPlayerByUserId(userId)
 		end,
 		onChanged = pushProfile,
+		onRevive = function(player)
+			local match = director and director:MatchFor(player)
+			if match then
+				match:UseReviveToken(player, os.clock())
+			end
+		end,
+		productEnabled = function(product)
+			return product.Kind ~= "Revive" or FeatureFlags.PaidRevive
+		end,
 	})
 	if FeatureFlags.Monetization then
 		monetization:Bind()
 	end
 
-	-- The shop is open to anyone in the lobby; `director` is assigned just below, before any
-	-- request can arrive.
-	local director
-	-- Rigs, the Depth Pact and achievements; changed in the lobby only, like the shop.
-	local loadout = LoadoutService.new(persistence, {
-		canChange = function(player)
-			return director ~= nil and director:MatchFor(player) == nil
-		end,
-	})
-	local shop = ShopService.new(persistence, {
+	-- The shop is open to anyone in the lobby; `director` is assigned below, before any request
+	-- can arrive. A new theme or sign shows on the plot straight away.
+	local pushBase
+	shop = ShopService.new(persistence, {
 		canShop = function(player)
 			return director ~= nil and director:MatchFor(player) == nil
 		end,
 		ownsPass = function(player, passKey)
 			return monetization:OwnsPass(player, passKey)
 		end,
-		onChanged = pushProfile,
+		onChanged = function(player)
+			pushProfile(player)
+			if pushBase then
+				pushBase(player)
+			end
+		end,
+	})
+	-- Rigs, the Depth Pact, presets and achievements; changed in the lobby only, like the shop.
+	loadout = LoadoutService.new(persistence, {
+		canChange = function(player)
+			return director ~= nil and director:MatchFor(player) == nil
+		end,
+		extraPresets = function(player)
+			return monetization:GetPresetSlots(player)
+		end,
+		ownsTrail = function(player, itemId)
+			local item = ShopConfig.Get(itemId)
+			return item ~= nil and item.Kind == "Trail" and shop:Owns(player, item)
+		end,
+		wearTrail = function(player, itemId)
+			persistence:SetEquippedTrail(player, itemId)
+		end,
 	})
 
 	-- The home base: the service that builds, claims and cheers, and the Outpost's plots that
 	-- show it. Managed in the lobby only, like the shop.
 	local baseSync = Remotes.Get("BaseSync")
 	local builder
-	local pushBase
 	local base = BaseService.new(persistence, {
 		canManage = function(player)
 			return director ~= nil and director:MatchFor(player) == nil
@@ -274,6 +306,8 @@ function GameBootstrap.Start()
 		end
 		local state = base:GetState(player)
 		if state then
+			-- Only a theme or sign still owned is shown (a lapsed pass falls back to the default).
+			state.Theme, state.Sign = shop:GetBaseStyle(player)
 			state.Open = open == true
 			state.PlotIndex = player:GetAttribute("PlotIndex")
 			baseSync:FireClient(player, state)
@@ -318,13 +352,7 @@ function GameBootstrap.Start()
 						meta.stats[stat] = (meta.stats[stat] or 0) + delta
 					end
 				end
-				for stat, delta in monetization:GetRunBonuses(player) do
-					meta.stats[stat] = (meta.stats[stat] or 0) + delta
-				end
-				-- Roblox Premium members earn a little more from every run.
-				if GameBootstrap._isPremium(player) then
-					meta.stats.CoinMultiplier = (meta.stats.CoinMultiplier or 0) + MetaConfig.PremiumCoinBonus
-				end
+				-- Nothing bought with Robux changes a run: passes are cosmetics and convenience.
 				-- The account level gates which cards can be offered (gradual unlocks).
 				meta.level = ProgressionConfig.LevelFor(persistence:GetXp(player))
 				-- The chosen rig bends the starting stats the same way the buildings do.
@@ -338,6 +366,18 @@ function GameBootstrap.Start()
 				return meta
 			end,
 			wallClock = os.time,
+			-- A downed player may be offered the paid Revive once it is switched on and configured.
+			canBuyRevive = function()
+				if not FeatureFlags.PaidRevive then
+					return false
+				end
+				for _, product in monetization:Catalogue().Products do
+					if product.Key == "Revive" then
+						return true
+					end
+				end
+				return false
+			end,
 			areFriends = function(a, b)
 				return friends:AreFriends(a, b)
 			end,
@@ -364,6 +404,8 @@ function GameBootstrap.Start()
 		["unknown achievement"] = "That achievement has changed. Reopen the Journal.",
 		["already claimed"] = "Already claimed.",
 		["not complete"] = "Not complete yet.",
+		["no such slot"] = "That preset slot is locked. Passes add more.",
+		["empty slot"] = "Nothing saved in that slot yet.",
 	}
 	local function onLoadoutResult(player, kind, result, reason)
 		if not result then
@@ -373,6 +415,10 @@ function GameBootstrap.Start()
 			persistence:SaveInBackground(player, os.clock())
 		elseif kind == "Rig" then
 			notify:FireClient(player, { Kind = "Info", Text = "Rig selected: " .. result.Title })
+		elseif kind == "SavePreset" then
+			notify:FireClient(player, { Kind = "Info", Text = "Loadout saved." })
+		elseif kind == "ApplyPreset" then
+			notify:FireClient(player, { Kind = "Info", Text = "Loadout applied." })
 		end
 		pushProfile(player)
 	end
@@ -455,6 +501,47 @@ function GameBootstrap.Start()
 		end,
 	})
 
+	-- A private server's owner can feature one player's base on the hub board; anyone can then
+	-- visit it from the board's prompt.
+	local featured = nil
+	local function featureBase(player, userId)
+		if not GameBootstrap._ownsPrivateServer(game, player) then
+			notify:FireClient(player, { Kind = "Error", Text = "Only this private server's owner can feature a base." })
+			return
+		end
+		local target = userId and Players:GetPlayerByUserId(userId) or player
+		if not target then
+			return
+		end
+		featured = target
+		Signage.SetText(lobbyParts.featuredBoard, "FEATURED OUTPOST\n" .. string.upper(target.Name))
+		lobbyParts.featuredPrompt.Enabled = true
+		notify:FireClient(player, { Kind = "Info", Text = string.format("%s's outpost is featured in the hall.", target.Name) })
+	end
+	lobbyParts.featuredPrompt.Triggered:Connect(function(player)
+		if featured and featured.Parent ~= nil then
+			visitBase(player, featured.UserId)
+		end
+	end)
+
+	-- Rewarded video at the end of a run (off until FeatureFlags.RewardedVideo).
+	local ads = RewardedAds.new({
+		ads = FeatureFlags.RewardedVideo and game:GetService("AdService") or nil,
+		persistence = persistence,
+	})
+	local function watchAd(player)
+		task.spawn(function()
+			local coins, reason = ads:Watch(player)
+			if coins then
+				notify:FireClient(player, { Kind = "Reward", Text = string.format("Thanks for watching! +%d coins", coins) })
+				pushProfile(player)
+				persistence:SaveInBackground(player, os.clock())
+			elseif reason == "daily limit" then
+				notify:FireClient(player, { Kind = "Error", Text = "That's all the ad bonuses for today." })
+			end
+		end)
+	end
+
 	local router = RemoteRouter.new(function(player)
 		return director:MatchFor(player)
 	end, persistence, pushProfile, FeatureFlags.SalvageShop and shop or nil, {
@@ -472,6 +559,11 @@ function GameBootstrap.Start()
 				cheerBase(player, owner)
 			end
 		end,
+		onEmote = function(player, item)
+			EmoteBurst.Play(player, item.Emote)
+		end,
+		onFeatureBase = featureBase,
+		onWatchAd = FeatureFlags.RewardedVideo and watchAd or nil,
 	})
 	router:Bind()
 
@@ -712,6 +804,7 @@ function GameBootstrap.Start()
 		loadout = loadout,
 		base = base,
 		builder = builder,
+		ads = ads,
 	}
 end
 
@@ -725,11 +818,14 @@ function GameBootstrap._wantsFirstDescent(public)
 		and public.Flags.FirstDescentDone == false
 end
 
-function GameBootstrap._isPremium(player)
-	local ok, premium = pcall(function()
-		return player.MembershipType == Enum.MembershipType.Premium
+-- Whether this server is a private server and `player` owns it. Reserved servers have a
+-- PrivateServerId too, but no owner, so nobody owns those.
+function GameBootstrap._ownsPrivateServer(gameRef, player)
+	local ok, owns = pcall(function()
+		return gameRef.PrivateServerId ~= "" and gameRef.PrivateServerOwnerId ~= 0
+			and gameRef.PrivateServerOwnerId == player.UserId
 	end)
-	return ok and premium == true
+	return ok and owns == true
 end
 
 -- Payout keys are stored in each profile's run ledger, so their prefix must never repeat across

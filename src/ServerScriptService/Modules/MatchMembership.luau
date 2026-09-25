@@ -55,12 +55,12 @@ function Membership.methods:GetParticipants()
 end
 
 function Membership.methods:UnregisterPlayer(player, now)
-	-- Leaving mid-run still pays for the coins already picked up, and the experience earned so
-	-- far. The profile is still loaded here (the server releases it after this), and the key
-	-- makes a repeat pay nothing.
+	-- Leaving mid-run still pays the share of the haul a lost run keeps, and the experience
+	-- earned so far. The profile is still loaded here (the server releases it after this), and
+	-- the key makes a repeat pay nothing.
 	local state = self._states[player]
 	if state and self:IsRunActive() and table.find(self._participants, player) and self._persistence then
-		local amount = RewardService.Multiply(state, state.coins)
+		local amount = RewardService.Multiply(state, RewardService.HaulKept(state, "Left"))
 		local xp = RewardService.Experience(state, "Left", false)
 		if amount > 0 or xp > 0 then
 			local runKey = string.format("%s-%d-left", self._runKeyPrefix, self._runId)

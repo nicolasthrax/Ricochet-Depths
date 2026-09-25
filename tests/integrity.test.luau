@@ -24,7 +24,9 @@ describe("run and room configuration agree", function()
 	it("ships the room mix the vertical slice promises", function()
 		local normal, elite = 0, 0
 		for _, room in RunConfig.Rooms do
-			if room.Kind == "Normal" then
+			if room.Tier == 0 then
+				continue -- the first descent's scripted rooms are not part of the run mix
+			elseif room.Kind == "Normal" then
 				normal += 1
 			elseif room.Kind == "Elite" then
 				elite += 1

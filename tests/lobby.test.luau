@@ -129,7 +129,7 @@ describe("lobby layout", function()
 	local lobby, soloPrompt, parts = LobbyBuilder.Build(world)
 	local dressing = lobby:FindFirstChild("Dressing")
 
-	it("has a solo portal, two gates and two shop kiosks, each with its prompt", function()
+	it("has a solo portal, two gates, the Outpost portal and the Cosmetics kiosk, each with its prompt", function()
 		expect(soloPrompt.ClassName).toBe("ProximityPrompt")
 		expect(soloPrompt.Parent.Name).toBe("DescentPedestal")
 		expect(#parts.gates).toBe(2)
@@ -139,8 +139,21 @@ describe("lobby layout", function()
 			expect(gate.board).toBeTruthy()
 			expect(gate.capacity).toBe(RunConfig.Lobby.GateCapacity)
 		end
-		expect(parts.armoryPrompt.Parent.Name).toBe("ArmoryKiosk")
+		expect(parts.outpostPrompt.Parent.Name).toBe("OutpostKiosk")
 		expect(parts.cosmeticsPrompt.Parent.Name).toBe("CosmeticsKiosk")
+	end)
+
+	it("holds parties of two to four at a gate, the solo portal covering one", function()
+		expect(RunConfig.Lobby.GateCapacity).toBe(4)
+		expect(RunConfig.Lobby.GateMinPlayers).toBe(2)
+	end)
+
+	it("spawns players facing north, at the descent well", function()
+		local spawn = lobby:FindFirstChild("LobbySpawn")
+		local toWell = lobby:FindFirstChild("DescentPedestal").Position - spawn.Position
+		local look = spawn.CFrame.LookVector
+		expect(look.Z).toBeLessThan(-0.99)
+		expect(toWell.Z).toBeLessThan(0)
 	end)
 
 	it("puts the gates on the west side and the shops on the east", function()
@@ -148,7 +161,7 @@ describe("lobby layout", function()
 		for _, gate in parts.gates do
 			expect(gate.zone.Position.X - origin.X).toBeLessThan(-20)
 		end
-		expect(lobby:FindFirstChild("ArmoryKiosk").Position.X - origin.X).toBeGreaterThan(20)
+		expect(lobby:FindFirstChild("OutpostKiosk").Position.X - origin.X).toBeGreaterThan(20)
 		expect(lobby:FindFirstChild("CosmeticsKiosk").Position.X - origin.X).toBeGreaterThan(20)
 	end)
 
@@ -193,7 +206,7 @@ describe("lobby layout", function()
 		local keepClear = {
 			lobby:FindFirstChild("LobbySpawn"),
 			lobby:FindFirstChild("DescentPedestal"),
-			lobby:FindFirstChild("ArmoryKiosk"),
+			lobby:FindFirstChild("OutpostKiosk"),
 			lobby:FindFirstChild("CosmeticsKiosk"),
 		}
 		for _, gate in parts.gates do
@@ -240,9 +253,9 @@ describe("lobby signs", function()
 				expect(gui.Parent:IsA("BasePart")).toBe(true)
 			end
 		end
-		-- Two gates, two shops, three zone banners, the solo portal.
+		-- Two gates, the Outpost and Cosmetics kiosks, three zone banners, the solo portal.
 		expect(boards).toBeGreaterThanOrEqual(8)
-		for _, text in { "ARMORY", "COSMETICS", "SOLO DESCENT" } do
+		for _, text in { "YOUR OUTPOST", "COSMETICS", "SOLO DESCENT" } do
 			local found = false
 			for _, gui in lobby:GetDescendants() do
 				if gui.ClassName == "TextLabel" and gui.Text == text then
@@ -280,8 +293,8 @@ describe("lobby signs", function()
 	it("updates a gate's board with its count and countdown", function()
 		local gate = parts.gates[1]
 		LobbyBuilder.SetGateStatus(gate, 3, 12)
-		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  3/8  ·  12s")
+		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  3/4  ·  12s")
 		LobbyBuilder.SetGateStatus(gate, 1, nil)
-		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  1/8  ·  need 2")
+		expect(gate.board:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Text").Text).toBe("GATE I  1/4  ·  need 2")
 	end)
 end)

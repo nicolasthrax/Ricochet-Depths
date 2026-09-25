@@ -5,7 +5,16 @@ presentation from any existing game.
 
 ## Current milestone
 
-**2.0.0: the redesign. Orbs, bounce power, the dash, combo, Surge, waves and swarms, ricochet-
+**3.0.0: concept alignment. The game now matches the original concept (steam-to-roblox.xlsx):
+the Outpost home base with 12 buildings, offline claims and friend visits; runs of 1–4; the haul
+at risk with "Bank loot" extract points; 7 daily modifiers; the first-60-seconds opening
+descent; card labels, a recommended card, reroll and early respec; the party and friend bonus;
+the launch economy with no paid power; a forgiving 7-day track; onboarding-funnel and economy
+telemetry; and the UI for all of it. Green on every gate: syntax, lint, Rojo build and
+815 headless tests. Nothing in 3.0 has run in Studio yet; see section 2d of the release
+checklist. `docs/CONCEPT_TRACEABILITY.md` maps every concept item to code and tests.**
+
+Before it: **2.0.0: the redesign. Orbs, bounce power, the dash, combo, Surge, waves and swarms, ricochet-
 aware enemies, barrels, boost pads and portals, objective rooms, doors, Trials and two
 mini-bosses. Green on every gate: syntax, lint, Rojo build and 655 headless tests. Nothing in
 2.0 has run in Studio yet; see the 2.0 section of the release checklist.**
@@ -229,6 +238,28 @@ where every enemy is, never hesitate, and cannot plan a bank shot — the game's
 Since 0.7.0-dev, rooms are drawn at random per run, so columns are run-shape slots rather than
 fixed rooms (the dry run seeds its plans, so these repeat exactly).
 
+### 3.0.0
+
+Nine rooms, with the Colossus and Forge halls as mid-run bosses. The bots never take the Bank
+loot door, so every run shown goes the full depth. The dry run does not switch on depth pressure
+(merged from PR #13 after this table was measured), which makes a room that drags more dangerous but does not change when it clears. "Reached the end" counts runs that cleared the
+Throne; the rest were defeated.
+
+| Bot | R1 | R2 | Colossus | F1 | F2 | Forge | A1 | Vault | Throne | Full run (median) | Floor | Reached the end |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Direct fire, exact aim | 22.2s | 51.3s | 86.5s | 33.8s | 43.0s | 28.6s | 30.1s | 19.6s | 66.8s | 459s | 405s | 40% |
+| Direct fire with aim error | 30.5s | 45.7s | 90.4s | 32.6s | 41.8s | 25.0s | 29.3s | 16.0s | 55.1s | 392s | 389s | 28% |
+| Probing | 25.8s | 58.6s | 80.0s | 26.8s | 36.7s | 27.6s | 26.9s | 15.8s | 67.6s | 388s | 389s | 40% |
+
+The target is `RunConfig.TargetRunSeconds` = 420s. The modelled floor (6.5–6.8 min) sits just
+under it, and bots are faster than people, so real full runs should land at or above 7 minutes.
+Banking is the short way out: after the Colossus hall is about 3 minutes in, and after the Forge
+hall about 4.5. Most defeats happen in room 2 and in the Throne. Room 2 is where Chasers and
+Mirrors deal the most damage (63–80 per run). A human-played defeat rate is the first number to
+measure in Studio.
+
+### 1.0.2
+
 | Bot | Ruins 1 | Ruins 2 | Foundry 1 | Foundry 2 | Abyss 1 | Vault | Throne | Extracted | Runs reaching the boss |
 |---|---|---|---|---|---|---|---|---|---|
 | Direct fire, exact aim | 7.0s | 7.8s | 6.5s | 9.5s | 6.3s | 5.3s | 56.6s | 93% | 60 of 60 |
@@ -275,6 +306,60 @@ With strictly direct fire, 23 rooms were force-cleared by the 150s room time lim
 soft-lock guard is doing real work.
 
 ## Changelog
+
+### 3.0.0 — concept alignment
+
+Goal: match everything in the original concept (the Overview, Roblox Playbook and Concept MVP
+sheets). Built in sections A–G; `docs/CONCEPT_ALIGNMENT_HANDOFF.md` has the detail.
+
+- **Schema v10** (`PlayerDataConfig`): Rerolls and ReviveTokens balances beside coins, all
+  store-owned and ledgered; base, presets, nameplate, daily limits and funnel flags; the v8 → v9
+  migration refunds every Armory level in coins, exactly once. v9 → v10 cleans up a profile
+  saved by the 2.x haul build (PR #13), which also called itself v9: it drops DepthRank and
+  refunds any Armory levels still held, Deep Quiver included.
+- **Merged with PR #13** (the haul, Surface Lift, depth pressure and Deepen). Depth pressure is
+  kept (`RunConfig.Pressure`, `FeatureFlags.Pressure`, `tests/pressure.test.luau`). The Surface
+  Lift, the 40% haul share, Deep Quiver and Deepen are replaced by this release's Bank loot, 50%
+  share and base buildings, since the concept puts earnable power in the base.
+- **The Outpost** (`BaseConfig`, `BaseService`, `BaseBuilder`, `BaseView`): a 4x4 plot per player
+  (8 plots; max players is now 8), 12 buildings bought through the purchase path and gated by
+  the Camp Hearth, where earnable power now lives (the Armory is gone); a Salvage Yard with an
+  8 h offline cap (Storehouse and the Supporter Pack raise it, 12 h max), claimed once per stretch
+  of time across servers; a Trophy Hall; themes and signs; visits and once-a-day cheers. The
+  lobby's Armory kiosk is now the Outpost portal; BASE is on the menu rail and the HUD.
+- **Hub:** gates of 2–4 (solo portal for 1); spawn facing the well; no title screen.
+- **Haul at risk:** a lost, timed-out or abandoned run keeps half the coins it collected;
+  ColossusHall, ForgeHall and the tutorial's Hoard Keeper are extract points whose doors include
+  **Bank loot** (whole haul plus a depth bonus of 60/120/160 by zone). Results show banked or
+  lost coins, "your haul builds X", a 3 s look at your plot, and DESCEND / BUILD AT BASE.
+- **Daily biome modifier** (`DailyModifierConfig`): 7 modifiers by UTC day, on stats, enemies and
+  champions; a once-a-day bonus; the hall's TODAY board and a HUD chip.
+- **First 60 seconds** (`RunConfig.FirstDescent`): a new player drops into the First Pit (a tight
+  pack of harmless Drifters), is offered Split Shot twice, gets Fusillade at once ("try it now"),
+  then meets the Hoard Keeper, who bursts into coins at the first Bank loot choice. A banner and a
+  pulsing aim line lead the way; `Flags.FirstDescentDone` records it.
+- **Cards:** every card has an icon and a three-word label; one card per offer is RECOMMENDED
+  (and is the timeout's auto-pick); one free reroll per run, then Reroll tokens; a free respec in
+  the first two rounds; cards unlock gradually with account level.
+- **Party and friends:** +5% coins per extra member (max +15%), +10% with a Roblox friend
+  (`FriendCache`, looked up off the run loop); enemies gain 35% health per extra member. A solo
+  run is unchanged. The door vote cap is now 10 s, as the concept specifies.
+- **Launch economy** (`MonetizationConfig`): Explorer Pass and Supporter Pack (presets, offline
+  hours, cosmetics, a chat tag); Revive and Reroll-bundle products granted as tokens; revive
+  tokens spent while down, once a run, with a grace window when everyone is down; cosmetics
+  (trails, themes, signs, emotes, nameplate titles) earned by coins, level or pass; loadout
+  presets (2 free); rewarded video (`RewardedAds`); private-server base featuring. Removed: coin
+  packs, 2x Coins, VIP and the Premium coin bonus (all were coins for money). The paid Revive
+  and rewarded video are flagged off until checked live.
+- **Daily loop:** the 7-day track never resets on a missed day; day 5 adds a Revive token and
+  day 7 rerolls.
+- **Telemetry** (`FunnelService`): the seven onboarding steps once ever per account, to
+  AnalyticsService and our telemetry; an economy event for every grant and spend. Metrics and
+  decisions in `docs/GO_NO_GO.md`.
+- **Tests:** new `base`, `runloop`, `economy`, `funnel`, `views` and `currencies` files;
+  `shop.test` moved its multi-level purchase cases onto buildings. The stub gained
+  `Players:GetPlayerByUserId` and `Signal:Wait`.
+- **Deferred by the concept:** the season pass, UGC limiteds and the weekly guild target.
 
 ### 2.0.0 — the redesign
 

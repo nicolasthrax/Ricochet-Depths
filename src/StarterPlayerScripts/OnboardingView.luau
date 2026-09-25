@@ -9,7 +9,8 @@ local OnboardingView = {}
 OnboardingView.__index = OnboardingView
 
 local HINTS = {
-	Lobby = "Step into a Gate with friends (2-8), or use the Solo Portal. Claim free rewards in Daily and Quests!",
+	Lobby = "Step into a Gate with friends (2-4), or use the Solo Portal. Spend your haul at your BASE!",
+	FirstDescent = "Bounce shots. Break everything.",
 	Aim = "Drag away from your target, then release to fire.",
 	Ricochet = "Shots bounce. Bank them off walls to reach what you cannot see.",
 	Shield = "Shields turn slowly. Shoot the open side, or bank a shot round the back.",
@@ -31,6 +32,9 @@ local NEW_HINTS = {
 	Magnet = "Magnet! It bends shots toward itself. Use it to curve round cover.",
 	Sponge = "Sponge! It soaks up a shot's bounces. Hit it last, or head on.",
 	TreasureRunner = "Treasure Runner! Catch it before it escapes with its coins.",
+	-- 3.0.
+	BankLoot = "Bank loot to keep everything you found, or descend deeper for more.",
+	Base = "Tap a building, then a tile. Buildings make every run stronger.",
 }
 for hintId, text in NEW_HINTS do
 	HINTS[hintId] = text

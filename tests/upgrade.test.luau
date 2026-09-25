@@ -194,11 +194,12 @@ describe("selection validation", function()
 		expect(reason).toBe("no pending offer")
 	end)
 
-	it("auto-picks the first card when the timer runs out", function()
+	it("auto-picks the recommended card when the timer runs out", function()
 		local service = UpgradeService.new(21)
 		local state = newState()
 		local offer = service:BuildOffer("p1", state, 100)
-		local expected = offer.cards[1].Id
+		local expected = offer.recommended
+		expect(expected).toBeTruthy()
 
 		expect(#service:ResolveExpired(100 + UpgradeConfig.ChoiceTimeout - 0.1, function()
 			return state

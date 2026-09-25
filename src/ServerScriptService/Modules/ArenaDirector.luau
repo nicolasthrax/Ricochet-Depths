@@ -20,7 +20,8 @@ local ArenaDirector = {}
 ArenaDirector.__index = ArenaDirector
 
 -- options: parent (where slot folders go), planeY, seed, maxSlots, shared (MatchService deps
--- every slot shares: net, world, persistence, telemetry, metaProvider, planRun, runKeyPrefix),
+-- every slot shares: net, world, persistence, telemetry, metaProvider, planRun, runKeyPrefix,
+-- wallClock, areFriends),
 -- effectsRemote (optional), onReleased(players) called when a group is sent home.
 function ArenaDirector.new(options)
 	return setmetatable({
@@ -85,10 +86,11 @@ function ArenaDirector:_createSlot(index)
 		doors = FeatureFlags.IsEnabled("Doors"),
 		challenges = FeatureFlags.IsEnabled("Challenges"),
 		events = FeatureFlags.IsEnabled("RoomEvents"),
-		haul = FeatureFlags.IsEnabled("Haul"),
 		pressure = FeatureFlags.IsEnabled("Pressure"),
 	}
 	deps.coins = CoinDrops.new(arena, Random.new(seed))
+	-- 3.0: the daily biome modifier.
+	deps.dailyModifiers = FeatureFlags.IsEnabled("DailyModifiers")
 	-- Run keys must be unique per slot as well as per server, or two arenas' first runs
 	-- would share a payout key and the profile ledger would refuse the second.
 	deps.runKeyPrefix = string.format("%s-a%d", self._shared.runKeyPrefix or "local", index)
@@ -118,8 +120,9 @@ function ArenaDirector:_freeSlot()
 	return nil
 end
 
--- Starts a descent for `players` in a free arena. Returns the slot, or nil and a reason.
-function ArenaDirector:StartGroup(players, now)
+-- Starts a descent for `players` in a free arena. options (optional) go to
+-- MatchService:RequestStart, e.g. { firstDescent = true }. Returns the slot, or nil and a reason.
+function ArenaDirector:StartGroup(players, now, options)
 	if #players == 0 then
 		return nil, "no players"
 	end
@@ -135,7 +138,7 @@ function ArenaDirector:StartGroup(players, now)
 	for _, player in players do
 		slot.match:RegisterPlayer(player)
 	end
-	local ok, reason = slot.match:RequestStart(players[1], now)
+	local ok, reason = slot.match:RequestStart(players[1], now, options)
 	if not ok then
 		for _, player in players do
 			slot.match:UnregisterPlayer(player, now)

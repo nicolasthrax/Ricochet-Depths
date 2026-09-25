@@ -14,6 +14,9 @@ function UpgradeService.new(seed, pool)
 		_pool = pool,
 		_random = Random.new(seed or 1),
 		_offers = {},
+		-- The last offer each player settled this round, and the card it gave: what a respec
+		-- undoes and reopens.
+		_settled = {},
 		_nextOfferId = 0,
 	}, UpgradeService)
 end
@@ -44,7 +47,36 @@ function UpgradeService.IsEligible(card, playerState)
 	if playerState:GetStacks(card.Id) >= card.MaxStacks then
 		return false
 	end
+	-- Gradual unlocks: a card waits for the account level it unlocks at. A state with no known
+	-- level (tests, tools) is never gated.
+	if card.UnlockLevel and playerState.level and playerState.level < card.UnlockLevel then
+		return false
+	end
 	return meetsRequirements(card, playerState)
+end
+
+-- How strongly a card is worth taking now, for the RECOMMENDED tag: a fused card first, then a
+-- piece of a fusion (more so one already started), then the rarer card.
+local function recommendScore(card, playerState)
+	if card.Rarity == "Fused" then
+		return 100
+	end
+	if UpgradeConfig.IsFusionPart(card.Id) then
+		return playerState:GetStacks(card.Id) > 0 and 60 or 50
+	end
+	return card.Rarity == "Rare" and 20 or 10
+end
+
+-- The card of an offer to recommend (ties go to the earlier card).
+function UpgradeService.Recommend(cards, playerState)
+	local best, bestScore = nil, -1
+	for _, card in cards do
+		local score = recommendScore(card, playerState)
+		if score > bestScore then
+			best, bestScore = card, score
+		end
+	end
+	return best
 end
 
 function UpgradeService:GetEligibleCards(playerState)
@@ -81,10 +113,32 @@ end
 -- empty. A fused card the player qualifies for is always among them: an evolution is the payoff
 -- a build was working toward, and it should never be lost to a bad roll.
 --
--- options (optional): { rare = true } makes sure at least one card is Rare or better.
+-- options (optional): { rare = true } makes sure at least one card is Rare or better;
+-- { force = { cardId, ... } } puts those cards in first when they are eligible (the first
+-- descent); { exclude = { [cardId] = true } } leaves cards out, unless that would leave nothing
+-- to offer (a reroll).
 function UpgradeService:BuildOffer(playerKey, playerState, now, count, options)
 	local candidates = self:GetEligibleCards(playerState)
 	local cards = {}
+	if options and options.exclude then
+		local kept = {}
+		for _, card in candidates do
+			if not options.exclude[card.Id] then
+				table.insert(kept, card)
+			end
+		end
+		if #kept > 0 then
+			candidates = kept
+		end
+	end
+	for _, forcedId in options and options.force or {} do
+		for index, card in candidates do
+			if card.Id == forcedId then
+				table.insert(cards, table.remove(candidates, index))
+				break
+			end
+		end
+	end
 	if options and options.rare then
 		local rares = {}
 		for index, card in candidates do
@@ -97,7 +151,10 @@ function UpgradeService:BuildOffer(playerKey, playerState, now, count, options)
 		end
 	end
 	-- One qualifying evolution, if there is any and none is in the offer yet.
-	local hasFused = cards[1] ~= nil and cards[1].Rarity == "Fused"
+	local hasFused = false
+	for _, card in cards do
+		hasFused = hasFused or card.Rarity == "Fused"
+	end
 	for index = #candidates, 1, -1 do
 		if not hasFused and candidates[index].Rarity == "Fused" and candidates[index].Requires then
 			table.insert(cards, table.remove(candidates, index))
@@ -121,16 +178,53 @@ function UpgradeService:BuildOffer(playerKey, playerState, now, count, options)
 		end
 	end
 
+	return self:_open(playerKey, playerState, cards, now, options and options.timeout)
+end
+
+function UpgradeService:_open(playerKey, playerState, cards, now, timeout)
 	self._nextOfferId += 1
+	local recommended = UpgradeService.Recommend(cards, playerState)
 	local offer = {
 		id = self._nextOfferId,
 		cards = cards,
-		expiresAt = now + (options and options.timeout or UpgradeConfig.ChoiceTimeout),
+		recommended = recommended and recommended.Id or nil,
+		expiresAt = now + (timeout or UpgradeConfig.ChoiceTimeout),
 		resolved = false,
 		playerKey = playerKey,
 	}
 	self._offers[playerKey] = offer
 	return offer
+end
+
+-- A fresh offer in place of the pending one, avoiding the cards just shown where the pool
+-- allows. Returns the new offer, or nil and a reason.
+function UpgradeService:Reroll(playerKey, playerState, now)
+	local offer = self._offers[playerKey]
+	if not offer or offer.resolved then
+		return nil, "no pending offer"
+	end
+	local shown = {}
+	for _, card in offer.cards do
+		shown[card.Id] = true
+	end
+	return self:BuildOffer(playerKey, playerState, now, #offer.cards, { exclude = shown })
+end
+
+-- Respec: undoes the card this player settled on this round and reopens the same offer, so they
+-- can pick again. Returns the reopened offer, or nil and a reason.
+function UpgradeService:Reopen(playerKey, playerState, now)
+	if self._offers[playerKey] then
+		return nil, "still choosing"
+	end
+	local settled = self._settled[playerKey]
+	if not settled then
+		return nil, "nothing to respec"
+	end
+	if not playerState:RemoveUpgrade(settled.card.Id) then
+		return nil, "nothing to respec"
+	end
+	self._settled[playerKey] = nil
+	return self:_open(playerKey, playerState, settled.cards, now)
 end
 
 function UpgradeService:GetOffer(playerKey)
@@ -144,9 +238,12 @@ function UpgradeService.ToClientPayload(offer, now)
 		table.insert(cards, {
 			Id = card.Id,
 			Title = card.Title,
+			Label = card.Label,
+			Icon = card.Icon,
 			Description = card.Description,
 			Category = card.Category,
 			Rarity = card.Rarity,
+			Recommended = card.Id == offer.recommended or nil,
 		})
 	end
 	-- A duration, never a timestamp. os.clock() is per-process, so a server clock value is
@@ -189,20 +286,28 @@ function UpgradeService:Choose(playerKey, playerState, offerId, cardId)
 
 	offer.resolved = true
 	self._offers[playerKey] = nil
+	self._settled[playerKey] = { card = chosen, cards = offer.cards }
 	return chosen
 end
 
--- Auto-picks the first card of any offer whose timer ran out, so a run never stalls.
+-- Auto-picks the recommended card (else the first) of any offer whose timer ran out, so a run
+-- never stalls and an idle player still gets the card most worth having.
 function UpgradeService:ResolveExpired(now, stateResolver)
 	local resolved = {}
 	for playerKey, offer in self._offers do
 		if now >= offer.expiresAt and not offer.resolved then
 			local playerState = stateResolver and stateResolver(playerKey)
 			local card = offer.cards[1]
+			for _, candidate in offer.cards do
+				if candidate.Id == offer.recommended then
+					card = candidate
+				end
+			end
 			if playerState and card then
 				local applied = playerState:AddUpgrade(card)
 				if applied then
 					table.insert(resolved, { playerKey = playerKey, card = card, auto = true })
+					self._settled[playerKey] = { card = card, cards = offer.cards }
 				end
 			end
 			offer.resolved = true
@@ -218,10 +323,17 @@ end
 
 function UpgradeService:Clear(playerKey)
 	self._offers[playerKey] = nil
+	self._settled[playerKey] = nil
 end
 
 function UpgradeService:ClearAll()
 	table.clear(self._offers)
+	table.clear(self._settled)
+end
+
+-- A new round: last round's choices can no longer be respecced.
+function UpgradeService:ClearSettled()
+	table.clear(self._settled)
 end
 
 return UpgradeService

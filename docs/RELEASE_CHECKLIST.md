@@ -3,8 +3,8 @@
 Gate for making Ricochet Depths public. Nothing here is a formality: an unchecked box that is not
 explicitly waived blocks the launch.
 
-**Build:** `2.0.0` · **Status:** feature-complete and green headlessly, **not yet verified in
-Studio or on a published server.** Sections 2–5 below are the remaining work, and section 8 lists
+**Build:** `3.0.0` (concept alignment) · **Status:** feature-complete and green headlessly, **not
+yet verified in Studio or on a published server.** Section 2d is the 3.0 Studio pass. Sections 2–5 below are the remaining work, and section 8 lists
 the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VALIDATION_CHECKLIST.md`
 (V1–V9).
 
@@ -12,10 +12,14 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 
 | Check | State | Notes |
 |---|---|---|
-| `luau-compile` on all sources | PASS | 100 sources + 38 test files |
+| `luau-compile` on all sources | PASS | 127 sources + 44 test files |
 | `luau-analyze` lint | PASS | zero findings in `src/` or `tests/` |
 | `rojo build` | PASS | Rojo 7.7.0 |
-| Headless test suite | PASS | 655 tests, 0 failures |
+| Headless test suite | PASS | 815 tests, 0 failures |
+| 3.0 home base | PASS | build/upgrade through the purchase path, Hearth gates, tiles and swaps, layouts cleaned against what is built, offline claims (math, cap, two-server idempotency, auto-claim before a yard upgrade), cheers (daily, caps), 8 plots, remotes sanitised |
+| 3.0 run changes | PASS | haul share on defeat and leaving, Bank loot door after extract points (depth bonus, tie keeps descending), 7 daily modifiers and the once-a-day bonus, the first descent (clustered opener, forced Split Shot, fusion "try it now", Hoard Keeper, flag set on finish), card labels/icons, RECOMMENDED + auto-pick, reroll (free, then tokens), respec, unlock levels, party and friend bonus, party enemy scaling |
+| 3.0 economy | PASS | no coins or stats sold (Premium coin bonus removed), passes as entitlements, Revive/Reroll receipts as tokens, revive tokens (once a run, grace window), cosmetics by coins/level/pass, presets, rewarded video (flagged off), private server feature |
+| 3.0 daily loop and telemetry | PASS | forgiving 7-day track (never resets; day 5/7 extras), funnel steps once ever, economy events for every grant and spend |
 | 2.0 redesign | PASS | orbs (spend, drop, pickup, roll home, trick shot), bounce power, dash (i-frames, cooldown, Blink Strike, Recall), combo, Surge (pool, auto-pick), waves, Mirror/Sponge/Magnet/Runner, barrels (chains), boost pads, portals (exits clear of cover), loot, Crystal Hunt, Beacon, Gallery, doors and votes, Trials, mini-bosses, a full nine-room descent with everything on |
 | Shot effects, champions | PASS | crits, burns (full duration), arcs, chained explosions, chill, Siphon, Second Wind; champion stats, orb ring, regen, reuse clears tags |
 | Rigs, Pact, Journal | PASS | unlock rules, lobby-only, read-only refusals, group Pact merge, Heat reaching a real run, one claim per achievement, schema v8 migration |
@@ -25,13 +29,13 @@ the steps only the owner can do. The ordered Studio procedure is `docs/STUDIO_VA
 | Levels | PASS | XP from runs, daily rewards, quests and codes; level-up coins; Level column and nameplates |
 | Rooms load under the player | PASS | every room in every arena slot: floor under the spawn, cover and enemies on it; the stub now treats Position and CFrame as one property |
 | Concurrent arenas | PASS | two groups run side by side, isolated; slots freed and reused; payout keys unique per slot |
-| Multiplayer gates | PASS | 2-player minimum, 8-player cap with overflow, 15s/5s countdowns, cancel on leave |
+| Multiplayer gates | PASS | 2-player minimum, 4-player cap with overflow, 15s/5s countdowns, cancel on leave |
 | Coins | PASS | drops, magnet, collection, room-clear sweep, payout, defeat rules, leaver paid once |
-| Robux receipts | PASS | granted once, only after save; unloaded profile and failed save retried; id 0 never sold |
+| Robux receipts | PASS | granted once (as Reroll / Revive tokens), only after save; unloaded profile and failed save retried; id 0 never sold |
 | No z-fighting | PASS | no two overlapping visible top faces within 0.05 studs, in any layout |
 | Geometry integrity | PASS | every layout: bevels and reflectors at 45°, spawn open in 8 directions, shielded posts flankable; rooms correct at any arena origin |
 | Lobby | PASS | invisible 100-stud barrier and ceiling; props clear of spawn, portal, gates and kiosks; every sign prints on a SurfaceGui |
-| Shop purchases | PASS | including cross-server double-charge and overspend; VIP-only item gated |
+| Shop purchases | PASS | including cross-server double-charge and overspend (now on buildings); pass items free with the pass, level items never sold |
 | No binary files in git | PASS | lobby, arenas, enemy models and the descent shaft are all built at runtime |
 | Property-based fuzz suite, soak | PASS | seeded; instance counts flat |
 | No secrets, keys, cookies or private IDs in the repo | PASS | `DebugConfig.AllowedUserIds` and every Robux id ship empty/0 by design |
@@ -87,6 +91,52 @@ fallback. Everything else is unverified.
 - [ ] Health bars appear over hurt enemies; shatter shards and the room-clear flash look right,
       and disappear with Reduced Flash on
 - [ ] Performance with 40 enemies alive and burning (Highlights are capped at ~31 by the engine)
+
+## 2d. 3.0 concept alignment (Play Solo and local servers). Highest risk first.
+
+The first descent and the Outpost are built at runtime and have only run against the stub.
+
+- [ ] **First descent:** a fresh account (or a profile with `Flags.FirstDescentDone = false` in the
+      dev datastore) spawns facing the well and, once the character exists, drops straight into
+      the First Pit with no menu in the way. The banner reads "BOUNCE SHOTS. BREAK EVERYTHING.",
+      and the aim hint line pulses ahead of the player until the first shot.
+- [ ] First Pit: the Drifter pack is in view from the room spawn and the first hit lands within
+      5-15 s. First card by ~30 s; Split Shot is offered after rooms 1 and 2; taking the second
+      opens "FUSION! Try it now" with Fusillade alone. The Hoard Keeper bursts into coins, and
+      its doors include BANK LOOT.
+- [ ] Rejoin after the first descent: it does not start again (the flag saved).
+- [ ] **Outpost plots:** the Outpost kiosk teleports you onto your plot's entry pad; the plot has
+      your name on the sign, the Camp Hearth on tile 6, and "Manage base" / "Cheer" prompts on
+      the Hearth. The entry pad's prompt returns you to the hall. The Outpost ground and barrier
+      hold players in (walk to every edge). Plots do not overlap the hall or each other.
+- [ ] **Base panel on a phone:** the 4x4 grid and the building list fit; tap a building then a
+      tile builds or moves it, and the plot rebuilds straight away (storeys rise with levels,
+      labels read "Forge Lv3"); CLAIM shows the yard's coins; VISIT and CHEER work between two
+      players; a cheer toasts both players and pays once a day.
+- [ ] **Results:** after a run the camera swings over your plot for 3 s and hands back cleanly;
+      the haul line shows banked or lost coins; "Your haul builds ..." is right; DESCEND starts a
+      new solo run once back in the hall; BUILD AT BASE teleports you to your plot.
+- [ ] **Card picker:** emoji icons render on every card (Roblox emoji support varies by
+      platform: check PC, phone and console), labels stay on one line, the RECOMMENDED tag is
+      on one card, REROLL (FREE) then REROLL (n left) with tokens, and CHANGE MY CARD appears on
+      the door stage in rounds 1-2 only.
+- [ ] **Daily modifier:** the hall's "TODAY" board and the HUD chip agree; a Gold Rush / Bouncy
+      Walls day visibly changes a run; the bonus toast appears once on the first run of the day.
+- [ ] **Revive token:** with a token (day-5 reward, or grant one in the dev store) and solo, going
+      down shows USE REVIVE for 8 s; using it stands you up at half health; once a run.
+- [ ] **Emotes and cosmetics:** Wave plays over the head for 2.5 s in the hall, not in a run; a
+      bought theme and sign recolour your plot at once; a nameplate title shows "Lv N · Title".
+- [ ] **Presets:** SAVE in slot 1, change rig and trail, LOAD restores both.
+- [ ] **Party bonus:** two Roblox friends in a gate both see +5% party and +10% friend coins
+      (friendship lookups happen in the background: join, wait a few seconds, then descend).
+- [ ] **Analytics:** after a first session, Creator Hub → Analytics → Onboarding shows the seven
+      funnel steps, and Economy shows coin sources (run, daily, offline...) and sinks (buildings,
+      cosmetics).
+- [ ] With `FeatureFlags.PaidRevive` / `RewardedVideo` turned on in a **test** experience only:
+      the Revive product prompts while down and revives on purchase; an ad shows at results
+      (where eligible) and pays the fixed bonus up to 3 a day. Leave both off until this passes.
+- [ ] **Private server:** the owner sees FEATURE IN HALL in the base panel's visit list; the
+      hall's board then names the base and its prompt visits it.
 
 ## 3. Multiplayer validation (Studio → Test → Local Server with 2–4 players)
 
@@ -169,8 +219,8 @@ These cannot be done from this repository and need a human with account access.
    sync cannot write it, untick it by hand; the server warns while it is on.
 3. **Create a separate test experience** and publish the same place there for sections 2–4.
 4. **Enable API services** on the test experience (Game Settings → Security).
-5. **Set max players to 20** (Game Settings → Players). Two gates of 8 plus solo players, each
-   group in its own arena; up to 6 runs at once per server.
+5. **Set max players to 8** (Game Settings → Players). The Outpost has 8 home-base plots, one per
+   player; two gates of 2–4 plus solo players, each group in its own arena.
 6. **Enable the platforms** you intend to support (Game Settings → Places → Devices).
 7. **Set the icon and thumbnails** (Creator Hub → Experience). Ready-made originals are in
    `marketing/`: `icon.png` (512×512) and `thumb1–3.png` (1920×1080). Add one or two real
@@ -186,11 +236,29 @@ These cannot be done from this repository and need a human with account access.
 8c. **Make a Roblox group** for the game and link it on the experience page; that is where
    players look for codes and updates.
 9. **Optional custom sky:** upload six skybox images and paste their ids into `SkyConfig`.
-10. **Create the passes and products** (Creator Hub → Monetization): passes *2x Coins* and *VIP*,
-    developer products *500 / 1,500 / 5,000 Coins*. Paste each id into `MonetizationConfig`.
-    Test a purchase in the test experience first.
+10. **Create the passes and products** (Creator Hub → Monetization), then paste each id into
+    `MonetizationConfig` (anything left at 0 is never offered):
+    - Game pass **Explorer Pass**, 99–149 R$ (129 suggested): +1 loadout preset, the Explorer
+      nameplate and the Banner base sign. Describe exactly that.
+    - Game pass **Supporter Pack**, 299–399 R$ (349 suggested): Gold trail, Gilded base theme,
+      Cheer emote, +2 presets, +2 h offline storage, Supporter chat tag.
+    - Developer product **Revive**, 29 R$: one revive, used while down, once a run. Leave
+      `FeatureFlags.PaidRevive = false` until section 2d's check passes.
+    - Developer product **5 Rerolls**, 49–79 R$ (59 suggested).
+    - Developer product for the **rewarded video** reward (`MonetizationConfig.Ads.RewardProductId`),
+      only if you enable `FeatureFlags.RewardedVideo`; check ad eligibility for the experience.
+    - The retired 2x Coins / VIP passes and coin packs must **not** be recreated: the concept's
+      launch economy sells no power. If they already exist from 2.0, take them off sale.
+    Test every purchase in the test experience first.
+10a. **Turn on regional pricing** for every pass and product (Creator Hub → Monetization →
+    pricing), and use price optimization one item at a time (concept S18/S19).
+10b. **Private servers:** enable them (Game Settings → Permissions / Monetization) at 49–99 R$ a
+    month (the concept's range). Owners get base-showcase control (FEATURE IN HALL); public
+    matchmaking must stay healthy, so watch public server fill after enabling.
 11. **Populate `DebugConfig.AllowedUserIds`** in the test build only, for the F3 overlay. Never
     commit real ids.
 12. **Complete the experience questionnaire** (maturity and content) in Creator Hub before making
     the experience public.
-13. **Check analytics after the first sessions** (Creator Hub → Analytics).
+13. **Check analytics after the first sessions** (Creator Hub → Analytics): the onboarding funnel
+    and economy events described in `docs/GO_NO_GO.md`. Do not scale acquisition until bounce
+    and D1 are at or above the similar-experience benchmark shown there.

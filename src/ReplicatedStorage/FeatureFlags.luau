@@ -42,15 +42,23 @@ FeatureFlags.Doors = true
 FeatureFlags.Challenges = true
 -- Random room events (Treasure Runners).
 FeatureFlags.RoomEvents = true
--- The haul at risk: a lost run keeps only part of its coins, and a Surface Lift door after each
--- mini-boss lets the group bank the haul and leave.
-FeatureFlags.Haul = true
 -- Depth pressure: hunters arrive in a normal room that drags on.
 FeatureFlags.Pressure = true
 
+-- The home base: twelve buildings on a grid, offline workers and friend visits (BaseService).
+FeatureFlags.BaseBuilding = true
+-- A new player is dropped straight into a scripted solo first descent instead of a title card.
+FeatureFlags.FirstDescent = true
+-- One biome modifier a day for every run, with a once-a-day bonus (DailyModifierConfig).
+FeatureFlags.DailyModifiers = true
+
+-- 3.0 monetization that needs a Studio / live check before it is switched on:
+-- the paid Revive product (a revive token bought while down), and rewarded video ads.
+FeatureFlags.PaidRevive = false
+FeatureFlags.RewardedVideo = false
+
 -- Deferred until the vertical slice has been playtested.
 FeatureFlags.CosmeticStore = false
-FeatureFlags.BaseBuilding = false
 FeatureFlags.Matchmaking = false
 FeatureFlags.SecondBoss = false
 

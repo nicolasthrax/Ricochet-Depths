@@ -54,6 +54,17 @@ function Signal:Fire(...)
 	end
 end
 
+-- Suspends the calling thread until the next Fire, and returns what was fired.
+function Signal:Wait()
+	local thread = coroutine.running()
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		task.spawn(thread, ...)
+	end)
+	return coroutine.yield()
+end
+
 function Signal:CountHandlers()
 	return #self._handlers
 end
@@ -687,6 +698,15 @@ rawset(playersStub, "GetPlayers", function(self)
 		end
 	end
 	return out
+end)
+
+rawset(playersStub, "GetPlayerByUserId", function(self, userId)
+	for _, child in rawget(self, "_children") do
+		if rawget(child, "ClassName") == "Player" and rawget(child, "UserId") == userId then
+			return child
+		end
+	end
+	return nil
 end)
 
 makeService("ReplicatedStorage")

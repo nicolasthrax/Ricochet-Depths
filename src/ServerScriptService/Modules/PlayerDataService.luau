@@ -13,6 +13,9 @@ PlayerDataService.__index = PlayerDataService
 -- options.wallClock returns the time grants are stamped with. It must mean the same thing on
 -- every server, which is why it is wall-clock time (os.time) and never os.clock, which is
 -- per-process and unrelated across servers.
+-- options.onEconomy(player, flow, currencyId, amount, balance, detail), optional, hears every
+-- grant ("Source", detail = ledger key) and spend ("Sink", detail = item id) as it is applied,
+-- for economy analytics. It must not yield or throw.
 function PlayerDataService.new(store, options)
 	options = options or {}
 	return setmetatable({
@@ -41,7 +44,6 @@ PlayerDataService.STORE_OWNED_FIELDS = {
 	Currency = true,
 	GrantedRuns = true,
 	MetaUpgrades = true,
-	DepthRank = true,
 	Progression = true,
 }
 
@@ -338,7 +340,6 @@ function PlayerDataService:Update(player, mutator)
 	-- alone would neither detect nor undo the change.
 	local currencyTable, ledgerTable, levelsTable = profile.Currency, profile.GrantedRuns, profile.MetaUpgrades
 	local progressionTable, xpBefore = profile.Progression, profile.Progression.Xp
-	local rankBefore = profile.DepthRank
 	local currencyBefore = snapshotCurrency(currencyTable)
 	local ledgerBefore = snapshotLedger(ledgerTable)
 	local levelsBefore = table.clone(levelsTable)
@@ -354,13 +355,11 @@ function PlayerDataService:Update(player, mutator)
 		or not sameLevels(levelsBefore, levelsTable)
 		or profile.Progression ~= progressionTable
 		or progressionTable.Xp ~= xpBefore
-		or profile.DepthRank ~= rankBefore
 	then
 		-- Put everything back exactly as it was, into the original tables.
 		profile.Currency, profile.GrantedRuns, profile.MetaUpgrades = currencyTable, ledgerTable, levelsTable
 		profile.Progression = progressionTable
 		progressionTable.Xp = xpBefore
-		profile.DepthRank = rankBefore
 		table.clear(currencyTable)
 		for key, value in currencyBefore do
 			currencyTable[key] = value
@@ -373,7 +372,7 @@ function PlayerDataService:Update(player, mutator)
 		for itemId, level in levelsBefore do
 			levelsTable[itemId] = level
 		end
-		error("currency, experience, the run ledger, meta upgrades and the Depth Rank change only through grants and purchases, not Update", 2)
+		error("currency, experience, the run ledger and meta upgrades change only through grants and purchases, not Update", 2)
 	end
 
 	markChanged(session)
@@ -400,44 +399,18 @@ end
 --     so it is acknowledged and not charged again;
 --   * the stored level is one below and the stored balance covers the cost: charged and applied;
 --   * anything else: refused, and reported back so the player sees it undone.
--- A Deepen rides the same queue, in order with the purchases around it: it applies when the
--- stored rank is one below its target and the stored levels meet every requirement, zeroing
--- those items; a stored rank already at its target means it happened already.
 -- Returns key -> "applied" | "owned" | "rejected".
-local function applyDeepen(merged, deepen)
-	local storedRank = tonumber(merged.DepthRank) or 0
-	if storedRank >= deepen.Rank then
-		return "owned"
-	end
-	if storedRank ~= deepen.Rank - 1 then
-		return "rejected"
-	end
-	for itemId, level in deepen.Requires do
-		if (merged.MetaUpgrades[itemId] or 0) < level then
-			return "rejected"
-		end
-	end
-	for itemId in deepen.Requires do
-		merged.MetaUpgrades[itemId] = nil
-	end
-	merged.DepthRank = deepen.Rank
-	return "applied"
-end
-
 local function applyPurchases(merged, pending)
 	local outcomes = {}
 	for _, entry in orderedPurchases(pending) do
 		local purchase = entry.purchase
-		if purchase.Kind == "Deepen" then
-			outcomes[entry.key] = applyDeepen(merged, purchase)
-			continue
-		end
 		local storedLevel = merged.MetaUpgrades[purchase.ItemId] or 0
-		local balance = merged.Currency.Salvage or 0
+		local currencyId = purchase.Currency or "Salvage"
+		local balance = merged.Currency[currencyId] or 0
 		if storedLevel >= purchase.Level then
 			outcomes[entry.key] = "owned"
 		elseif storedLevel == purchase.Level - 1 and balance >= purchase.Cost then
-			merged.Currency.Salvage = balance - purchase.Cost
+			merged.Currency[currencyId] = balance - purchase.Cost
 			merged.MetaUpgrades[purchase.ItemId] = purchase.Level
 			outcomes[entry.key] = "applied"
 		else
@@ -472,6 +445,9 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			for runKey, grant in session.pendingGrants do
 				if merged.GrantedRuns[runKey] == nil then
 					merged.Currency.Salvage = (merged.Currency.Salvage or 0) + grant.Amount
+					for currencyId, extra in grant.Extras or {} do
+						merged.Currency[currencyId] = (merged.Currency[currencyId] or 0) + extra
+					end
 					merged.Progression.Xp = (merged.Progression.Xp or 0) + (grant.Xp or 0)
 					merged.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
 				end
@@ -514,9 +490,10 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 			session.pendingPurchases[key] = nil
 			if outcome == "rejected" then
 				table.insert(session.purchaseRejections, {
-					ItemId = purchase.Kind == "Deepen" and "Deepen" or purchase.ItemId,
-					Level = purchase.Level or purchase.Rank,
+					ItemId = purchase.ItemId,
+					Level = purchase.Level,
 					Cost = purchase.Cost,
+					Currency = purchase.Currency or "Salvage",
 				})
 			end
 		end
@@ -525,35 +502,33 @@ function PlayerDataService:_writeOnce(session, now, deadline)
 	-- Currency is store-owned now: what the store holds, plus grants still waiting to go, less
 	-- purchases still waiting to go. This is also how this server learns of grants and
 	-- purchases other servers committed.
-	local stillPending, xpPending = 0, 0
+	local stillPending, xpPending = {}, 0
+	for _, currencyId in PlayerDataConfig.Currencies do
+		stillPending[currencyId] = 0
+	end
 	for _, grant in session.pendingGrants do
-		stillPending += grant.Amount
+		stillPending.Salvage += grant.Amount
+		for currencyId, extra in grant.Extras or {} do
+			stillPending[currencyId] = (stillPending[currencyId] or 0) + extra
+		end
 		xpPending += grant.Xp or 0
 	end
 	for _, purchase in session.pendingPurchases do
-		stillPending -= purchase.Cost
+		local currencyId = purchase.Currency or "Salvage"
+		stillPending[currencyId] = (stillPending[currencyId] or 0) - purchase.Cost
 	end
-	profile.Currency.Salvage = (result.Currency.Salvage or 0) + stillPending
+	for currencyId, pending in stillPending do
+		profile.Currency[currencyId] = (result.Currency[currencyId] or 0) + pending
+	end
 	profile.Progression.Xp = (result.Progression and result.Progression.Xp or 0) + xpPending
 
-	-- Levels and rank likewise: the store's, with anything still pending here replayed on top in
-	-- the order it was made, so a Deepen still in flight resets what was bought before it and
-	-- not what was bought after.
+	-- Levels likewise: the store's, raised by anything still pending here.
 	table.clear(profile.MetaUpgrades)
 	for itemId, level in result.MetaUpgrades or {} do
 		profile.MetaUpgrades[itemId] = level
 	end
-	profile.DepthRank = tonumber(result.DepthRank) or 0
-	for _, entry in orderedPurchases(session.pendingPurchases) do
-		local purchase = entry.purchase
-		if purchase.Kind == "Deepen" then
-			for itemId in purchase.Requires do
-				profile.MetaUpgrades[itemId] = nil
-			end
-			profile.DepthRank = math.max(profile.DepthRank, purchase.Rank)
-		else
-			profile.MetaUpgrades[purchase.ItemId] = math.max(profile.MetaUpgrades[purchase.ItemId] or 0, purchase.Level)
-		end
+	for _, purchase in session.pendingPurchases do
+		profile.MetaUpgrades[purchase.ItemId] = math.max(profile.MetaUpgrades[purchase.ItemId] or 0, purchase.Level)
 	end
 
 	-- Take back the runs the store knows about, then keep memory within the same cap. The rest
@@ -635,10 +610,30 @@ end
 -- Idempotent payout of coins and, optionally, experience. A run key is only ever credited once
 -- per profile, whatever replays, reconnects or duplicate completion events occur; the coins and
 -- the experience travel together, so neither can be paid without the other.
+-- extras, optional, adds consumables in the same grant: { Rerolls = n, ReviveTokens = n }.
 -- Returns the coins credited, a reason when nothing was, and the experience credited.
-function PlayerDataService:GrantReward(player, runKey, amount, xp)
+function PlayerDataService:GrantReward(player, runKey, amount, xp, extras)
 	xp = xp or 0
-	if not validAmount(amount) or not validAmount(xp) or (math.floor(amount) <= 0 and math.floor(xp) <= 0) then
+	local cleanExtras, anyExtra = nil, false
+	if extras ~= nil then
+		if type(extras) ~= "table" then
+			return 0, "invalid amount", 0
+		end
+		cleanExtras = {}
+		for currencyId, value in extras do
+			if currencyId == "Salvage" or not table.find(PlayerDataConfig.Currencies, currencyId) or not validAmount(value) then
+				return 0, "invalid amount", 0
+			end
+			if math.floor(value) > 0 then
+				cleanExtras[currencyId] = math.floor(value)
+				anyExtra = true
+			end
+		end
+		if not anyExtra then
+			cleanExtras = nil
+		end
+	end
+	if not validAmount(amount) or not validAmount(xp) or (math.floor(amount) <= 0 and math.floor(xp) <= 0 and not anyExtra) then
 		return 0, "invalid amount", 0
 	end
 	local session = self:_sessionFor(player)
@@ -651,16 +646,26 @@ function PlayerDataService:GrantReward(player, runKey, amount, xp)
 		return 0, "already granted", 0
 	end
 
-	local grant = { Amount = math.floor(amount), Xp = math.floor(xp), At = self._wallClock() }
+	local grant = { Amount = math.floor(amount), Xp = math.floor(xp), Extras = cleanExtras, At = self._wallClock() }
 	local profile = session.profile
 	profile.GrantedRuns[runKey] = { Amount = grant.Amount, At = grant.At }
 	session.pendingGrants[runKey] = grant
 	-- Shown to the player straight away; reconciled against the store on the next save.
 	profile.Currency.Salvage += grant.Amount
+	for currencyId, extra in cleanExtras or {} do
+		profile.Currency[currencyId] = (profile.Currency[currencyId] or 0) + extra
+	end
 	profile.Progression.Xp += grant.Xp
 	markChanged(session)
 
 	pruneLedger(profile.GrantedRuns)
+	local onEconomy = self._options.onEconomy
+	if onEconomy then
+		onEconomy(player, "Source", "Salvage", grant.Amount, profile.Currency.Salvage, runKey)
+		for currencyId, extra in cleanExtras or {} do
+			onEconomy(player, "Source", currencyId, extra, profile.Currency[currencyId], runKey)
+		end
+	end
 	return grant.Amount, nil, grant.Xp
 end
 
@@ -676,8 +681,15 @@ end
 -- A salvage-shop purchase, applied the way grants are: optimistically in memory now, and
 -- re-checked against the stored balance when the save commits (see applyPurchases). The shop's
 -- business rules (catalogue, prices, when the shop is open) live in ShopService; this only
--- guarantees the money side. Returns the new in-memory balance, or nil and a reason.
-function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost)
+-- guarantees the money side. currencyId (default "Salvage") is the balance charged: buildings
+-- and cosmetics cost coins, and a spent consumable is modelled as a purchase of the next level
+-- of a use counter (e.g. "RerollUse") paid in that consumable. Returns the new in-memory balance
+-- of that currency, or nil and a reason.
+function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost, currencyId)
+	currencyId = currencyId or "Salvage"
+	if not table.find(PlayerDataConfig.Currencies, currencyId) then
+		return nil, "invalid currency"
+	end
 	if type(itemId) ~= "string" or itemId == "" then
 		return nil, "invalid item"
 	end
@@ -696,84 +708,34 @@ function PlayerDataService:SpendOnUpgrade(player, itemId, level, cost)
 	if (profile.MetaUpgrades[itemId] or 0) ~= level - 1 then
 		return nil, "level mismatch"
 	end
-	if (profile.Currency.Salvage or 0) < cost then
-		return nil, "insufficient salvage"
+	if (profile.Currency[currencyId] or 0) < cost then
+		return nil, "insufficient " .. string.lower(currencyId)
 	end
 
 	session.purchaseSequence += 1
-	-- The same item and level can be bought again after a Deepen, so a purchase made at a Depth
-	-- Rank is keyed by it too and never replaces one still pending from before.
-	local rank = profile.DepthRank or 0
-	local key = itemId .. "#" .. level .. (rank > 0 and ("@" .. rank) or "")
-	session.pendingPurchases[key] = {
+	session.pendingPurchases[itemId .. "#" .. level] = {
 		ItemId = itemId,
 		Level = level,
 		Cost = cost,
+		Currency = currencyId,
 		Sequence = session.purchaseSequence,
 	}
-	profile.Currency.Salvage -= cost
+	profile.Currency[currencyId] = (profile.Currency[currencyId] or 0) - cost
 	profile.MetaUpgrades[itemId] = level
 	markChanged(session)
-	return profile.Currency.Salvage
+	if self._options.onEconomy then
+		self._options.onEconomy(player, "Sink", currencyId, cost, profile.Currency[currencyId], itemId)
+	end
+	return profile.Currency[currencyId]
 end
 
--- A Deepen: resets the items in `requires` (item id -> the level each must have reached) and
--- raises the Depth Rank to `rank`, applied like a purchase: in memory now, and re-checked against
--- the store when the save commits. The shop decides the catalogue side (ShopService.Deepen);
--- this only guarantees it happens once and in order. Returns the new rank, or nil and a reason.
-function PlayerDataService:Deepen(player, rank, requires)
-	if type(rank) ~= "number" or rank < 1 or rank ~= math.floor(rank) then
-		return nil, "invalid rank"
-	end
-	if type(requires) ~= "table" or next(requires) == nil then
-		return nil, "invalid requirements"
-	end
-	local session = self:_sessionFor(player)
-	if not session or not session.loaded or session.failed then
-		return nil, "profile not loaded"
-	end
-
-	local profile = session.profile
-	if (profile.DepthRank or 0) ~= rank - 1 then
-		return nil, "rank mismatch"
-	end
-	for itemId, level in requires do
-		if type(itemId) ~= "string" or type(level) ~= "number" or (profile.MetaUpgrades[itemId] or 0) < level then
-			return nil, "not ready"
-		end
-	end
-
-	session.purchaseSequence += 1
-	session.pendingPurchases["Deepen#" .. rank] = {
-		Kind = "Deepen",
-		Rank = rank,
-		Requires = table.clone(requires),
-		Cost = 0,
-		Sequence = session.purchaseSequence,
-	}
-	for itemId in requires do
-		profile.MetaUpgrades[itemId] = nil
-	end
-	profile.DepthRank = rank
-	markChanged(session)
-	return rank
-end
-
--- Times this player has Deepened, including a Deepen not yet written.
-function PlayerDataService:GetDepthRank(player)
+-- The in-memory balance of one currency (coins by default), including pending changes.
+function PlayerDataService:GetBalance(player, currencyId)
 	local session = self:_sessionFor(player)
 	if not session or not session.profile then
 		return 0
 	end
-	return session.profile.DepthRank or 0
-end
-
-function PlayerDataService:GetBalance(player)
-	local session = self:_sessionFor(player)
-	if not session or not session.profile then
-		return 0
-	end
-	return session.profile.Currency.Salvage or 0
+	return session.profile.Currency[currencyId or "Salvage"] or 0
 end
 
 -- A copy of item id -> level owned, including purchases not yet written.
@@ -821,13 +783,27 @@ function PlayerDataService:GetPublicProfile(player)
 		return nil
 	end
 	local profile = session.profile
+	local base = profile.Base
 	return {
 		Salvage = profile.Currency.Salvage,
+		Rerolls = profile.Currency.Rerolls or 0,
+		ReviveTokens = profile.Currency.ReviveTokens or 0,
 		Settings = table.clone(profile.Settings),
-		Flags = table.clone(profile.Flags),
+		Flags = {
+			OnboardingSeen = profile.Flags.OnboardingSeen,
+			FirstDescentDone = profile.Flags.FirstDescentDone,
+		},
+		Base = {
+			Layout = table.clone(base.Layout),
+			LastClaimAt = base.LastClaimAt,
+			Theme = base.Theme,
+			Sign = base.Sign,
+			CheersReceived = base.Cheers.Received,
+		},
+		Presets = table.clone(profile.Presets),
+		Nameplate = profile.Nameplate,
 		Stats = table.clone(profile.Stats),
 		MetaUpgrades = table.clone(profile.MetaUpgrades),
-		DepthRank = profile.DepthRank or 0,
 		EquippedTrail = profile.EquippedTrail,
 		Progression = ProgressionConfig.Describe(profile.Progression.Xp),
 		SelectedRig = profile.SelectedRig,

@@ -12,7 +12,6 @@ local REMOTE_NAMES = {
 	"UpdateSettings", -- accessibility options, sanitised server-side before storage
 	"PurchaseShopItem", -- salvage shop item id; price and eligibility are decided server-side
 	"EquipShopItem", -- an owned trail's item id, or "" to clear
-	"DeepenArmory", -- reset a maxed Armory for the next Depth Rank; eligibility is decided server-side
 	"ClaimDaily", -- claim today's login reward
 	"ClaimQuest", -- quest id
 	"RedeemCode", -- promo code text
@@ -23,6 +22,20 @@ local REMOTE_NAMES = {
 	"Dash", -- the dash's heading; the client moves itself, the server grants i-frames and effects
 	"ChooseSurge", -- surge offer id + perk id
 	"ChooseDoor", -- door id, a vote for the next room
+	"UpgradeBuilding", -- building id (+ a tile for a new one); price and gates checked server-side
+	"MoveBuilding", -- building id + tile; swaps with whatever stands there
+	"ClaimBase", -- empty the Salvage Yard
+	"VisitBase", -- a player's user id, or nil for your own plot (lobby only)
+	"CheerBase", -- the user id of the base being cheered
+	"RequestBase", -- ask for a fresh BaseSync (opening the base panel)
+	"RerollOffer", -- redraw the pending card offer (free once a run, then a Reroll token)
+	"RespecCard", -- undo this round's card and pick again (once a run, early rounds only)
+	"UseRevive", -- spend a Revive token while down (once a run)
+	"SavePreset", -- save the current rig, trail and Pact into a preset slot
+	"ApplyPreset", -- put a saved preset back on
+	"PlayEmote", -- an owned emote id; lobby only, rate limited
+	"FeatureBase", -- private server owner: feature a player's base on the hub board
+	"WatchAd", -- watch a rewarded video for the end-of-run bonus (when enabled)
 
 	-- server -> clients (display and cosmetics only)
 	"ProjectileImpact", -- batched confirmed contacts
@@ -38,6 +51,7 @@ local REMOTE_NAMES = {
 	"LobbyReadyState", -- ready pads: how many are ready and the start countdown
 	"DebugStats", -- developer overlay only; sent to allowlisted users
 	"MetaSync", -- daily streak and today's quests for this player
+	"BaseSync", -- this player's base: levels, layout, the yard, what to build next
 	"Notify", -- a toast: { Text, Kind = "Reward" | "Quest" | "Info" | "Error" }; "Callout" is a big centre call
 	"SurgeOffer", -- three Surge perks to pick from mid-fight
 	"SurgeResolved", -- which perk was taken

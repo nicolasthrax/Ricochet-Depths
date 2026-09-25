@@ -1,4 +1,6 @@
--- End-of-run summary. Everything shown here was computed and sent by the server.
+-- End-of-run summary. Everything shown here was computed and sent by the server. 3.0: the haul
+-- (banked in full, or half lost in the depths), the day's modifier bonus, what the coins build
+-- at home, and two calls to action: DESCEND again, or go BUILD at the base.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PactConfig = require(ReplicatedStorage:WaitForChild("PactConfig"))
@@ -11,15 +13,17 @@ ResultsView.__index = ResultsView
 
 local OUTCOME_TEXT = {
 	Extracted = { title = "Extracted", color = UiConfig.Colors.Health },
-	Surfaced = { title = "Surfaced", color = UiConfig.Colors.Health },
 	Defeated = { title = "Lost in the Depths", color = UiConfig.Colors.Danger },
 	TimedOut = { title = "Out of Time", color = UiConfig.Colors.Warning },
 	Abandoned = { title = "Run Abandoned", color = UiConfig.Colors.TextMuted },
 	Aborted = { title = "Descent Collapsed", color = UiConfig.Colors.TextMuted },
 }
 
-function ResultsView.new(playerGui, onDismiss)
+-- onDismiss(): leave the results. actions (optional): { descend = function(), toBase = function(),
+-- watchAd = function() }, each called after onDismiss.
+function ResultsView.new(playerGui, onDismiss, actions)
 	local self = setmetatable({}, ResultsView)
+	actions = actions or {}
 
 	self.gui = UiTheme.screenGui("RicochetResults", playerGui, 30)
 	self.gui.Enabled = false
@@ -52,7 +56,7 @@ function ResultsView.new(playerGui, onDismiss)
 	self.lines.BackgroundTransparency = 1
 	self.lines.BorderSizePixel = 0
 	self.lines.Position = UDim2.new(0, 0, 0, 44)
-	self.lines.Size = UDim2.new(1, 0, 1, -110)
+	self.lines.Size = UDim2.new(1, 0, 1, -44 - 34 - UiConfig.MinTouchTarget - 16)
 	self.lines.CanvasSize = UDim2.new()
 	self.lines.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	self.lines.ScrollBarThickness = 4
@@ -64,11 +68,47 @@ function ResultsView.new(playerGui, onDismiss)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = self.lines
 
-	self.button = UiTheme.button("Return", panel, "Return to Lobby", "Primary")
-	self.button.AnchorPoint = Vector2.new(0.5, 1)
-	self.button.Position = UDim2.new(0.5, 0, 1, 0)
-	self.button.Size = UDim2.new(0.8, 0, 0, UiConfig.MinTouchTarget)
-	self.button.Activated:Connect(onDismiss)
+	-- What the haul builds at home, just above the buttons.
+	self.buildLabel = UiTheme.label("Builds", panel, "", UiConfig.Text.Small + 2, UiConfig.Colors.Gold)
+	self.buildLabel.AnchorPoint = Vector2.new(0, 1)
+	self.buildLabel.Position = UDim2.new(0, 0, 1, -UiConfig.MinTouchTarget - 8)
+	self.buildLabel.Size = UDim2.new(1, 0, 0, 26)
+	self.buildLabel.TextXAlignment = Enum.TextXAlignment.Center
+	self.buildLabel.TextWrapped = true
+
+	local function cta(name, text, style, x, handler)
+		local button = UiTheme.button(name, panel, text, style)
+		button.AnchorPoint = Vector2.new(x, 1)
+		button.Position = UDim2.new(x, 0, 1, 0)
+		button.Size = UDim2.new(0.48, 0, 0, UiConfig.MinTouchTarget)
+		button.Activated:Connect(function()
+			onDismiss()
+			if handler then
+				handler()
+			end
+		end)
+		return button
+	end
+	self.descendButton = cta("Descend", "DESCEND", "Primary", 0, actions.descend)
+	self.baseButton = cta("ToBase", "BUILD AT BASE", nil, 1, actions.toBase)
+	-- The old single button, kept as the base button for anything that still looks for it.
+	self.button = self.baseButton
+
+	-- Rewarded video: a small fixed bonus, one tap, only where it is switched on.
+	self.adButton = UiTheme.button("WatchAd", panel, "WATCH AN AD: +BONUS")
+	self.adButton.AnchorPoint = Vector2.new(1, 0)
+	self.adButton.Position = UDim2.new(1, 0, 0, 0)
+	self.adButton.Size = UDim2.fromOffset(150, UiConfig.MinTouchTarget)
+	self.adButton.TextSize = UiConfig.Text.Small - 2
+	self.adButton.TextWrapped = true
+	self.adButton.Visible = false
+	self._watchAd = actions.watchAd
+	self.adButton.Activated:Connect(function()
+		if self._watchAd then
+			self.adButton.Visible = false
+			self._watchAd()
+		end
+	end)
 
 	self._rows = {}
 	return self
@@ -104,12 +144,17 @@ function ResultsView:Show(summary)
 		index += 1
 		self:_row(index, text, color)
 	end
-	local haulLost = tonumber(summary.HaulLost) or 0
-	local haulBonus = tonumber(summary.HaulBonus) or 0
-	if haulLost > 0 then
-		extra(string.format("Haul lost to the depths: %d of %d", haulLost, tonumber(summary.Haul) or 0), UiConfig.Colors.Danger)
-	elseif haulBonus > 0 then
-		extra(string.format("Depth bonus on the haul: +%d", haulBonus), UiConfig.Colors.Gold)
+	-- The haul at risk: banked whole, or partly lost with the run.
+	local haul = tonumber(summary.Haul) or 0
+	local lost = tonumber(summary.HaulLost) or 0
+	if summary.Banked then
+		extra(string.format("Loot banked! Kept all %d coins you picked up.", haul), UiConfig.Colors.Health)
+	elseif lost > 0 then
+		extra(string.format("Haul lost in the depths: %d of %d coins. Bank loot at an extract point to keep it all.",
+			lost, haul), UiConfig.Colors.Danger)
+	end
+	if (tonumber(summary.DailyBonus) or 0) > 0 then
+		extra(string.format("Daily modifier bonus: +%d coins", summary.DailyBonus), UiConfig.Colors.Gold)
 	end
 	local rig = type(summary.Rig) == "string" and RigConfig.Get(summary.Rig)
 	local heat = tonumber(summary.Heat) or 0
@@ -162,7 +207,24 @@ function ResultsView:Show(summary)
 	end
 
 	self.lines.CanvasPosition = Vector2.new(0, 0)
+	self.adButton.Visible = self._watchAd ~= nil
 	self.gui.Enabled = true
+end
+
+-- "Your haul builds X": the base's next build (BaseSync's NextBuild) against the balance now.
+function ResultsView:SetNextBuild(nextBuild, balance)
+	if type(nextBuild) ~= "table" then
+		self.buildLabel.Text = ""
+		return
+	end
+	local short = (tonumber(nextBuild.Cost) or 0) - (tonumber(balance) or 0)
+	if short <= 0 then
+		self.buildLabel.Text = string.format("Your haul builds: %s Lv%d!", nextBuild.Title, nextBuild.Level)
+		self.buildLabel.TextColor3 = UiConfig.Colors.Health
+	else
+		self.buildLabel.Text = string.format("%d more coins build %s Lv%d", short, nextBuild.Title, nextBuild.Level)
+		self.buildLabel.TextColor3 = UiConfig.Colors.Gold
+	end
 end
 
 function ResultsView:Hide()

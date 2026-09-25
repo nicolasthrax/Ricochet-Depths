@@ -8,8 +8,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ArsenalConfig = require(ReplicatedStorage:WaitForChild("ArsenalConfig"))
 local ObjectiveConfig = require(ReplicatedStorage:WaitForChild("ObjectiveConfig"))
-local RewardConfig = require(ReplicatedStorage:WaitForChild("RewardConfig"))
-local RewardService = require(script.Parent.RewardService)
 local RouteConfig = require(ReplicatedStorage:WaitForChild("RouteConfig"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
 local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
@@ -17,12 +15,6 @@ local RunPlanner = require(ReplicatedStorage:WaitForChild("RunPlanner"))
 local Route = { methods = {} }
 
 local UP = Vector3.new(0, 1, 0)
-
--- A multiplier as players read it: 1, 1.25, 1.5.
-local function multiplierText(multiplier)
-	local text = string.gsub(string.format("%.2f", multiplier), "%.?0+$", "")
-	return text
-end
 
 local function zoneStep(definition)
 	local zone = definition and RunConfig.Zones[definition.Zone]
@@ -83,7 +75,9 @@ function Route.methods:_rollDoors()
 	while #rooms < RouteConfig.Doors do
 		table.insert(rooms, planned)
 	end
-	local rewards = self:_drawRewards(#rooms, self._lastReward == "Gallery" and "Gallery" or nil)
+	-- No bonus Gallery twice in a row, nor inside the scripted first descent.
+	local noGallery = self._lastReward == "Gallery" or planned.Kind == "Tutorial"
+	local rewards = self:_drawRewards(#rooms, noGallery and "Gallery" or nil)
 	local doors = {}
 	for index, room in rooms do
 		local reward = RouteConfig.Rewards[rewards[index] or "Treasure"]
@@ -99,21 +93,19 @@ function Route.methods:_rollDoors()
 			room = room,
 		})
 	end
-	-- With the haul at risk, every mini-boss is a way out: the Surface Lift goes last, so a tie
-	-- or a silent group pushes on rather than leaving.
-	local cleared = self._plan[self._roomIndex]
-	if self._route.haul and cleared and cleared.Kind == "MiniBoss" then
-		local lift = RouteConfig.Lift
-		-- The lift pays at the depth reached, this mini-boss included.
-		local multiplier = RewardService.DepthMultiplier(self._zonesCleared or 0)
+	-- An extract point: the last door banks the haul and ends the run.
+	local current = self._plan[self._roomIndex]
+	if current and current.ExtractPoint then
+		local bank = RouteConfig.BankLoot
 		table.insert(doors, {
 			Id = #doors + 1,
-			RoomId = lift.Id,
-			RoomName = lift.RoomName,
-			Kind = "Lift",
-			Reward = lift.Id,
-			RewardTitle = lift.Title,
-			RewardText = string.format(lift.Text, multiplierText(multiplier), math.floor(RewardConfig.DefeatCoinKeep * 100 + 0.5)),
+			RoomId = "Surface",
+			RoomName = bank.RoomName,
+			Zone = current.Zone,
+			Kind = "Extract",
+			Reward = bank.Id,
+			RewardTitle = bank.Title,
+			RewardText = bank.Text,
 		})
 	end
 	return doors
@@ -173,8 +165,9 @@ function Route.methods:_resolveDoors()
 			winner = door
 		end
 	end
-	if winner.Reward == "Lift" then
-		-- The run ends here (MatchService); nothing about the plan changes.
+	if winner.Reward == RouteConfig.BankLoot.Id then
+		-- Banked: the run ends here as an extraction (MatchService finishes it).
+		self._banked = true
 		self:_log("DoorChosen", { RunId = self._runId, Room = winner.RoomId, Reward = winner.Reward }, self._now)
 		return winner
 	end
@@ -326,6 +319,13 @@ function Route.methods:_leaveRoom(definition, now)
 				RouteConfig.ChallengeCoinsPerZone * step) })
 		end
 		self:_log("Challenge", { RunId = self._runId, Id = challenge.def.Id, Won = won }, now)
+	end
+
+	-- A room that bursts into coins when it is cleared (the first descent's Hoard Keeper).
+	if definition and definition.CoinBurst and self._coins then
+		local current = self._rooms:GetCurrent()
+		local centre = current and current.bounds.center or Vector3.zero
+		self._coins:Drop(centre + Vector3.new(0, 3, 0), definition.CoinBurst * math.max(#self._participants, 1))
 	end
 
 	if self._activeReward == "Treasure" and self._coins then

@@ -56,14 +56,14 @@ RouteConfig.Rewards = {
 }
 RouteConfig.RewardOrder = { "Heal", "Treasure", "Arsenal", "Surge", "Challenge", "Gallery" }
 
--- The Surface Lift: an extra door after each mini-boss (with the haul at risk) that ends the
--- run there, banking the whole haul at the depth reached. Never drawn at random, so it is not
--- in RewardOrder. %s in Text is the haul multiplier it pays at.
-RouteConfig.Lift = {
-	Id = "Lift",
-	RoomName = "Surface Lift",
-	Title = "Bank the haul",
-	Text = "End the run here and keep every coin (haul x%s). Push on and the next lift pays more, but a wipe keeps only %d%%.",
+-- The extra door after a room marked ExtractPoint: climb out now, keep the whole haul, and take
+-- a bonus that grows with depth (RewardConfig.BankBonusByZone). Never drawn at random. It is
+-- always the last door, so a tied vote keeps descending.
+RouteConfig.BankLoot = {
+	Id = "BankLoot",
+	Title = "Bank the loot",
+	Text = "Climb out now and keep the whole haul.",
+	RoomName = "The Surface",
 	Color = Color3.fromRGB(122, 224, 146),
 }
 

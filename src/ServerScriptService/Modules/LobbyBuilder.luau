@@ -1,6 +1,6 @@
 -- The Descent Hall, where players gather between runs. North: the solo portal (a pedestal) in
--- front of the zone banners. West: two multiplayer gates of 2-8 players. East: the Armory and
--- Cosmetics kiosks. South: the (invisible) spawn. An invisible barrier and ceiling keep everyone inside.
+-- front of the zone banners. West: two multiplayer gates of 2-4 players. East: the Outpost portal
+-- (to your home base) and the Cosmetics kiosk. South: the (invisible) spawn. An invisible barrier and ceiling keep everyone inside.
 -- Built at runtime; nothing here is a binary model.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -25,8 +25,10 @@ local GATE_NAMES = { "GATE I", "GATE II" }
 local KIOSK_SIZE = Vector3.new(4, 7, 6) -- thin side faces west, towards the hall
 local KIOSK_X = 46
 local KIOSKS = {
-	{ Name = "ArmoryKiosk", Z = -14, Title = "ARMORY", Prompt = "OpenArmoryPrompt", Object = "Armory", Color = Color3.fromRGB(226, 196, 120) },
-	{ Name = "CosmeticsKiosk", Z = 14, Title = "COSMETICS", Prompt = "OpenCosmeticsPrompt", Object = "Cosmetics", Color = Color3.fromRGB(200, 150, 255) },
+	{ Name = "OutpostKiosk", Z = -14, Title = "YOUR OUTPOST", Prompt = "OpenOutpostPrompt", Object = "Outpost",
+		Action = "Go to your base", Color = Color3.fromRGB(255, 196, 120) },
+	{ Name = "CosmeticsKiosk", Z = 14, Title = "COSMETICS", Prompt = "OpenCosmeticsPrompt", Object = "Cosmetics",
+		Action = "Browse", Color = Color3.fromRGB(200, 150, 255) },
 }
 
 local HALL_HEIGHT = 16
@@ -78,7 +80,9 @@ function LobbyBuilder.Build(parent)
 	local spawnPad = Instance.new("SpawnLocation")
 	spawnPad.Name = "LobbySpawn"
 	spawnPad.Size = RoomConfig.SpawnPadSize
-	spawnPad.Position = origin + SPAWN_OFFSET + Vector3.new(0, floorY + RoomConfig.SpawnPadSize.Y / 2, 0)
+	-- Characters spawn facing the pad's front: north, straight at the descent well.
+	local spawnAt = origin + SPAWN_OFFSET + Vector3.new(0, floorY + RoomConfig.SpawnPadSize.Y / 2, 0)
+	spawnPad.CFrame = CFrame.lookAt(spawnAt, spawnAt + Vector3.new(0, 0, -1))
 	spawnPad.Anchored = true
 	spawnPad.Neutral = true
 	spawnPad.Duration = 0
@@ -102,14 +106,45 @@ function LobbyBuilder.Build(parent)
 	LobbyBuilder._buildLandmarks(lobby, signs, origin)
 	LobbyBuilder._buildAmbience(lobby, origin)
 	local leaderboards = LobbyBuilder._buildLeaderboards(lobby, origin)
+	local modifierBoard = LobbyBuilder._buildModifierBoard(signs, origin)
+	local featuredBoard, featuredPrompt = LobbyBuilder._buildFeaturedBoard(signs, origin)
 	LobbyBuilder._buildBarrier(lobby, origin)
 
 	return lobby, soloPrompt, {
 		gates = gates,
-		armoryPrompt = prompts.ArmoryKiosk,
+		outpostPrompt = prompts.OutpostKiosk,
 		cosmeticsPrompt = prompts.CosmeticsKiosk,
 		leaderboards = leaderboards,
+		modifierBoard = modifierBoard,
+		featuredBoard = featuredBoard,
+		featuredPrompt = featuredPrompt,
 	}
+end
+
+-- A private server's featured base, on a board mirroring the modifier's. Its prompt stays off
+-- until the server's owner features someone (GameBootstrap).
+function LobbyBuilder._buildFeaturedBoard(signs, origin)
+	local floorY = RoomConfig.FloorY
+	local board = Signage.Board(signs, "FeaturedBoard", Vector3.new(16, 3.4, 0.2), origin + Vector3.new(17, floorY + 5, 10),
+		SOUTH, "OUTPOSTS\nVisit friends from the Outpost kiosk", Color3.fromRGB(255, 196, 120), SIGN_BACK)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "VisitFeaturedPrompt"
+	prompt.ActionText = "Visit featured base"
+	prompt.ObjectText = "Outpost"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Enabled = false
+	prompt.Parent = board
+	return board, prompt
+end
+
+-- Today's biome modifier, on a board beside the walkway facing the spawn. GameBootstrap prints
+-- it (and reprints it when the UTC day turns).
+function LobbyBuilder._buildModifierBoard(signs, origin)
+	local floorY = RoomConfig.FloorY
+	return Signage.Board(signs, "ModifierBoard", Vector3.new(16, 3.4, 0.2), origin + Vector3.new(-17, floorY + 5, 10),
+		SOUTH, "TODAY IN THE DEPTHS", Color3.fromRGB(255, 214, 120), SIGN_BACK)
 end
 
 -- The pedestal at the north end. Its prompt starts a one-player run.
@@ -196,7 +231,7 @@ function LobbyBuilder.SetGateStatus(gate, count, countdown)
 	end
 end
 
--- The Armory and Cosmetics kiosks on the east side, facing the hall, each under a canopy with
+-- The Outpost and Cosmetics kiosks on the east side, facing the hall, each under a canopy with
 -- its name on a board above.
 function LobbyBuilder._buildKiosks(lobby, signs, origin)
 	local floorY = RoomConfig.FloorY
@@ -219,7 +254,7 @@ function LobbyBuilder._buildKiosks(lobby, signs, origin)
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = spec.Prompt
-		prompt.ActionText = "Browse"
+		prompt.ActionText = spec.Action
 		prompt.ObjectText = spec.Object
 		prompt.HoldDuration = 0
 		prompt.MaxActivationDistance = 12

@@ -16,16 +16,18 @@ function MetaConfig.SecondsUntilReset(unixTime)
 end
 
 --// Daily login -----------------------------------------------------------------
--- Claim once per day. Claiming on consecutive days grows the streak; missing a day starts it
--- again from day 1. The seven rewards cycle, so a long streak keeps paying the week's rewards.
+-- Claim once per day. 3.0: a forgiving 7-day track. Every claim moves one step along it and a
+-- missed day never sends anyone back to day 1: come back after a week away and you pick up where
+-- you left off. The seven rewards cycle, so the track keeps paying. Extras are consumables: a
+-- Revive token on day 5 and rerolls on day 7.
 MetaConfig.DailyRewards = {
 	{ Coins = 50 },
 	{ Coins = 75 },
 	{ Coins = 100, Xp = 50 },
 	{ Coins = 150 },
-	{ Coins = 200, Xp = 100 },
+	{ Coins = 200, Xp = 100, Extras = { ReviveTokens = 1 } },
 	{ Coins = 250 },
-	{ Coins = 500, Xp = 250 },
+	{ Coins = 500, Xp = 250, Extras = { Rerolls = 3 } },
 }
 
 -- The reward for the `streak`th consecutive day (1-based).
@@ -130,6 +132,8 @@ end
 
 --// Social ----------------------------------------------------------------------
 -- Roblox Premium members earn this much extra coin multiplier on every run.
-MetaConfig.PremiumCoinBonus = 0.1
+-- Loadout presets (rig, trail and Pact saved together): FreeSlots for everyone, more with passes
+-- (MonetizationConfig PresetSlots), never more than MaxSlots.
+MetaConfig.Presets = { FreeSlots = 2, MaxSlots = 5 }
 
 return MetaConfig

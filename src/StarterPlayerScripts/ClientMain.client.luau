@@ -4,6 +4,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local BasePreview = require(script.Parent:WaitForChild("BasePreview"))
+local BaseView = require(script.Parent:WaitForChild("BaseView"))
 local CalloutView = require(script.Parent:WaitForChild("CalloutView"))
 local CardPickerView = require(script.Parent:WaitForChild("CardPickerView"))
 local CodesView = require(script.Parent:WaitForChild("CodesView"))
@@ -21,7 +23,6 @@ local QuestsView = require(script.Parent:WaitForChild("QuestsView"))
 local StatsView = require(script.Parent:WaitForChild("StatsView"))
 local SurgePickerView = require(script.Parent:WaitForChild("SurgePickerView"))
 local RoomFx = require(script.Parent:WaitForChild("RoomFx"))
-local TitleScreen = require(script.Parent:WaitForChild("TitleScreen"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"))
 local ResultsView = require(script.Parent:WaitForChild("ResultsView"))
 local RunConfig = require(ReplicatedStorage:WaitForChild("RunConfig"))
@@ -30,6 +31,8 @@ local ShopView = require(script.Parent:WaitForChild("ShopView"))
 local SoundPlayer = require(script.Parent:WaitForChild("SoundPlayer"))
 local UiTheme = require(script.Parent:WaitForChild("UiTheme"))
 local UiConfig = require(ReplicatedStorage:WaitForChild("UiConfig"))
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("FeatureFlags"))
+local MonetizationConfig = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -39,7 +42,6 @@ local requestReturnToLobby = Remotes.Get("RequestReturnToLobby")
 local updateSettings = Remotes.Get("UpdateSettings")
 local purchaseShopItem = Remotes.Get("PurchaseShopItem")
 local equipShopItem = Remotes.Get("EquipShopItem")
-local deepenArmory = Remotes.Get("DeepenArmory")
 local claimDaily = Remotes.Get("ClaimDaily")
 local claimQuest = Remotes.Get("ClaimQuest")
 local redeemCode = Remotes.Get("RedeemCode")
@@ -49,6 +51,21 @@ local setPact = Remotes.Get("SetPact")
 local claimAchievement = Remotes.Get("ClaimAchievement")
 local chooseSurge = Remotes.Get("ChooseSurge")
 local chooseDoor = Remotes.Get("ChooseDoor")
+local upgradeBuilding = Remotes.Get("UpgradeBuilding")
+local moveBuilding = Remotes.Get("MoveBuilding")
+local claimBase = Remotes.Get("ClaimBase")
+local visitBase = Remotes.Get("VisitBase")
+local cheerBase = Remotes.Get("CheerBase")
+local requestBase = Remotes.Get("RequestBase")
+local featureBase = Remotes.Get("FeatureBase")
+local rerollOffer = Remotes.Get("RerollOffer")
+local respecCard = Remotes.Get("RespecCard")
+local useRevive = Remotes.Get("UseRevive")
+local savePreset = Remotes.Get("SavePreset")
+local applyPreset = Remotes.Get("ApplyPreset")
+local playEmote = Remotes.Get("PlayEmote")
+local watchAd = Remotes.Get("WatchAd")
+local requestStartRun = Remotes.Get("RequestStartRun")
 local UserInputService = game:GetService("UserInputService")
 
 -- Cosmetic scripts read these attributes rather than each opening their own remote.
@@ -72,8 +89,8 @@ local onboarding = OnboardingView.new(playerGui)
 local MarketplaceService = game:GetService("MarketplaceService")
 local shopView = ShopView.new(playerGui, function(itemId)
 	purchaseShopItem:FireServer(itemId)
-end, function(itemId)
-	equipShopItem:FireServer(itemId)
+end, function(itemId, kind)
+	equipShopItem:FireServer(itemId, kind)
 end, function(kind, id)
 	-- Robux purchases go straight to Roblox; the server grants them from the receipt.
 	if kind == "Pass" then
@@ -81,8 +98,8 @@ end, function(kind, id)
 	else
 		MarketplaceService:PromptProductPurchase(player, id)
 	end
-end, function()
-	deepenArmory:FireServer()
+end, function(emoteId)
+	playEmote:FireServer(emoteId)
 end)
 local sounds = SoundPlayer.Shared()
 -- Every themed button clicks.
@@ -104,14 +121,56 @@ end)
 local statsView = StatsView.new(playerGui, string.upper(player.DisplayName or player.Name))
 local rigView = RigView.new(playerGui, function(rigId)
 	selectRig:FireServer(rigId)
+end, function(action, slot)
+	if action == "Save" then
+		savePreset:FireServer(slot)
+	else
+		applyPreset:FireServer(slot)
+	end
 end)
+-- A private server's owner may feature a friend's base in the hall.
+local function ownsPrivateServer()
+	local ok, owns = pcall(function()
+		return game.PrivateServerId ~= "" and game.PrivateServerOwnerId == player.UserId
+	end)
+	return ok and owns == true
+end
+local baseView = BaseView.new(playerGui, {
+	upgrade = function(buildingId, tile)
+		upgradeBuilding:FireServer(buildingId, tile)
+	end,
+	move = function(buildingId, tile)
+		moveBuilding:FireServer(buildingId, tile)
+	end,
+	claim = function()
+		claimBase:FireServer()
+	end,
+	visit = function(userId)
+		visitBase:FireServer(userId)
+	end,
+	cheer = function(userId)
+		cheerBase:FireServer(userId)
+	end,
+	feature = ownsPrivateServer() and function(userId)
+		featureBase:FireServer(userId)
+	end or nil,
+})
+local function otherPlayers()
+	local list = {}
+	for _, other in Players:GetPlayers() do
+		if other ~= player then
+			table.insert(list, { UserId = other.UserId, Name = other.DisplayName or other.Name })
+		end
+	end
+	return list
+end
 local pactView = PactView.new(playerGui, function(pact)
 	setPact:FireServer(pact)
 end)
 local journalView = JournalView.new(playerGui, function(achievementId)
 	claimAchievement:FireServer(achievementId)
 end)
-local modals = { dailyView, questsView, codesView, statsView, rigView, pactView, journalView }
+local modals = { dailyView, questsView, codesView, statsView, rigView, pactView, journalView, baseView }
 local function closeModals()
 	for _, view in modals do
 		view:Close()
@@ -137,7 +196,15 @@ local function invite()
 	end
 end
 
+local function openBase()
+	requestBase:FireServer()
+	baseView:SetPlayers(otherPlayers())
+	openOnly(baseView)
+	onboarding:Show("Base")
+end
+
 local menu = MenuDock.new(playerGui, {
+	Base = openBase,
 	Daily = function()
 		requestMeta:FireServer()
 		openOnly(dailyView)
@@ -170,7 +237,14 @@ local cardPicker = CardPickerView.new(playerGui, function(offerId, cardId)
 end, function(doorId)
 	sounds:Play("CardSelect")
 	chooseDoor:FireServer(doorId)
-end)
+end, {
+	reroll = function()
+		rerollOffer:FireServer()
+	end,
+	respec = function()
+		respecCard:FireServer()
+	end,
+})
 local surgePicker = SurgePickerView.new(playerGui, function(offerId, cardId)
 	sounds:Play("CardSelect")
 	chooseSurge:FireServer(offerId, cardId)
@@ -181,11 +255,30 @@ hud:SetDashHandler(function()
 	player:SetAttribute("DashRequest", (player:GetAttribute("DashRequest") or 0) + 1)
 end, UserInputService.KeyboardEnabled)
 -- Declared before construction so the dismiss callback closes over the local, not a global.
+-- DESCEND waits for the lobby state before asking for a new run: the server is still tearing
+-- the last one down when the results are dismissed.
 local results
+local descendWhenHome = false
 results = ResultsView.new(playerGui, function()
 	results:Hide()
 	requestReturnToLobby:FireServer()
-end)
+end, {
+	descend = function()
+		descendWhenHome = true
+	end,
+	toBase = function()
+		descendWhenHome = false
+		visitBase:FireServer(nil)
+	end,
+	watchAd = FeatureFlags.RewardedVideo and MonetizationConfig.Ads.RewardProductId > 0 and function()
+		watchAd:FireServer()
+	end or nil,
+})
+
+-- The HUD's BASE button goes straight to your plot.
+hud:SetBaseHandler(FeatureFlags.BaseBuilding and function()
+	visitBase:FireServer(nil)
+end or nil)
 
 -- AimController reads this to know when to accept input; attributes stay on this client.
 local function publishState(state)
@@ -207,6 +300,14 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 		roomFx:RoomCleared()
 	end
 	cardPicker:SetDoors(snapshot.State == RunConfig.States.UpgradeChoice and snapshot.Doors or nil)
+	-- An extract point: say what the Bank loot door means the first time one appears.
+	if snapshot.State == RunConfig.States.UpgradeChoice and type(snapshot.Doors) == "table" then
+		for _, door in type(snapshot.Doors.Doors) == "table" and snapshot.Doors.Doors or {} do
+			if door.Kind == "Extract" then
+				onboarding:Show("BankLoot")
+			end
+		end
+	end
 	descent:OnRunState(lastState, snapshot)
 	lastState = snapshot.State
 	hud:UpdateRun(snapshot)
@@ -214,6 +315,8 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 	-- ZoneAmbience tweens the lighting from this.
 	local inRun = snapshot.State ~= RunConfig.States.Lobby and snapshot.State ~= RunConfig.States.Results
 	player:SetAttribute("Zone", inRun and type(snapshot.Zone) == "string" and snapshot.Zone ~= "" and snapshot.Zone or "Lobby")
+	-- AimController pulses a hint line until the first shot of a first descent.
+	player:SetAttribute("FirstDescent", inRun and snapshot.FirstDescent == true or nil)
 	local inLobby = snapshot.State == RunConfig.States.Lobby
 	menu:SetVisible(inLobby)
 	if not inLobby then
@@ -230,8 +333,15 @@ Remotes.Get("RunStateChanged").OnClientEvent:Connect(function(snapshot)
 		end
 		results:Hide()
 		cardPicker:Hide()
+		if descendWhenHome then
+			descendWhenHome = false
+			requestStartRun:FireServer()
+		end
 	elseif snapshot.State == RunConfig.States.Combat then
 		cardPicker:Hide()
+		if snapshot.FirstDescent then
+			onboarding:Show("FirstDescent")
+		end
 		onboarding:Show("Aim")
 		onboarding:Show("Orbs")
 		if type(snapshot.Wave) == "table" and snapshot.Wave.Incoming then
@@ -333,6 +443,10 @@ Remotes.Get("UpgradeOffer").OnClientEvent:Connect(function(payload)
 	end
 	onboarding:Show("Upgrade")
 	cardPicker:Show(payload)
+	if payload.Fusion then
+		sounds:Play("LevelUp")
+		roomFx:Punch(0.8)
+	end
 end)
 
 Remotes.Get("UpgradeResolved").OnClientEvent:Connect(function(payload)
@@ -373,10 +487,26 @@ Remotes.Get("RunResults").OnClientEvent:Connect(function(summary)
 		return
 	end
 	cardPicker:Hide()
-	if summary.Outcome == "Extracted" or summary.Outcome == "Surfaced" then
+	if summary.Outcome == "Extracted" then
 		sounds:Play("RoomClear")
 	end
 	results:Show(summary)
+	-- Three seconds over the plot: this is what the haul builds.
+	BasePreview.Play(player, workspace.CurrentCamera)
+end)
+
+-- The base: its panel, and the "your haul builds" line on the results screen.
+Remotes.Get("BaseSync").OnClientEvent:Connect(function(state)
+	if type(state) ~= "table" then
+		return
+	end
+	baseView:SetState(state)
+	results:SetNextBuild(state.NextBuild, state.Balance)
+	if state.Open then
+		baseView:SetPlayers(otherPlayers())
+		openOnly(baseView)
+		onboarding:Show("Base")
+	end
 end)
 
 Remotes.Get("MetaSync").OnClientEvent:Connect(function(state)
@@ -392,10 +522,28 @@ Remotes.Get("MetaSync").OnClientEvent:Connect(function(state)
 		end
 	end
 	menu:SetClaimable(type(state.Daily) == "table" and state.Daily.CanClaim, questReady)
+	hud:SetLobbyModifier(state.Modifier)
 end)
 
 Remotes.Get("Notify").OnClientEvent:Connect(function(payload)
 	if type(payload) ~= "table" then
+		return
+	end
+	-- Down with a revive available: a token is spent by the server; with none, the paid Revive
+	-- (when it is switched on) is bought and spent in one go.
+	if payload.Kind == "ReviveOffer" then
+		hud:OfferRevive(payload.Tokens, function(tokens)
+			if tokens > 0 then
+				useRevive:FireServer()
+				return
+			end
+			for _, product in MonetizationConfig.Products do
+				if product.Kind == "Revive" and product.Id > 0 and FeatureFlags.PaidRevive then
+					MarketplaceService:PromptProductPurchase(player, product.Id)
+				end
+			end
+		end)
+		notifications:Show(payload.Text, "Error")
 		return
 	end
 	if payload.Kind == "SecondWind" then
@@ -436,11 +584,6 @@ for _, name in { "Mirror", "Magnet", "Sponge", "TreasureRunner" } do
 		onboarding:Show(name, 7)
 	end)
 end
-
--- The title card, over everything until the player presses Play.
-TitleScreen.new(playerGui, function()
-	sounds:Play("Reward")
-end)
 
 RunService.RenderStepped:Connect(function()
 	local now = os.clock()

@@ -1,78 +1,19 @@
--- The lobby shops: permanent upgrades in the Armory and trails in Cosmetics, all bought with
--- coins earned in runs. Item ids are persisted in profiles (MetaUpgrades), so they never change.
--- Prices are whole coins and rise with each level. Robux purchases live in MonetizationConfig.
+-- The Cosmetics shop, bought with coins earned in runs. Item ids are persisted in profiles
+-- (MetaUpgrades), so they never change. Prices are whole coins. Robux purchases live in
+-- MonetizationConfig. Nothing here changes how a run plays: earnable power lives in the home
+-- base's buildings (BaseConfig), and the 1.x Armory's stat upgrades were retired (and refunded)
+-- in schema v9.
 --
--- Kind "Stat" adds Effect.PerLevel per level owned to one of UpgradeConfig.BaseStats before any
--- run card is applied, so cards stack on top. Kind "Trail" is cosmetic: owning it lets it be
--- equipped, and the equipped one is drawn behind the player's shots.
+-- Every item is cosmetic, and each is earned one of three ways: bought with coins (Costs), reached
+-- at an account level (UnlockLevel, free), or included in a pass (RequiresPass, free with it).
+--   Trail: drawn behind the player's shots (profile.EquippedTrail).
+--   Theme: the home base's palette (profile.Base.Theme; BaseConfig.Themes).
+--   Sign: the base's sign board style (profile.Base.Sign; BaseConfig.Signs).
+--   Emote: played in the lobby as a burst over the head (PlayEmote); owned, never equipped.
+--   Nameplate: a title on the level plate over the head (profile.Nameplate).
 local ShopConfig = {}
 
 ShopConfig.Items = {
-	{
-		Id = "Vitality",
-		Category = "Armory",
-		Title = "Reinforced Frame",
-		Description = "+10 maximum health at the start of every run.",
-		Kind = "Stat",
-		Effect = { Stat = "MaxHealthBonus", PerLevel = 10 },
-		Costs = { 80, 160, 260, 380, 520 },
-	},
-	{
-		Id = "Stride",
-		Category = "Armory",
-		Title = "Servo Stride",
-		Description = "+1 walk speed at the start of every run.",
-		Kind = "Stat",
-		Effect = { Stat = "MoveSpeedBonus", PerLevel = 1 },
-		Costs = { 60, 140, 240 },
-	},
-	{
-		Id = "Velocity",
-		Category = "Armory",
-		Title = "Rail Tuning",
-		Description = "+1% projectile speed.",
-		Kind = "Stat",
-		Effect = { Stat = "SpeedMultiplier", PerLevel = 0.01 },
-		Costs = { 40, 55, 70, 90, 110, 135, 160, 190, 220, 250 },
-	},
-	{
-		Id = "Mending",
-		Category = "Armory",
-		Title = "Mending Core",
-		Description = "+0.5 health per second of regeneration between fights.",
-		Kind = "Stat",
-		Effect = { Stat = "RegenBonus", PerLevel = 0.5 },
-		Costs = { 120, 240, 400, 600 },
-	},
-	{
-		Id = "CoinMagnet",
-		Category = "Armory",
-		Title = "Coin Magnet",
-		Description = "+3 studs of reach when pulling in coins.",
-		Kind = "Stat",
-		Effect = { Stat = "MagnetBonus", PerLevel = 3 },
-		Costs = { 100, 220, 380 },
-	},
-	{
-		Id = "Fortune",
-		Category = "Armory",
-		Title = "Fortune",
-		Description = "+10% coins from every run.",
-		Kind = "Stat",
-		Effect = { Stat = "RewardMultiplier", PerLevel = 0.1 },
-		Costs = { 250, 500, 900 },
-	},
-	{
-		Id = "Quiver",
-		Category = "Armory",
-		Title = "Deep Quiver",
-		Description = "+1 orb carried into every run.",
-		Kind = "Stat",
-		-- Only worth selling while orbs are a limited resource.
-		RequiresFlag = "Orbs",
-		Effect = { Stat = "OrbCount", PerLevel = 1 },
-		Costs = { 1500, 4000 },
-	},
 	{
 		Id = "TrailEmber",
 		Category = "Cosmetics",
@@ -124,20 +65,123 @@ ShopConfig.Items = {
 		Title = "Gold Trail",
 		Description = "A blazing gold wake. VIP only. Cosmetic.",
 		Kind = "Trail",
-		RequiresPass = "VIP",
+		RequiresPass = "SupporterPack",
 		Trail = { Color = Color3.fromRGB(255, 210, 80), Lifetime = 0.35 },
-		Costs = { 1 },
+	},
+
+	-- Base themes. Their ids match BaseConfig.Themes.
+	{
+		Id = "Moss",
+		Category = "Cosmetics",
+		Title = "Mossy Ruins",
+		Description = "A green, overgrown look for your base. Cosmetic.",
+		Kind = "Theme",
+		Costs = { 400 },
+	},
+	{
+		Id = "Frost",
+		Category = "Cosmetics",
+		Title = "Frost Camp",
+		Description = "Snow and ice for your base. Unlocks at level 8.",
+		Kind = "Theme",
+		UnlockLevel = 8,
+	},
+	{
+		Id = "Gilded",
+		Category = "Cosmetics",
+		Title = "Gilded Outpost",
+		Description = "Gold trim on everything. Supporter Pack.",
+		Kind = "Theme",
+		RequiresPass = "SupporterPack",
+	},
+
+	-- Base sign styles. Their ids match BaseConfig.Signs.
+	{
+		Id = "Slate",
+		Category = "Cosmetics",
+		Title = "Slate Sign",
+		Description = "A dark slate board with bright lettering. Cosmetic.",
+		Kind = "Sign",
+		Costs = { 150 },
+	},
+	{
+		Id = "Banner",
+		Category = "Cosmetics",
+		Title = "Explorer Banner",
+		Description = "A blue and gold banner over your base. Explorer Pass.",
+		Kind = "Sign",
+		RequiresPass = "ExplorerPass",
+	},
+
+	-- Emotes, played in the lobby.
+	{
+		Id = "Wave",
+		Category = "Cosmetics",
+		Title = "Wave",
+		Description = "Say hello. Everyone has it.",
+		Kind = "Emote",
+		UnlockLevel = 1,
+		Emote = { Text = "👋", Color = Color3.fromRGB(255, 236, 200) },
+	},
+	{
+		Id = "Flex",
+		Category = "Cosmetics",
+		Title = "Flex",
+		Description = "Show off a good run. Unlocks at level 5.",
+		Kind = "Emote",
+		UnlockLevel = 5,
+		Emote = { Text = "💪", Color = Color3.fromRGB(255, 176, 102) },
+	},
+	{
+		Id = "Ricochet",
+		Category = "Cosmetics",
+		Title = "Ricochet",
+		Description = "A burst of bouncing sparks. Cosmetic.",
+		Kind = "Emote",
+		Costs = { 200 },
+		Emote = { Text = "✨", Color = Color3.fromRGB(120, 235, 255) },
+	},
+	{
+		Id = "Cheer",
+		Category = "Cosmetics",
+		Title = "Cheer",
+		Description = "A golden cheer. Supporter Pack.",
+		Kind = "Emote",
+		RequiresPass = "SupporterPack",
+		Emote = { Text = "🎉", Color = Color3.fromRGB(255, 214, 90) },
+	},
+
+	-- Nameplate titles.
+	{
+		Id = "Delver",
+		Category = "Cosmetics",
+		Title = "Delver",
+		Description = "A title for your nameplate. Unlocks at level 3.",
+		Kind = "Nameplate",
+		UnlockLevel = 3,
+	},
+	{
+		Id = "DeepDiver",
+		Category = "Cosmetics",
+		Title = "Deep Diver",
+		Description = "A title for your nameplate. Unlocks at level 10.",
+		Kind = "Nameplate",
+		UnlockLevel = 10,
+	},
+	{
+		Id = "Explorer",
+		Category = "Cosmetics",
+		Title = "Explorer",
+		Description = "A title for your nameplate. Explorer Pass.",
+		Kind = "Nameplate",
+		RequiresPass = "ExplorerPass",
 	},
 }
 
--- Deepen: once every Armory upgrade is maxed, the player can reset them all for the next Depth
--- Rank, which adds RewardPerRank to their coin multiplier for good. Trails are never reset.
--- The rank is saved in profiles (DepthRank).
-ShopConfig.Deepen = {
-	MaxRank = 10,
-	RewardPerRank = 0.1,
-	Stat = "RewardMultiplier",
-}
+-- The tabs the Cosmetics shop shows, in order, and the kinds that can be equipped (an emote is
+-- played, not worn).
+ShopConfig.Kinds = { "Trail", "Theme", "Sign", "Emote", "Nameplate" }
+ShopConfig.Equippable = { Trail = true, Theme = true, Sign = true, Nameplate = true }
 
 local byId = {}
 for _, item in ShopConfig.Items do
@@ -148,72 +192,30 @@ function ShopConfig.Get(itemId)
 	return byId[itemId]
 end
 
+-- How many levels can be bought: 1 for a coin cosmetic, 0 for one earned by level or a pass.
 function ShopConfig.MaxLevel(item)
-	return #item.Costs
+	return item.Costs and #item.Costs or 0
 end
 
--- Price of buying `level` (the level the player will own afterwards). nil past the max.
+-- Price of buying `level` (the level the player will own afterwards). nil past the max, and for
+-- items that are not sold.
 function ShopConfig.CostFor(item, level)
-	return item.Costs[level]
+	return item.Costs and item.Costs[level] or nil
 end
 
--- Whether an item is on sale in this build. `flags` is FeatureFlags; an item naming a flag
--- that is off is neither sold nor shown.
-function ShopConfig.IsAvailable(item, flags)
-	return item.RequiresFlag == nil or (flags ~= nil and flags[item.RequiresFlag] == true)
-end
-
--- The Armory items a Deepen resets, as item id -> the level each must reach first.
-function ShopConfig.DeepenRequirements(flags)
-	local required = {}
-	for _, item in ShopConfig.Items do
-		if item.Kind == "Stat" and ShopConfig.IsAvailable(item, flags) then
-			required[item.Id] = ShopConfig.MaxLevel(item)
-		end
-	end
-	return required
-end
-
--- Whether `levels` has every Armory upgrade maxed, so the next Deepen is open.
-function ShopConfig.CanDeepen(levels, rank, flags)
-	if (tonumber(rank) or 0) >= ShopConfig.Deepen.MaxRank then
+-- Whether an item is owned: bought (levels), reached (level), or included in an owned pass.
+-- ownsPass(passKey) -> bool.
+function ShopConfig.Owns(item, levels, level, ownsPass)
+	if not item then
 		return false
 	end
-	for itemId, level in ShopConfig.DeepenRequirements(flags) do
-		if (tonumber((levels or {})[itemId]) or 0) < level then
-			return false
-		end
+	if item.RequiresPass then
+		return ownsPass ~= nil and ownsPass(item.RequiresPass) == true
 	end
-	return true
-end
-
--- A whole Depth Rank in 0..MaxRank; anything malformed counts as none.
-function ShopConfig.SanitiseRank(rank)
-	local value = tonumber(rank)
-	if not value or value ~= value then
-		return 0
+	if item.UnlockLevel and (tonumber(level) or 0) >= item.UnlockLevel then
+		return true
 	end
-	return math.clamp(math.floor(value), 0, ShopConfig.Deepen.MaxRank)
-end
-
--- Stat deltas from owned levels, as { [stat] = amount }, plus the Depth Rank's bonus when a
--- rank is given. Unknown ids are ignored and levels are clamped to the item's max, so a stale
--- or tampered profile can never grant more than the shop sells.
-function ShopConfig.ComputeBonuses(levels, depthRank)
-	local bonuses = {}
-	local rank = ShopConfig.SanitiseRank(depthRank)
-	if rank > 0 then
-		bonuses[ShopConfig.Deepen.Stat] = ShopConfig.Deepen.RewardPerRank * rank
-	end
-	for itemId, level in levels or {} do
-		local item = byId[itemId]
-		if item and item.Kind == "Stat" and type(level) == "number" and level > 0 then
-			local owned = math.min(math.floor(level), ShopConfig.MaxLevel(item))
-			local stat = item.Effect.Stat
-			bonuses[stat] = (bonuses[stat] or 0) + item.Effect.PerLevel * owned
-		end
-	end
-	return bonuses
+	return type(levels) == "table" and (levels[item.Id] or 0) >= 1
 end
 
 return ShopConfig

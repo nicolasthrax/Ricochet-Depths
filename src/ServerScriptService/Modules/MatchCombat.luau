@@ -79,6 +79,7 @@ function Combat.methods:HandleFire(player, direction, power, now)
 
 	state.shotsFired += 1
 	state.projectilesFired += fired
+	self:_funnel(player, "FirstInput")
 	self:_log("ShotFired", { RunId = self._runId, Projectiles = fired }, now)
 	return fired > 0, fired == 0 and "projectile pool exhausted" or nil
 end
@@ -151,6 +152,7 @@ function Combat.methods:HandleImpact(result, entry, now)
 	end
 
 	if not hit.blocked then
+		self:_funnel(entry.shooter, "FirstHit")
 		local state = self._states[entry.shooter]
 		if crit and state then
 			state.crits += 1

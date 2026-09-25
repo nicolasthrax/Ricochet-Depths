@@ -28,15 +28,13 @@ function HudView.new(playerGui)
 	track.Size = UDim2.new(1, 0, 0, 14)
 	self.healthFill = fill
 
-	-- Coins picked up this run, with a brief "+N" as they come in. With the haul at risk it reads
-	-- "Haul", with what getting out now would multiply it by.
+	-- Coins picked up this run, with a brief "+N" as they come in.
 	self.coinLabel = UiTheme.label("CoinLabel", health, "", UiConfig.Text.Hud, UiConfig.Colors.Warning)
 	self.coinLabel.AnchorPoint = Vector2.new(1, 0)
 	self.coinLabel.Position = UDim2.new(1, 0, 0, 0)
 	self.coinLabel.Size = UDim2.new(0.5, 0, 0, 20)
 	self.coinLabel.TextXAlignment = Enum.TextXAlignment.Right
 	self._coins = 0
-	self._coinWord = "Coins"
 
 	-- Orbs in hand: one pip each, lit when the orb is ready to throw.
 	local pips = Instance.new("Frame")
@@ -153,6 +151,45 @@ function HudView.new(playerGui)
 	end)
 	self.storeButton = store
 
+	-- BASE, beside the Store: straight to your own plot in the Outpost. Lobby only.
+	local base = UiTheme.button("BaseButton", self.gui, "BASE")
+	base.Position = UDim2.new(0, 132, 0, 12)
+	base.Size = UDim2.fromOffset(96, UiConfig.MinTouchTarget)
+	base.Visible = false
+	base.Activated:Connect(function()
+		if self._onBase then
+			self._onBase()
+		end
+	end)
+	self.baseButton = base
+
+	-- Today's biome modifier: a chip under the room line, in the lobby and in runs.
+	local chip = UiTheme.panel("ModifierChip", self.gui)
+	chip.AnchorPoint = Vector2.new(0.5, 0)
+	chip.Position = UDim2.new(0.5, 0, 0, 58)
+	chip.Size = UDim2.fromOffset(330, 26)
+	chip.Visible = false
+	UiTheme.padding(chip, 4)
+	self.modifierChip = chip
+	self.modifierLabel = UiTheme.label("ModifierLabel", chip, "", UiConfig.Text.Small, UiConfig.Colors.Gold)
+	self.modifierLabel.Size = UDim2.fromScale(1, 1)
+	self.modifierLabel.TextXAlignment = Enum.TextXAlignment.Center
+	self.modifierLabel.TextScaled = true
+
+	-- Down with a revive available: one big button (a token, or the paid Revive when it is on).
+	local revive = UiTheme.button("ReviveButton", self.gui, "USE REVIVE", "Primary")
+	revive.AnchorPoint = Vector2.new(0.5, 0.5)
+	revive.Position = UDim2.new(0.5, 0, 0.62, 0)
+	revive.Size = UDim2.fromOffset(260, 64)
+	revive.Visible = false
+	revive.Activated:Connect(function()
+		revive.Visible = false
+		if self._onRevive then
+			self._onRevive(self._reviveTokens or 0)
+		end
+	end)
+	self.reviveButton = revive
+
 	-- Level badge and experience bar, under the Store button. Lobby only, like the Store: in a
 	-- run the top of the screen belongs to the room and boss bars.
 	local levelPanel = UiTheme.panel("LevelPanel", self.gui)
@@ -259,16 +296,16 @@ function HudView:UpdatePlayer(snapshot)
 	local gained = coins - self._coins
 	self._coins = coins
 	if gained > 0 then
-		self.coinLabel.Text = string.format("+%d  %s", gained, self:_coinText())
+		self.coinLabel.Text = string.format("+%d  Coins %d", gained, coins)
 		self._coinToken = (self._coinToken or 0) + 1
 		local token = self._coinToken
 		task.delay(1.2, function()
 			if self._coinToken == token then
-				self.coinLabel.Text = self:_coinText()
+				self.coinLabel.Text = string.format("Coins %d", self._coins)
 			end
 		end)
 	else
-		self.coinLabel.Text = self:_coinText()
+		self.coinLabel.Text = string.format("Coins %d", coins)
 	end
 
 	self:_renderUpgrades(snapshot.Upgrades or {})
@@ -276,14 +313,6 @@ function HudView:UpdatePlayer(snapshot)
 end
 
 -- Orb pips, the Surge meter and the combo meter from a player snapshot.
-function HudView:_coinText()
-	local text = string.format("%s %d", self._coinWord, self._coins)
-	if self._haulMultiplier and self._haulMultiplier > 1 then
-		text ..= string.format("  x%s", (string.gsub(string.format("%.2f", self._haulMultiplier), "%.?0+$", "")))
-	end
-	return text
-end
-
 function HudView:_renderArsenal(snapshot)
 	local orbsMax = tonumber(snapshot.OrbsMax)
 	local orbs = tonumber(snapshot.Orbs) or 0
@@ -392,16 +421,20 @@ function HudView:UpdateRun(snapshot)
 	end
 
 	local inRun = snapshot.State ~= RunConfig.States.Lobby
-	local haul = inRun and type(snapshot.Haul) == "table" and snapshot.Haul or nil
-	local word, multiplier = haul and "Haul" or "Coins", haul and tonumber(haul.Multiplier) or nil
-	if word ~= self._coinWord or multiplier ~= self._haulMultiplier then
-		self._coinWord, self._haulMultiplier = word, multiplier
-		self.coinLabel.Text = self:_coinText()
-	end
 	-- Upgrades belong to a run: hidden in the lobby, and cleared when a run ends. The Store
 	-- button is the reverse.
 	self.upgradePanel.Visible = inRun
 	self.storeButton.Visible = not inRun
+	self.baseButton.Visible = not inRun and self._onBase ~= nil
+	if snapshot.State ~= RunConfig.States.Combat then
+		self.reviveButton.Visible = false
+	end
+	-- A run shows its own modifier (none in a first descent); the lobby keeps today's.
+	if inRun then
+		self:SetModifier(snapshot.Modifier)
+	elseif self._lobbyModifier then
+		self:SetModifier(self._lobbyModifier)
+	end
 	self.levelPanel.Visible = not inRun
 	self.loadoutLabel.Visible = not inRun
 	self.dashButton.Visible = snapshot.State == RunConfig.States.Combat and self._onDash ~= nil
@@ -496,7 +529,7 @@ function HudView:_renderLobbyObjective()
 			status.Capacity, math.max(status.MinPlayers - status.Count, 1))
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	else
-		self.objectiveLabel.Text = "Step into a Gate with friends (2-8), or use the Solo Portal"
+		self.objectiveLabel.Text = "Step into a Gate with friends (2-4), or use the Solo Portal"
 		self.objectiveLabel.TextColor3 = UiConfig.Colors.Accent
 	end
 end
@@ -562,6 +595,37 @@ end
 
 function HudView:SetStoreHandler(callback)
 	self._onStore = callback
+end
+
+function HudView:SetBaseHandler(callback)
+	self._onBase = callback
+	self.baseButton.Visible = callback ~= nil and self.storeButton.Visible
+end
+
+-- modifier is DailyModifierConfig.Describe's table, or nil to hide the chip.
+function HudView:SetModifier(modifier)
+	local shown = type(modifier) == "table" and type(modifier.Title) == "string"
+	self.modifierChip.Visible = shown
+	if shown then
+		self.modifierLabel.Text = string.format("TODAY: %s  -  %s", string.upper(modifier.Title), tostring(modifier.Text))
+	end
+end
+
+-- Today's modifier as the lobby knows it (MetaSync), kept for when a run ends.
+function HudView:SetLobbyModifier(modifier)
+	self._lobbyModifier = modifier
+	if self.storeButton.Visible then
+		self:SetModifier(modifier)
+	end
+end
+
+-- A ReviveOffer from the server: show the button while down. onRevive(tokens) decides whether
+-- to spend a token or open the paid Revive.
+function HudView:OfferRevive(tokens, onRevive)
+	self._reviveTokens = tonumber(tokens) or 0
+	self._onRevive = onRevive
+	self.reviveButton.Text = self._reviveTokens > 0 and string.format("USE REVIVE (%d)", self._reviveTokens) or "REVIVE"
+	self.reviveButton.Visible = true
 end
 
 function HudView:Flash(message, color)

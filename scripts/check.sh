@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full local gate: syntax, lint, Rojo build, headless tests.
+# Full local gate: syntax, lint, strict types (mvp/), Rojo builds, headless tests.
 # Override tool paths with LUAU_BIN / LUAU_COMPILE_BIN / LUAU_ANALYZE_BIN / ROJO_BIN.
 set -uo pipefail
 
@@ -14,7 +14,7 @@ status=0
 step() { printf '\n=== %s ===\n' "$1"; }
 fail() { echo "FAILED: $1"; status=1; }
 
-sources=$(find src tests -name '*.luau' | sort)
+sources=$(find src mvp tests -name '*.luau' | sort)
 
 step "syntax (luau-compile)"
 for file in $sources; do
@@ -42,8 +42,14 @@ else
 	echo "ok"
 fi
 
+step "strict types, mvp/ (tools/strict-check.sh)"
+if ! LUAU_ANALYZE_BIN="$LUAU_ANALYZE_BIN" tools/strict-check.sh; then
+	fail "strict types"
+fi
+
 step "rojo build"
-if "$ROJO_BIN" build default.project.json --output /tmp/ricochet-check.rbxlx; then
+if "$ROJO_BIN" build default.project.json --output /tmp/ricochet-check.rbxlx \
+	&& "$ROJO_BIN" build mvp.project.json --output /tmp/ricochet-mvp-check.rbxlx; then
 	echo "ok"
 else
 	fail "rojo build"

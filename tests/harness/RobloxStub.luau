@@ -735,6 +735,10 @@ makeService("MemStorageService")
 local workspaceStub = makeService("Workspace")
 rawset(workspaceStub, "Gravity", 196.2)
 rawset(workspaceStub, "CurrentCamera", Instance.new("Camera"))
+-- Server time follows the virtual clock.
+rawset(workspaceStub, "GetServerTimeNow", function(self)
+	return clockValue
+end)
 -- Tests install a world model here: function(origin, direction, params) -> result | nil
 __raycastHandler = nil
 rawset(workspaceStub, "Raycast", function(self, origin, direction, params)
@@ -993,6 +997,7 @@ function Harness.giveCharacter(player, position)
 	humanoid.Name = "Humanoid"
 	humanoid.Health = 100
 	humanoid.MaxHealth = 100
+	humanoid.HipHeight = 2
 	humanoid.Parent = character
 	character.Parent = workspace
 	rawset(player, "Character", character)

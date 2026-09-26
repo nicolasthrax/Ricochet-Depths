@@ -4,3 +4,4 @@
 *.rbxmx
 *.rbxlx.lock
 .test-build/
+.cache/

@@ -1,0 +1,59 @@
+{
+  "name": "RicochetDepthsLane",
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "StreamingEnabled": false
+      },
+      "LaneSpawn": {
+        "$className": "SpawnLocation",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": false,
+          "Transparency": 1,
+          "Duration": 0,
+          "Position": [0, 99.6, 3],
+          "Size": [4, 0.8, 4]
+        }
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "$path": "mvp/ReplicatedStorage"
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$path": "mvp/ServerScriptService"
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "$path": "mvp/StarterPlayerScripts"
+      }
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Technology": "Future",
+        "GlobalShadows": false,
+        "Brightness": 1.2,
+        "ClockTime": 0,
+        "Ambient": [0.18, 0.2, 0.26],
+        "OutdoorAmbient": [0.18, 0.2, 0.26],
+        "EnvironmentDiffuseScale": 0.4,
+        "EnvironmentSpecularScale": 0.4
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.6,
+          "Size": 18,
+          "Threshold": 1.4
+        }
+      }
+    }
+  }
+}
